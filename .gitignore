@@ -236,3 +236,13 @@ $RECYCLE.BIN/
 
 
 /data
+
+# OpenFOAM 결과 폴더 제외
+[0-9]*
+constant/polyMesh
+processor*
+*.logsim/
+
+/sim
+
+.vscode
