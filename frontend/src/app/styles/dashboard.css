@@ -29,7 +29,7 @@ button {
   background:
     radial-gradient(circle at top, rgba(48, 140, 255, 0.12), transparent 28%),
     radial-gradient(circle at right center, rgba(38, 194, 255, 0.1), transparent 24%),
-    linear-gradient(135deg, #7590ad 0%, #2d71ba 42%, #547091 100%);
+    linear-gradient(90deg, #12263b 0%, #112c49 50%, #11253b 100%);
 }
 
 .dashboard__bg {
@@ -182,6 +182,47 @@ button {
   width: 100%;
   min-height: calc(100vh - 132px);
   padding: 22px 20px 90px;
+  overflow: hidden;
+}
+
+/* 왼쪽/오른쪽 전체 오버레이 레이어 */
+.dashboard__body::before,
+.dashboard__body::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 23%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 왼쪽 끝에서 시작해서 가운데로 갈수록 사라짐 */
+.dashboard__body::before {
+  left: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(2, 8, 18, 0.96) 0%,
+      rgba(3, 10, 22, 0.86) 28%,
+      rgba(4, 14, 28, 0.76) 48%,
+      rgba(5, 18, 34, 0.4) 78%,
+      rgba(5, 18, 34, 0) 90%
+    );
+}
+
+/* 오른쪽 끝에서 시작해서 가운데로 갈수록 사라짐 */
+.dashboard__body::after {
+  right: 0;
+  background:
+    linear-gradient(
+      270deg,
+      rgba(2, 8, 18, 0.96) 0%,
+      rgba(3, 10, 22, 0.88) 18%,
+      rgba(4, 14, 28, 0.68) 38%,
+      rgba(5, 18, 34, 0.32) 68%,
+      rgba(5, 18, 34, 0) 100%
+    );
 }
 
 .dashboard__center {
@@ -207,7 +248,7 @@ button {
   z-index: 6;
 }
 
-.dashboard__left-panels::before,
+/* .dashboard__left-panels::before,
 .dashboard__right-panels::before {
   content: "";
   position: absolute;
@@ -226,8 +267,8 @@ button {
     linear-gradient(
       90deg,
       rgba(2, 8, 18, 0.92) 0%,
-      rgba(4, 14, 28, 0.8) 42%,
-      rgba(5, 18, 34, 0.35) 72%,
+      rgba(4, 14, 28, 0.8) 40%,
+      rgba(5, 18, 34, 0.35) 100%,
       rgba(5, 18, 34, 0) 100%
     );
 }
@@ -242,7 +283,7 @@ button {
       rgba(5, 18, 34, 0.35) 72%,
       rgba(5, 18, 34, 0) 100%
     );
-}
+} */
 
 .dashboard__left-panels {
   left: 34px;
