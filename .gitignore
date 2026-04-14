@@ -246,3 +246,28 @@ processor*
 /sim
 
 .vscode
+
+# React / Node
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+build/
+frontend/build/
+coverage/
+.vite/
+
+# Spring Boot / Java
+target/
+backend/target/
+.gradle/
+backend/.gradle/
+out/
+bin/
+*.class
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
