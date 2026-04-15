@@ -5,7 +5,6 @@ import AlertHistoryPanel from "../components/side/AlertHistoryPanel";
 import ZoneStatusPanel from "../components/side/ZoneStatusPanel";
 import EnvironmentPanel from "../components/side/EnvironmentPanel";
 import CtpStatusPanel from "../components/side/CtpStatusPanel";
-import StyleChangePanel from "../components/side/StyleChangePanel";
 import CenterPlaceholder from "../components/center/CenterPlaceholder";
 import type { SystemStatus } from "../components/common/SystemStatus";
 import { systemStatusMap } from "../components/common/SystemStatus";
@@ -16,9 +15,6 @@ function DashboardFrame() {
 
   return (
     <div className="dashboard">
-      {/* 전체 배경 */}
-      <div className="dashboard__bg" />
-
       {/* 상단 바 */}
       <header className="dashboard__header">
         {/* 상단 좌측 바 */}
@@ -51,10 +47,6 @@ function DashboardFrame() {
 
       {/* 본문 전체 */}
       <main className="dashboard__body">
-        {/* 중앙 영역 */}
-        <section className="dashboard__center">
-          <CenterPlaceholder />
-        </section>
 
         {/* 좌측 패널 영역 */}
         <aside className="dashboard__left-panels">
@@ -63,11 +55,15 @@ function DashboardFrame() {
           <ZoneStatusPanel />
         </aside>
 
+        {/* 중앙 영역 */}
+
+          <CenterPlaceholder />
+
+
         {/* 우측 패널 영역 */}
         <aside className="dashboard__right-panels">
           <EnvironmentPanel />
           <CtpStatusPanel />
-          <StyleChangePanel />
         </aside>
       </main>
 
