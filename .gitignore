@@ -1,0 +1,32 @@
+### 1. 환경 변수 및 비밀번호 (가장 중요) ###
+.env
+.env.local
+.env.*.local
+*.env
+
+### 2. 파이썬 관련 (가상환경 및 캐시) ###
+venv/
+.venv/
+smart-parm-v2/ 
+smart-farm-v2/ 
+
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+### 3. Docker 및 데이터베이스 실제 데이터 ###
+# (컨테이너가 생성한 실제 DB 파일이나 S3 데이터는 git에 올리지 않습니다)
+data/db-data/
+data/s3-bucket/
+!data/s3-bucket/sensor.csv # (단, 테스트용 CSV는 예외적으로 허용하고 싶을 때)
+
+### 4. 운영체제 및 IDE 관련 ###
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+### 5. 로그 및 임시 파일 ###
+*.log
+tmp/
