@@ -235,7 +235,7 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/python,macos,windows
 
 
-/data
+
 
 # OpenFOAM 결과 폴더 제외
 [0-9]*
@@ -243,6 +243,14 @@ constant/polyMesh
 processor*
 *.logsim/
 
-/sim
 
 .vscode
+
+
+# 프로젝트 폴더
+/data
+/sim
+/models
+
+# .zip 파일 무시
+*.zip
