@@ -1,3 +1,4 @@
+/* 기본 스타일 */
 html,
 body,
 #root {
@@ -9,7 +10,7 @@ body,
 
 body {
   font-family: "Pretendard", "Noto Sans KR", sans-serif;
-  background: #154c35;
+  /* background: #258a60; */
   color: #e9fff4;
 }
 
@@ -21,29 +22,33 @@ button {
   font: inherit;
 }
 
+/* 대시보드 스타일 */
 .dashboard {
   position: relative;
   width: 100%;
   min-height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at top, rgba(48, 140, 255, 0.12), transparent 28%),
-    radial-gradient(circle at right center, rgba(38, 194, 255, 0.1), transparent 24%),
-    linear-gradient(90deg, #12263b 0%, #112c49 50%, #11253b 100%);
+    radial-gradient(circle at top, rgba(48, 255, 140, 0.12), transparent 28%),  /* 위에서 원형 또는 타원형으로 내려오는 빛 */
+    /* radial-gradient(circle at right center, rgba(79, 200, 247, 1), transparent 24%), */
+    linear-gradient(90deg, #4f7297 0%, #294b6e 50%, #4f7297 100%);
 }
 
+/* 배경 장식 레이어 */
 .dashboard__bg {
   position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at center, rgba(70, 170, 255, 0.08), transparent 40%),
+  inset: 0; /* 부모를 덮는다 */
+  /* 약한 격자무늬 효과로 입체감 부여 */
+  /* background:
+    radial-gradient(circle at center, rgba(70, 170, 255, 0.08), transparent 100%),
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: auto, 36px 36px, 36px 36px;
+  background-size: auto, 36px 36px, 36px 36px; */
   opacity: 0.18;
-  pointer-events: none;
+  pointer-events: none; /* 다른 효과를 방해하지 못하게 하기 위한 설정 */
 }
 
+/* 헤더 스타일 */
 .dashboard__header {
   position: relative;
   z-index: 5;
@@ -64,8 +69,8 @@ button {
 
 .dashboard__title-wrap {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: center; /* 세로 중앙 정렬 */
+  gap: 20px;
 }
 
 .dashboard__title {
@@ -74,6 +79,7 @@ button {
   color: #e7fff2;
 }
 
+/* 시스템 상태 스타일 (정상, 경고, 위험) */
 .dashboard__system-status {
   display: flex;
   align-items: center;
@@ -86,6 +92,7 @@ button {
   width: 22px;
   height: 22px;
   border-radius: 50%;
+  border: 1px solid currentColor;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -103,27 +110,12 @@ button {
   color: #2fd36b;
 }
 
-.dashboard__system-status.is-normal .dashboard__system-dot {
-  background-color: #2fd36b;
-  box-shadow: 0 0 10px rgba(47, 211, 107, 0.6);
-}
-
 .dashboard__system-status.is-warning {
   color: #ffd84d;
 }
 
-.dashboard__system-status.is-warning .dashboard__system-dot {
-  background-color: #ffd84d;
-  box-shadow: 0 0 10px rgba(255, 216, 77, 0.6);
-}
-
 .dashboard__system-status.is-danger {
   color: #ff000f;
-}
-
-.dashboard__system-status.is-danger .dashboard__system-dot {
-  background-color: #ff000f;
-  box-shadow: 0 0 10px rgba(255, 77, 77, 0.6);
 }
 
 .dashboard__header-center {
@@ -138,7 +130,7 @@ button {
   padding: 8px 14px;
   border: 1px solid rgba(111, 255, 185, 0.22);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(127, 240, 166, 0.117);
   color: #dfffee;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -159,7 +151,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 14px;
+  gap: 16px;
 }
 
 .dashboard__ai-button {
@@ -188,11 +180,12 @@ button {
 /* 왼쪽/오른쪽 전체 오버레이 레이어 */
 .dashboard__body::before,
 .dashboard__body::after {
-  content: "";
+  content: ""; /* 장식용 박스 생성 */
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 23%;
+  display: flex;
+  min-width: 400px;
   pointer-events: none;
   z-index: 1;
 }
@@ -203,11 +196,11 @@ button {
   background:
     linear-gradient(
       90deg,
-      rgba(2, 8, 18, 0.96) 0%,
-      rgba(3, 10, 22, 0.86) 28%,
-      rgba(4, 14, 28, 0.76) 48%,
-      rgba(5, 18, 34, 0.4) 78%,
-      rgba(5, 18, 34, 0) 90%
+      rgba(5, 20, 45, 0.96) 0%,
+      rgba(6, 22, 49, 0.78) 30%,
+      rgba(7, 26, 55, 0.65) 55%,
+      rgba(8, 30, 61, 0.32) 80%,
+      rgba(8, 30, 61, 0) 100%
     );
 }
 
@@ -217,14 +210,15 @@ button {
   background:
     linear-gradient(
       270deg,
-      rgba(2, 8, 18, 0.96) 0%,
-      rgba(3, 10, 22, 0.88) 18%,
-      rgba(4, 14, 28, 0.68) 38%,
-      rgba(5, 18, 34, 0.32) 68%,
-      rgba(5, 18, 34, 0) 100%
+      rgba(5, 20, 45, 0.96) 0%,
+      rgba(6, 22, 49, 0.78) 30%,
+      rgba(7, 26, 55, 0.65) 55%,
+      rgba(8, 30, 61, 0.32) 80%,
+      rgba(8, 30, 61, 0) 100%
     );
 }
 
+/* 모델링이 들어갈 영역 */
 .dashboard__center {
   position: relative;
   width: 100%;
@@ -241,9 +235,11 @@ button {
 .dashboard__right-panels {
   position: absolute;
   top: 28px;
+  bottom: 50px;
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  justify-content: space-between;
+  /* gap: 26px; */
   width: 260px;
   z-index: 6;
 }

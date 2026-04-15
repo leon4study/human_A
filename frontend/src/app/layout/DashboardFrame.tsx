@@ -11,7 +11,7 @@ import type { SystemStatus } from "../components/common/SystemStatus";
 import { systemStatusMap } from "../components/common/SystemStatus";
 
 function DashboardFrame() {
-    const systemStatus: SystemStatus = "danger"; // "normal" | "warning" | "danger"
+    const systemStatus: SystemStatus = "warning"; // "normal" | "warning" | "danger"
     const currentStatus = systemStatusMap[systemStatus];
 
   return (
