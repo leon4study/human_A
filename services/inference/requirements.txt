@@ -1,0 +1,19 @@
+# 1. API 서버 관련
+fastapi
+uvicorn
+
+# 2. AI 및 데이터 처리 관련
+tensorflow-cpu  # GPU가 없는 환경(라즈베리 파이, 일반 서버)이라면 cpu 버전이 가볍습니다.
+pandas
+numpy
+joblib
+scikit-learn    # Scaler(joblib)를 로드하고 사용할 때 필요합니다.
+
+# 3. 데이터베이스 및 클라우드 저장소 관련
+sqlalchemy
+psycopg2-binary # PostgreSQL 연결 드라이버
+boto3           # MinIO/S3 연결
+
+# 4. 유틸리티
+python-dotenv
+apscheduler
