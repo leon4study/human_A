@@ -1,129 +1,165 @@
-from fastapi import FastAPI, HTTPException, Body
-from typing import Dict, Any
+# 로컬 실행 명령어 예시
+# python -m uvicorn inference_api:app --reload (개발/테스트용)
+# python -m uvicorn inference_api:app --host 0.0.0.0 --port 8000 (배포/실전용)
+
+import os
+import json
+import glob
+import joblib
+import datetime
 import numpy as np
 import tensorflow as tf
-import joblib
-import json
-import datetime
+from fastapi import FastAPI, Body, HTTPException
+from typing import Dict, Any, List
+from logger import get_logger
 
-app = FastAPI(title="SmartFarm 예지보전 API 서버")
+app = FastAPI(title="SmartFarm Multi-Domain 예지보전 API")
+logger = get_logger("API")
+
 
 # =====================================================================
-# 1. 서버가 부팅될 때 딱 한 번! 메모리에 모델을 올려둡니다 (Cold Start 방지)
+# 1. 멀티 모델 및 설정 로드 (서버 기동 시)
 # =====================================================================
-print("⏳ Loading Models & Configs...")
+MODELS_DATA = {}
+
+
+# 경로 설정 (src/inference_api.py 기준 상위 models 폴더)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+save_dir = os.path.join(project_root, "models")
+
+# 🌟 [방법 1 적용] models 폴더를 뒤져서 config 파일 자동 찾기
+logger.info("⏳ Loading Multi-Domain Models & Configs...")
+
+# models 폴더 안에 있는 모든 '_config.json' 파일의 경로를 리스트로 가져옵니다.
+config_files = glob.glob(os.path.join(save_dir, "*_config.json"))
+
+# 파일명에서 앞부분(도메인 이름)만 쏙 빼서 SYSTEMS 리스트를 자동으로 만듭니다.
+# 예: ".../models/motor_config.json" -> "motor"
+SYSTEMS = [os.path.basename(f).replace("_config.json", "") for f in config_files]
+
+if not SYSTEMS:
+    logger.warning("⚠️ models 폴더에 학습된 모델(config)이 하나도 없습니다!")
+else:
+    logger.info(f"🔍 감지된 도메인 모델들: {SYSTEMS}")
+
 try:
-    MODEL = tf.keras.models.load_model("../models/model.keras")
-    SCALER = joblib.load("../models/scaler.pkl")
+    for sys_name in SYSTEMS:
+        # 각 시스템별 파일 로드
+        model_path = os.path.join(save_dir, f"{sys_name}_model.keras")
+        scaler_path = os.path.join(save_dir, f"{sys_name}_scaler.pkl")
+        config_path = os.path.join(save_dir, f"{sys_name}_config.json")
 
-    with open("../models/model_config.json", "r") as f:
-        CONFIG = json.load(f)
+        # # 3가지 아티팩트(모델, 스케일러, 설정) 중 하나라도 없으면 스킵
+        if not all(os.path.exists(p) for p in [model_path, scaler_path, config_path]):
+            logger.warning(
+                f"⚠️ {sys_name.upper()} 모델 파일 일부가 누락되었습니다. 스킵합니다."
+            )
+            continue
 
-    THRESHOLD = CONFIG["threshold"]
-    FEATURE_NAMES = CONFIG["features"]
-    print("✅ Server Ready! Waiting for data...")
+        MODELS_DATA[sys_name] = {
+            "model": tf.keras.models.load_model(model_path),
+            "scaler": joblib.load(scaler_path),
+            "config": json.load(open(config_path, "r")),
+        }
+    logger.info(f"✅ {len(MODELS_DATA)}개의 서브 시스템 모델 로드 완료!")
+
 except Exception as e:
-    print(f"❌ Failed to load artifacts. 경로와 파일을 확인해주세요: {e}")
+    logger.error(f"❌ 초기화 중 치명적 에러 발생: {e}")
 
 
 # =====================================================================
-# 2. 데이터가 들어오는 API 엔드포인트
+# 2. 실시간 다중 도메인 추론 엔드포인트
 # =====================================================================
 @app.post("/predict")
-def predict_anomaly_and_rca(realtime_data_dict: Dict[str, Any] = Body(...)):
-    """
-    프론트엔드에서 JSON 형태로 센서 데이터를 보내면,
-    FastAPI가 자동으로 realtime_data_dict 딕셔너리로 변환해줍니다.
-    """
+def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
+    if not MODELS_DATA:
+        logger.error("❌ 추론 요청이 들어왔으나 로드된 모델이 없습니다.")
+        raise HTTPException(status_code=503, detail="사용 가능한 모델이 없습니다.")
+
+    final_results = {}
+    total_alarm_level = 0
+    overall_status = "Normal 🟢"
+
     try:
-        # 1~3. 스케일링 및 모델 예측
-        # 들어온 데이터 중 모델 학습에 사용된 피처만 순서대로 추출 (없으면 0.0 처리)
-        input_values = [
-            float(realtime_data_dict.get(feat, 0.0)) for feat in FEATURE_NAMES
-        ]
-        raw_array = np.array(input_values).reshape(1, -1)
-        scaled_array = SCALER.transform(raw_array)
+        for sys_name, data in MODELS_DATA.items():
+            model = data["model"]
+            scaler = data["scaler"]
+            config = data["config"]
+            features = config["features"]
 
-        pred_array = MODEL.predict(scaled_array, verbose=0)
-        mse_score = np.mean(np.power(scaled_array - pred_array, 2))
+            # 1. 해당 모델 피처만 추출
+            input_values = [float(realtime_data.get(f, 0.0)) for f in features]
+            raw_array = np.array(input_values).reshape(1, -1)
 
-        # (옵션) 프론트에서 로그 스케일 그래프를 그린다면 이 값도 같이 넘겨줌
-        log_mse_score = np.log10(mse_score + 1e-10)
+            # 2. 추론
+            scaled_array = scaler.transform(raw_array)
+            pred_array = model.predict(scaled_array, verbose=0)
+            mse_score = float(np.mean(np.power(scaled_array - pred_array, 2)))
 
-        # -----------------------------------------------------------------
-        # 4. 3단계 알람 상태 판별
-        # -----------------------------------------------------------------
-        T_ERR = THRESHOLD
-        T_WARN = THRESHOLD * 0.7  # 임시 비율
-        T_CAUT = THRESHOLD * 0.4  # 임시 비율
+            # 3. 임계값 비교 (저장된 설정값 사용)
+            t_caut = config["threshold_caution"]
+            t_warn = config["threshold_warning"]
+            t_err = config["threshold_error"]
 
-        alarm_level = 0
-        alarm_label = "Normal 🟢"
+            alarm_level = 0
+            label = "Normal"
+            if mse_score >= t_err:
+                alarm_level = 3
+                label = "Error 🔴"
+            elif mse_score >= t_warn:
+                alarm_level = 2
+                label = "Warning 🟠"
+            elif mse_score >= t_caut:
+                alarm_level = 1
+                label = "Caution 🔸"
 
-        if mse_score >= T_ERR:
-            alarm_level = 3
-            alarm_label = "Error 🔴"
-        elif mse_score >= T_WARN:
-            alarm_level = 2
-            alarm_label = "Warning 🟠"
-        elif mse_score >= T_CAUT:
-            alarm_level = 1
-            alarm_label = "Caution 🔸"
+            # 4. RCA (원인 분석)
+            feature_errors = np.power(scaled_array - pred_array, 2)[0]
+            sum_err = np.sum(feature_errors) if np.sum(feature_errors) > 0 else 1e-10
+            rca = sorted(
+                [
+                    {"feature": n, "contribution": round((float(e) / sum_err) * 100, 1)}
+                    for n, e in zip(features, feature_errors)
+                ],
+                key=lambda x: x["contribution"],
+                reverse=True,
+            )[:3]
 
-        is_anomaly = alarm_level == 3
-
-        # -----------------------------------------------------------------
-        # 5. 실시간 RCA 계산 (원인 분석)
-        # -----------------------------------------------------------------
-        feature_errors = np.power(scaled_array - pred_array, 2)[0]
-        sum_error = np.sum(feature_errors) if np.sum(feature_errors) > 0 else 1e-10
-
-        rca_list = [
-            {
-                "feature": name,
-                "contribution_pct": round(float((err / sum_error) * 100), 1),
+            # 결과 저장
+            final_results[sys_name] = {
+                "score": round(mse_score, 6),
+                "alarm": {"level": alarm_level, "label": label},
+                "rca": rca,
             }
-            for name, err in zip(FEATURE_NAMES, feature_errors)
-        ]
 
-        # 내림차순 정렬 후 Top 3 추출
-        rca_list = sorted(rca_list, key=lambda x: x["contribution_pct"], reverse=True)
-        top3_rca = rca_list[:3]
+            # 전체 알람 수위 갱신 (가장 심각한 쪽 기준)
+            if alarm_level > total_alarm_level:
+                total_alarm_level = alarm_level
+                overall_status = label
 
-        # -----------------------------------------------------------------
-        # 6. 프론트엔드 맞춤형 최종 Response 구성
-        # -----------------------------------------------------------------
-        response = {
-            "status": "success",
-            "timestamp": realtime_data_dict.get(
+        response_payload = {
+            "timestamp": realtime_data.get(
                 "timestamp", datetime.datetime.now().isoformat()
             ),
-            "score": {
-                "mse": round(float(mse_score), 6),
-                "log_mse": round(float(log_mse_score), 6),
-            },
-            "thresholds": {
-                "caution": round(float(T_CAUT), 6),
-                "warning": round(float(T_WARN), 6),
-                "error": round(float(T_ERR), 6),
-            },
-            "alarm_status": {
-                "level": alarm_level,
-                "label": alarm_label,
-                "is_anomaly": is_anomaly,
-            },
-            "rca_report": top3_rca,
+            "overall_alarm_level": total_alarm_level,
+            "overall_status": overall_status,
+            "domain_reports": final_results,
             "action_required": (
-                f"Inspect {top3_rca[0]['feature']}"
-                if alarm_level >= 2
-                else "All systems normal."
+                "System check recommended" if total_alarm_level >= 2 else "Optimal"
             ),
         }
 
-        # 💡 json.dumps()를 빼고 딕셔너리를 그대로 반환해야
-        # FastAPI가 올바른 'application/json' 형태로 전달합니다.
-        return response
+        # 🌟 핵심 로그 1: 시스템에 주의(Caution) 이상의 이상징후가 포착되었을 때만 로그를 남김!
+        if total_alarm_level > 0:
+            logger.warning(
+                f"🚨 [이상 감지] Level {total_alarm_level} ({overall_status}) - 타임스탬프: {response_payload['timestamp']}"
+            )
+
+        return response_payload
 
     except Exception as e:
-        # 에러 발생 시 HTTP 500 에러와 함께 원인을 반환하도록 수정
+        # API 내부에서 파이썬 에러가 터졌을 때
+        # exc_info=True 를 주면 에러가 난 몇 번째 줄인지 추적(Traceback) 정보까지 파일에 싹 다 저장됩니다.
+        logger.error(f"❌ API 추론 중 내부 에러 발생: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

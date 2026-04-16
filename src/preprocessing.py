@@ -121,7 +121,7 @@ def create_modeling_features(df):
     # pH 불안정성 (침전 발생 임계점 6.5 초과 여부)
     # 배관 막힘의 주원인인 '칼슘/인산 침전'이 발생하는 pH 6.5 이상의 위험 상태를 플래그(1/0)로 만듭니다.
     # [Rule] 이 플래그가 켜진 상태가 오래 유지되면, 곧 배관이 막힌다는 강력한 예지 시그널입니다.
-    df_feat["ph_instability_flag"] = (df_feat["mix_ph"] > 6.5).astype(int)
+    df_feat["ph_instability_flag"] = (df_feat["mix_ph"] > 6.5).astype(np.int8)
 
     # 누적 염분 부하량 추정치 (Cumulative Salt Load)
     # 배지에서 빠져나오는 배액 EC와 들어가는 공급 EC의 차이를 의미합니다.
@@ -351,11 +351,6 @@ def step1_prepare_window_data(df_raw, window_method="sliding"):
 # ==============================================================================
 def step2_clean_and_drop_collinear(df_agg):
     print("\n🧹 [Step 2] 데이터 정제 및 다중공선성 변수 제거 시작...")
-    df_final = df_agg.copy()
-
-    # 1. 무한대(Inf) 및 결측치(NaN) 처리
-    df_final = df_final.replace([np.inf, -np.inf], np.nan)
-    df_final = df_final.fillna(df_final.mean())
 
     # 2. 다중공선성 및 풍선효과 결과 변수들 수동 제거 리스트
     collinear_drop_list = [
@@ -382,10 +377,15 @@ def step2_clean_and_drop_collinear(df_agg):
         "hidden_tip_clog_level",
     ]
 
-    # 3. 변수 걷어내기
-    df_clean = df_final.drop(
-        columns=[col for col in collinear_drop_list if col in df_final.columns]
-    )
+    # 1. 어차피 지울 컬럼들은 가장 먼저 쳐냅니다! (교집합 탐색으로 속도 UP)
+    valid_cols_to_drop = list(set(collinear_drop_list).intersection(df_agg.columns))
+    df_clean = df_agg.drop(columns=valid_cols_to_drop)
+
+    # 2. 남은 핵심 피처들에 대해서만 결측치 연산을 수행하고,
+    # inplace=True를 써서 새로운 메모리를 할당하지 않고 제자리에서 덮어씁니다.
+    df_clean.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df_clean.fillna(df_clean.mean(numeric_only=True), inplace=True)
+
     print(
         f"  -> 중복/노이즈 변수 {len(collinear_drop_list)}개 제거 완료! (남은 피처 수: {len(df_clean.columns)})"
     )

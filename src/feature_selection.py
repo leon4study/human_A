@@ -22,6 +22,10 @@ from preprocessing import step1_prepare_window_data, step2_clean_and_drop_collin
 def get_shap_importance(X, y, target_name, n_estimators=100, random_state=42):
     print(f"[{target_name}] 모델 학습 및 SHAP 계산 중... (전체 데이터: {len(X)}개)")
 
+    """
+    
+    """
+
     # 1. 모델 학습 (학습은 빠르므로 전체 데이터 43,199개 모두 사용)
     # 트리가 너무 깊어지는 것을 방지하기 위해 max_depth를 15 정도로 제한하면 훨씬 빠르고 과적합도 막아줍니다.
     model = RandomForestRegressor(
@@ -53,6 +57,13 @@ def get_shap_importance_kmeans(X, y, target_name, n_estimators=100, random_state
     트리 기반 모델(Random Forest, XGBoost)은 데이터의 크기나 비율보다는 '순서(Rank)'를 기준으로 분기를 나누기 때문에 스케일링이 전혀 필요 없습니다.
     하지만 K-Means는 '유클리디안 거리(Euclidean Distance)'를 계산하기 때문에 스케일링을 안 하면 대참사가 일어납니다.
     예를 들어 압력 센서는 1000 단위로 움직이고, 밸브 상태는 0~1로 움직인다면 K-Means는 압력 센서만 보고 군집을 엉터리로 나눠버립니다.
+    """
+
+    """
+        수정해야 할 사항
+        1. n_clusters = min(300,len(X)) 에서 왜 min을 300 또는 len(X) 로 하는지, (n_clusters 가 더 작을 수 있지 않나? )
+        2. voting 방식을 활용해 수정
+        
     """
 
     print(
@@ -129,11 +140,12 @@ def run_shap_ensemble(df, target_dict, top_ratio=0.2):
     for target, leak_cols in target_dict.items():
         # X, y 분리 (타겟 본인과, 타겟을 계산하는 데 쓰인 부모 컬럼들 제외)
         cols_to_drop = [target] + leak_cols
-        X = df.drop(columns=[col for col in cols_to_drop if col in df.columns])
+        valid_cols_to_drop = list(set(cols_to_drop).intersection(df.columns))
+        X = df.drop(columns=valid_cols_to_drop)
         y = df[target]
 
         # 결측치가 있으면 RF가 안 돌아가므로 임시로 평균 채우기 (이미 전처리 하셨다면 생략 가능)
-        X = X.fillna(X.mean())
+        X = X.fillna(X.mean(numeric_only=True))
         y = y.fillna(y.mean())
 
         # SHAP 중요도 계산
@@ -155,10 +167,10 @@ def run_shap_ensemble(df, target_dict, top_ratio=0.2):
     list_of_sets = list(top_features_per_target.values())
 
     # 교집합: 3개 고장 모드 모두에서 공통으로 중요한 핵심 피처 (가장 강력함)
-    intersection_features = set.intersection(*list_of_sets)
+    intersection_features = set.intersection(*list_of_sets) if list_of_sets else set()
 
     # 합집합: 하나라도 중요하다고 뜬 피처 (풀(Pool)을 넓게 가져갈 때)
-    union_features = set.union(*list_of_sets)
+    union_features = set.union(*list_of_sets) if list_of_sets else set()
 
     # 최소 2개 이상의 타겟에서 중요하다고 꼽힌 피처 (가장 추천하는 현실적 타협안)
     from collections import Counter
@@ -219,7 +231,7 @@ def step3_4_select_features_and_finalize(
     print("-" * 60)
 
     # 3. 최종 학습용 데이터셋(X_train_ae) 구축
-    X_train_ae = df_clean[ensemble_lists["robust"]].copy()
+    X_train_ae = df_clean[ensemble_lists["robust"]].copy()  
 
     print(f"\n✅ 최종 데이터 준비 완료!")
     print(f"  - 오토인코더 학습용 데이터 (X_train_ae) 형태: {X_train_ae.shape}")
