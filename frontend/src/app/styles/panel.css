@@ -54,11 +54,12 @@
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 8px;
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .alert-table__head {
-  color: rgba(231, 255, 240, 0.66);
+  color: rgb(231, 255, 240);
 }
 
 .alert-table__row {
