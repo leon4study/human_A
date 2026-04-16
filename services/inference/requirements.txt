@@ -17,3 +17,5 @@ boto3           # MinIO/S3 연결
 # 4. 유틸리티
 python-dotenv
 apscheduler
+
+gmqtt
