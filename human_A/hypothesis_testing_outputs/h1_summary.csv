@@ -1,3 +1,0 @@
-﻿hypothesis,x,y,lag_10m,lag_minutes,p_value,significant
-H1_original,zone1_resistance,zone1_moisture_response_pct,6,60,1.2681133531888351e-117,True
-H1_alternative,filter_delta_p_kpa,flow_drop_rate,1,10,0.0,True

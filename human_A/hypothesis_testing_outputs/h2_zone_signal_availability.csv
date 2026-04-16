@@ -1,7 +1,0 @@
-﻿signal,threshold,events,failure_rate,pass_gate
-zone1_substrate_moisture_pct,0.0889560000000139,90,0.12222222222222223,True
-zone2_substrate_moisture_pct,0.08450819999999266,90,0.21111111111111114,True
-zone3_substrate_moisture_pct,0.08450819999999266,90,0.18888888888888888,True
-zone1_substrate_ec_ds_m,0.00444779999999951,90,0.24444444444444446,True
-zone2_substrate_ec_ds_m,0.00444779999999951,90,0.3555555555555555,False
-zone3_substrate_ec_ds_m,0.00444779999999951,90,0.5,False
