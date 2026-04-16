@@ -36,9 +36,9 @@ button {
   inset: 0; /* 부모를 덮는다 */
   z-index: 1;
   background:
-    radial-gradient(circle at top, rgba(48, 255, 140, 0.12), transparent 28%),  /* 위에서 원형 또는 타원형으로 내려오는 빛 */
+    radial-gradient(circle at top, rgba(118, 228, 255, 0.12), transparent 28%),  /* 위에서 원형 또는 타원형으로 내려오는 빛 */
     /* radial-gradient(circle at right center, rgba(79, 200, 247, 1), transparent 24%), */
-    linear-gradient(90deg, #4f7297 0%, #294b6e 50%, #4f7297 100%);
+    linear-gradient(90deg, #7496bb 0%, #4c7197 50%, #7496bb 100%);
 }
 
 .dashboard__overlay {
@@ -48,6 +48,26 @@ button {
   display: flex;
   flex-direction: column;
 }
+
+.dashboard__bottom-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 320px;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    linear-gradient(
+      0deg,
+      rgba(10, 36, 80, 0.96) 0%,
+      rgba(11, 38, 84, 0.73) 30%,
+      rgba(12, 42, 90, 0.55) 55%,
+      rgba(13, 46, 96, 0.32) 80%,
+      rgba(13, 46, 96, 0) 100%
+    );
+}
+
 
 /* 헤더 스타일 */
 .dashboard__header {
@@ -202,11 +222,11 @@ button {
   background:
     linear-gradient(
       90deg,
-      rgba(5, 20, 45, 0.96) 0%,
-      rgba(6, 22, 49, 0.78) 30%,
-      rgba(7, 26, 55, 0.65) 55%,
-      rgba(8, 30, 61, 0.32) 80%,
-      rgba(8, 30, 61, 0) 100%
+      rgba(10, 36, 80, 0.96) 0%,
+      rgba(11, 38, 84, 0.73) 30%,
+      rgba(12, 42, 90, 0.55) 55%,
+      rgba(13, 46, 96, 0.32) 80%,
+      rgba(13, 46, 96, 0) 100%
     );
 }
 
@@ -216,11 +236,16 @@ button {
   background:
     linear-gradient(
       270deg,
-      rgba(5, 20, 45, 0.96) 0%,
+      rgba(10, 36, 80, 0.96) 0%,
+      rgba(11, 38, 84, 0.73) 30%,
+      rgba(12, 42, 90, 0.55) 55%,
+      rgba(13, 46, 96, 0.32) 80%,
+      rgba(13, 46, 96, 0) 100%
+      /* rgba(5, 20, 45, 0.96) 0%,
       rgba(6, 22, 49, 0.78) 30%,
       rgba(7, 26, 55, 0.65) 55%,
       rgba(8, 30, 61, 0.32) 80%,
-      rgba(8, 30, 61, 0) 100%
+      rgba(8, 30, 61, 0) 100% */
     );
 }
 

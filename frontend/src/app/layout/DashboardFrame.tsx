@@ -128,6 +128,9 @@ function DashboardFrame() {
           </aside>
         </main>
 
+        {/* 하단 효과용 */}
+        <div className="dashboard__bottom-fade"></div>
+
         {/* 연결 상태 확인용 */}
         {/* <div
         style={{
