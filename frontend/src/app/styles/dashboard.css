@@ -27,27 +27,26 @@ button {
   position: relative;
   width: 100%;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top, rgba(48, 255, 140, 0.12), transparent 28%),  /* 위에서 원형 또는 타원형으로 내려오는 빛 */
-    /* radial-gradient(circle at right center, rgba(79, 200, 247, 1), transparent 24%), */
-    linear-gradient(90deg, #4f7297 0%, #294b6e 50%, #4f7297 100%);
 }
 
 /* 배경 장식 레이어 */
 .dashboard__bg {
   position: absolute;
   inset: 0; /* 부모를 덮는다 */
-  /* 약한 격자무늬 효과로 입체감 부여 */
-  /* background:
-    radial-gradient(circle at center, rgba(70, 170, 255, 0.08), transparent 100%),
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: auto, 36px 36px, 36px 36px; */
-  opacity: 0.18;
-  pointer-events: none; /* 다른 효과를 방해하지 못하게 하기 위한 설정 */
+  z-index: 1;
+  background:
+    radial-gradient(circle at top, rgba(48, 255, 140, 0.12), transparent 28%),  /* 위에서 원형 또는 타원형으로 내려오는 빛 */
+    /* radial-gradient(circle at right center, rgba(79, 200, 247, 1), transparent 24%), */
+    linear-gradient(90deg, #4f7297 0%, #294b6e 50%, #4f7297 100%);
+}
+
+.dashboard__overlay {
+  position: relative;
+  z-index: 5;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 헤더 스타일 */
@@ -59,8 +58,8 @@ button {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 16px 24px;
-  border-bottom: 1px solid rgba(111, 255, 185, 0.18);
-  background: rgba(5, 22, 16, 0.72);
+  border-bottom: 1px solid rgba(121, 111, 255, 0.18);
+  background: rgba(1, 31, 58, 0.72);
   backdrop-filter: blur(10px);
 }
 
@@ -175,11 +174,13 @@ button {
   position: relative;
   z-index: 2;
   width: 100%;
-  min-height: calc(100vh - 132px);
-  overflow: hidden;
   flex: 1;
-  display: flex;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  gap: 34px;
+  padding: 28px;
 }
 
 /* 왼쪽/오른쪽 전체 오버레이 레이어 */
@@ -223,73 +224,78 @@ button {
     );
 }
 
+.dashboard__center-wrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* 모델링이 들어갈 영역 */
 .dashboard__center {
   position: relative;
   flex: 1;
   min-width: 0;
-  min-height: 620px;
+  min-height: 0;
   overflow: hidden;
   background: transparent;
 }
 
-/* 양옆 패널을 침범하지 않도록 중앙 실사용 영역 */
-.dashboard__center__safe-area {
+/* 전체 배경 씬을 담는 영역 */
+.dashboard__bg-safe-area {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;      /* 아래쪽 기준으로 배치 */
+  justify-content: center;    /* 가로 중앙 */
+  padding: 80px 260px 110px; /* 헤더/좌우패널/하단영역 피해서 여백 */
+  pointer-events: none;
+}
+
+/* 실제 배치도 프레임 */
+.dashboard__bg-model-frame {
   position: relative;
   width: 100%;
   height: 100%;
-  padding: 0px 330px;
   display: flex;
-  align-items: center;
+  /* align-items: flex-end;      구조물이 바닥 쪽에 놓인 느낌 */
   justify-content: center;
 }
 
-/* 실제 모델이 들어갈 프레임 */
-.dashboard__center__model-frame {
+/* 실제 도식화/모델 자리 */
+.dashboard__bg-model {
   position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 디지털트윈 모델 배치 영역 */
-.dashboard__center__model {
-  position: relative;
-  width: 100%;
-  height: 100%;
+  width: min(1100px, 100%);
+  height: min(700px, 100%);
   background:
-    radial-gradient(circle at center, rgba(120, 210, 255, 0.08), transparent 60%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    radial-gradient(circle at center, rgba(120, 210, 255, 0.12), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(235, 248, 255, 0.68);
+  color: rgba(235, 248, 255, 0.72);
   font-size: 20px;
   font-weight: 600;
 }
 
 .dashboard__left-panels,
 .dashboard__right-panels {
-  position: absolute;
-  top: 28px;
-  bottom: 210px;
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 26px;
   width: 260px;
   flex-shrink: 0;
+  min-height: 0;
   z-index: 6;
 }
 
 .dashboard__bottom-panel {
-  position: absolute;
-  left: 330px;
-  right: 330px;
-  bottom: 20px;
-  height: 170px;
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 0 100px;
   z-index: 7;
 }
 
@@ -330,13 +336,13 @@ button {
     );
 } */
 
-.dashboard__left-panels {
+/* .dashboard__left-panels {
   left: 34px;
 }
 
 .dashboard__right-panels {
   right: 34px;
-}
+} */
 
 /* .center-placeholder {
   display: flex;

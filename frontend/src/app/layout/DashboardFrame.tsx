@@ -26,7 +26,9 @@ function DashboardFrame() {
 
   // 현재 선택된 CTP 항목 상태
   const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
-  const [selectedZoneId, setSelectedZoneId] = useState<string>(zoneItems[0]?.id ?? "");
+  const [selectedZoneId, setSelectedZoneId] = useState<string>(
+    zoneItems[0]?.id ?? "",
+  );
 
   const selectedMetric = useMemo(() => {
     if (!selectedMetricId) {
@@ -38,77 +40,96 @@ function DashboardFrame() {
 
   return (
     <div className="dashboard">
-      {/* 상단 바 */}
-      <header className="dashboard__header">
-        {/* 상단 좌측 바 */}
-        <div className="dashboard__header-left">
+
+      {/* 전체 배경 레이어 */}
+      <div className="dashboard__bg">
+        <CenterPlaceholder />
+      </div>
+
+      {/* UI 오버레이 레이어 */}
+      <div className="dashboard__overlay">
+        {/* 상단 바 */}
+        <header className="dashboard__header">
+          {/* 상단 좌측 바 */}
+          <div className="dashboard__header-left">
             <div className="dashboard__title-wrap">
-                <div className="dashboard__title">스마트팜 배양액 공급 시스템</div>
+              <div className="dashboard__title">
+                스마트팜 배양액 공급 시스템
+              </div>
 
-                <div className={`dashboard__system-status ${currentStatus.className}`}>
-                    <span className="dashboard__system-icon">{currentStatus.icon}</span>
-                    <span className="dashboard__system-text">{currentStatus.text}</span>
-                </div>
+              <div
+                className={`dashboard__system-status ${currentStatus.className}`}
+              >
+                <span className="dashboard__system-icon">
+                  {currentStatus.icon}
+                </span>
+                <span className="dashboard__system-text">
+                  {currentStatus.text}
+                </span>
+              </div>
             </div>
-        </div>
+          </div>
 
-        {/* 상단 중앙 바 */}
-        <footer className="dashboard__header-center">
-            <button className="dashboard__top-device-button is-active">1호기</button>
+          {/* 상단 중앙 바 */}
+          <footer className="dashboard__header-center">
+            <button className="dashboard__top-device-button is-active">
+              1호기
+            </button>
             <button className="dashboard__top-device-button">2호기</button>
             <button className="dashboard__top-device-button">3호기</button>
-        </footer>
+          </footer>
 
-        {/* 상단 우측 바 */}
-        <div className="dashboard__header-right">
-          <button className="dashboard__ai-button">AI 분석결과 페이지 버튼</button>
-          <div className="dashboard__time">
-            <CurrentTime />
+          {/* 상단 우측 바 */}
+          <div className="dashboard__header-right">
+            <button className="dashboard__ai-button">
+              AI 분석결과 페이지 버튼
+            </button>
+            <div className="dashboard__time">
+              <CurrentTime />
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* 본문 전체 */}
-      <main className="dashboard__body">
+        {/* 본문 전체 */}
+        <main className="dashboard__body">
+          {/* 좌측 패널 영역 */}
+          <aside className="dashboard__left-panels">
+            <KpiPanel items={kpiItems} />
+            <ZoneStatusPanel
+              zoneItems={zoneItems}
+              selectedZoneId={selectedZoneId}
+              onSelectZone={setSelectedZoneId}
+            />
+            <ZoneCauseTopPanel
+              selectedZoneId={selectedZoneId}
+              zoneItems={zoneItems}
+            />
+          </aside>
 
-        {/* 좌측 패널 영역 */}
-        <aside className="dashboard__left-panels">
-          <KpiPanel items={kpiItems} />
-          <ZoneStatusPanel
-            zoneItems={zoneItems}
-            selectedZoneId={selectedZoneId}
-            onSelectZone={setSelectedZoneId}
-          />
-          <ZoneCauseTopPanel
-            selectedZoneId={selectedZoneId}
-            zoneItems={zoneItems}
-          />
-        </aside>
+          {/* 중앙 묶음 영역 */}
+          <div className="dashboard__center-wrap">
+            {/* 중앙 영역 */}
+            <div className="dashboard__center-spacer"></div>
+            {/* 중앙 하단 영역 */}
+            <div className="dashboard__bottom-panel">
+              <AlertHistoryPanel items={alertItems} />
+            </div>
+          </div>
 
-        {/* 중앙 영역 */}
-        <div className="dashboard__center">
-          <CenterPlaceholder />
-        </div>
+          {/* 우측 패널 영역 */}
+          <aside className="dashboard__right-panels">
+            <EnvironmentPanel items={environment} />
+            <CtpStatusPanel
+              metrics={ctpMetrics}
+              selectedId={selectedMetricId}
+              onSelect={(metric) => setSelectedMetricId(metric.id)}
+            />
+            <CtpVisualizationPanel selectedMetric={selectedMetric} />
+          </aside>
+        </main>
 
-        {/* 중앙 하단 영역 */}
-        <div className="dashboard__bottom-panel">
-          <AlertHistoryPanel items={alertItems} />
-        </div>
-
-        {/* 우측 패널 영역 */}
-        <aside className="dashboard__right-panels">
-          <EnvironmentPanel items={environment} />
-          <CtpStatusPanel
-            metrics={ctpMetrics}
-            selectedId={selectedMetricId}
-            onSelect={(metric) => setSelectedMetricId(metric.id)}
-          />
-          <CtpVisualizationPanel selectedMetric={selectedMetric} />
-        </aside>
-      </main>
-
-      {/* 연결 상태 확인용 */}
-      {/* <div
+        {/* 연결 상태 확인용 */}
+        {/* <div
         style={{
           position: "fixed",
           right: "20px",
@@ -123,7 +144,7 @@ function DashboardFrame() {
       >
         WebSocket: {socketStatus}
       </div> */}
-
+      </div>
     </div>
   );
 }

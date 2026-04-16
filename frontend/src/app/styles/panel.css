@@ -63,16 +63,13 @@
 }
 
 .alert-table__body {
-  max-height: 200px;
+  max-height: 150px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.5) transparent;
 }
 
 .alert-table__row {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1.4fr 0.8fr;
-  gap: 8px;
   padding: 8px 0;
   border-bottom: 1px solid rgba(111, 255, 185, 0.08);
   color: #edfff4;
