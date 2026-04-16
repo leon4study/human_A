@@ -251,6 +251,10 @@ processor*
 /data
 /sim
 /models
+/logs
+
 
 # .zip 파일 무시
 *.zip
+
+
