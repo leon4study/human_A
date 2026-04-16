@@ -8,6 +8,7 @@ import glob
 import joblib
 import datetime
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from fastapi import FastAPI, Body, HTTPException
 from typing import Dict, Any, List
@@ -90,10 +91,10 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
 
             # 1. 해당 모델 피처만 추출
             input_values = [float(realtime_data.get(f, 0.0)) for f in features]
-            raw_array = np.array(input_values).reshape(1, -1)
+            raw_df = pd.DataFrame([input_values], columns=features)
 
             # 2. 추론
-            scaled_array = scaler.transform(raw_array)
+            scaled_array = scaler.transform(raw_df)
             pred_array = model.predict(scaled_array, verbose=0)
             mse_score = float(np.mean(np.power(scaled_array - pred_array, 2)))
 
@@ -130,6 +131,11 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
             final_results[sys_name] = {
                 "score": round(mse_score, 6),
                 "alarm": {"level": alarm_level, "label": label},
+                "thresholds": {
+                    "caution": round(t_caut, 6),
+                    "warning": round(t_warn, 6),
+                    "error": round(t_err, 6),
+                },
                 "rca": rca,
             }
 
