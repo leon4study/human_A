@@ -193,7 +193,7 @@ button {
   display: flex;
   min-width: 400px;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
 }
 
 /* 왼쪽 끝에서 시작해서 가운데로 갈수록 사라짐 */
@@ -293,10 +293,17 @@ button {
 }
 
 .dashboard__bottom-panel {
+  position: relative;
   flex-shrink: 0;
   margin-top: auto;
   padding: 0 100px;
-  z-index: 7;
+  z-index: 6;
+}
+
+.dashboard__bottom-panel .panel {
+  padding: 10px 10px 0;
+  border: 1px solid #0e477ccb;
+  border-radius: 30px;
 }
 
 /* .dashboard__left-panels::before,
