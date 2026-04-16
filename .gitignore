@@ -30,3 +30,5 @@ Thumbs.db
 ### 5. 로그 및 임시 파일 ###
 *.log
 tmp/
+
+services/frontend/node_modules
