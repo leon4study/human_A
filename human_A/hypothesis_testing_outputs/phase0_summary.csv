@@ -1,0 +1,9 @@
+﻿metric,value
+drain_ec_effective_cadence_median_hold_min,1.0
+drain_ec_effective_cadence_p95_hold_min,2.0
+isolated_event_count,90
+isolated_event_ratio,1.0
+drain_threshold_mad,0.004447800000001485
+drain_threshold_sigma,0.0063269513140818065
+drain_failure_rate,0.3555555555555555
+h2_main_gate_pass,False

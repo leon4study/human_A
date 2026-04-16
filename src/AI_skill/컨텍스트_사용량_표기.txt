@@ -1,0 +1,5 @@
+## Context Utilization Display
+
+End every response with an estimated context utilization percentage: `[Context: ~X%]`. This gives a persistent, at-a-glance gauge of how much context window has been consumed. The estimate should account for system instructions, conversation history, tool outputs, and any loaded content. Accuracy to the nearest 5% is sufficient — the goal is situational awareness, not precision.
+
+**Milestone notifications:** During long-running tasks (multi-step tool chains, extended protocol execution, background processing) where no natural response boundary exists, emit a brief inline milestone each time estimated utilization crosses a 5% threshold: `─── Context milestone: ~X% ───`. This ensures the user has visibility even when there is no conversational reply to attach the standard footer to. Milestones are informational — they do not pause execution.
