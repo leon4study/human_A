@@ -1,6 +1,11 @@
 import Panel from "../common/Panel";
+import type { AlertItem } from "../../types/dashboard";
 
-function AlertHistoryPanel() {
+interface AlertHistoryPanelProps {
+  items: AlertItem[];
+}
+
+function AlertHistoryPanel({ items }: AlertHistoryPanelProps) {
   return (
     <Panel title="Alert 이력">
       <div className="alert-table">
@@ -12,24 +17,14 @@ function AlertHistoryPanel() {
         </div>
 
         <div className="alert-table__body">
-          <div className="alert-table__row">
-            <span>-</span>
-            <span>-</span>
-            <span>-</span>
-            <span>-</span>
-          </div>
-          <div className="alert-table__row">
-            <span>-</span>
-            <span>-</span>
-            <span>-</span>
-            <span>-</span>
-          </div>
-          <div className="alert-table__row">
-            <span>-</span>
-            <span>-</span>
-            <span>-</span>
-            <span>-</span>
-          </div>
+          {items.map((item) => (
+            <div className="alert-table__row" key={item.id}>
+              <span>{item.time}</span>
+              <span>{item.equipment}</span>
+              <span>{item.cause}</span>
+              <span>{item.level}</span>
+            </div>
+          ))}
         </div>
       </div>
     </Panel>

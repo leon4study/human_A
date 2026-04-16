@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import "../styles/dashboard.css";
 import CurrentTime from "../components/common/CurrentTime";
 import KpiPanel from "../components/side/KpiPanel";
@@ -5,13 +6,35 @@ import AlertHistoryPanel from "../components/side/AlertHistoryPanel";
 import ZoneStatusPanel from "../components/side/ZoneStatusPanel";
 import EnvironmentPanel from "../components/side/EnvironmentPanel";
 import CtpStatusPanel from "../components/side/CtpStatusPanel";
+import CtpVisualizationPanel from "../components/side/CtpVisualizationPanel";
 import CenterPlaceholder from "../components/center/CenterPlaceholder";
-import type { SystemStatus } from "../components/common/SystemStatus";
 import { systemStatusMap } from "../components/common/SystemStatus";
+import useDashboardSocket from "../hooks/useDashboardSocket";
+import ZoneCauseTopPanel from "../components/side/ZoneCauseTopPanel";
 
 function DashboardFrame() {
-    const systemStatus: SystemStatus = "warning"; // "normal" | "warning" | "danger"
-    const currentStatus = systemStatusMap[systemStatus];
+  const {
+    systemStatus,
+    environment,
+    ctpMetrics,
+    kpiItems,
+    alertItems,
+    zoneItems,
+  } = useDashboardSocket();
+
+  const currentStatus = systemStatusMap[systemStatus];
+
+  // 현재 선택된 CTP 항목 상태
+  const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>(zoneItems[0]?.id ?? "");
+
+  const selectedMetric = useMemo(() => {
+    if (!selectedMetricId) {
+      return null;
+    }
+
+    return ctpMetrics.find((item) => item.id === selectedMetricId) ?? null;
+  }, [selectedMetricId, ctpMetrics]);
 
   return (
     <div className="dashboard">
@@ -50,22 +73,56 @@ function DashboardFrame() {
 
         {/* 좌측 패널 영역 */}
         <aside className="dashboard__left-panels">
-          <KpiPanel />
-          <AlertHistoryPanel />
-          <ZoneStatusPanel />
+          <KpiPanel items={kpiItems} />
+          <ZoneStatusPanel
+            zoneItems={zoneItems}
+            selectedZoneId={selectedZoneId}
+            onSelectZone={setSelectedZoneId}
+          />
+          <ZoneCauseTopPanel
+            selectedZoneId={selectedZoneId}
+            zoneItems={zoneItems}
+          />
         </aside>
 
         {/* 중앙 영역 */}
-
+        <div className="dashboard__center">
           <CenterPlaceholder />
+        </div>
 
+        {/* 중앙 하단 영역 */}
+        <div className="dashboard__bottom-panel">
+          <AlertHistoryPanel items={alertItems} />
+        </div>
 
         {/* 우측 패널 영역 */}
         <aside className="dashboard__right-panels">
-          <EnvironmentPanel />
-          <CtpStatusPanel />
+          <EnvironmentPanel items={environment} />
+          <CtpStatusPanel
+            metrics={ctpMetrics}
+            selectedId={selectedMetricId}
+            onSelect={(metric) => setSelectedMetricId(metric.id)}
+          />
+          <CtpVisualizationPanel selectedMetric={selectedMetric} />
         </aside>
       </main>
+
+      {/* 연결 상태 확인용 */}
+      {/* <div
+        style={{
+          position: "fixed",
+          right: "20px",
+          bottom: "20px",
+          padding: "8px 12px",
+          borderRadius: "10px",
+          background: "rgba(0,0,0,0.6)",
+          color: "#fff",
+          fontSize: "12px",
+          zIndex: 9999,
+        }}
+      >
+        WebSocket: {socketStatus}
+      </div> */}
 
     </div>
   );

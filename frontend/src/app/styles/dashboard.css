@@ -226,28 +226,71 @@ button {
 /* 모델링이 들어갈 영역 */
 .dashboard__center {
   position: relative;
-  width: 100%;
-  height: calc(100vh - 180px);
+  flex: 1;
+  min-width: 0;
   min-height: 620px;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
   overflow: hidden;
+  background: transparent;
+}
+
+/* 양옆 패널을 침범하지 않도록 중앙 실사용 영역 */
+.dashboard__center__safe-area {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 0px 330px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 실제 모델이 들어갈 프레임 */
+.dashboard__center__model-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 디지털트윈 모델 배치 영역 */
+.dashboard__center__model {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(circle at center, rgba(120, 210, 255, 0.08), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(235, 248, 255, 0.68);
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .dashboard__left-panels,
 .dashboard__right-panels {
   position: absolute;
   top: 28px;
-  bottom: 50px;
+  bottom: 210px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  /* gap: 26px; */
+  gap: 26px;
   width: 260px;
   flex-shrink: 0;
   z-index: 6;
+}
+
+.dashboard__bottom-panel {
+  position: absolute;
+  left: 330px;
+  right: 330px;
+  bottom: 20px;
+  height: 170px;
+  z-index: 7;
 }
 
 /* .dashboard__left-panels::before,
@@ -329,48 +372,4 @@ button {
   text-align: center;
 } */
 
-.center-stage {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  min-height: 620px;
-  overflow: hidden;
-  background: transparent;
-}
 
-/* 양옆 패널을 침범하지 않도록 중앙 실사용 영역 */
-.center-stage__safe-area {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding: 0px 330px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 실제 모델이 들어갈 프레임 */
-.center-stage__model-frame {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 디지털트윈 모델 배치 영역 */
-.center-stage__model {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background:
-    radial-gradient(circle at center, rgba(120, 210, 255, 0.08), transparent 60%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(235, 248, 255, 0.68);
-  font-size: 20px;
-  font-weight: 600;
-}

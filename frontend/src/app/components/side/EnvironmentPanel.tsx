@@ -1,25 +1,22 @@
 import Panel from "../common/Panel";
+import type { EnvironmentItem } from "../../types/dashboard";
 
-function EnvironmentPanel() {
+interface EnvironmentPanelProps {
+  items: EnvironmentItem[];
+}
+
+function EnvironmentPanel({ items }: EnvironmentPanelProps) {
   return (
     <Panel title="환경 정보">
       <div className="panel-list">
-        <div className="panel-row">
-          <span>광량</span>
-          <strong>400 μmol/m²·s</strong>
-        </div>
-        <div className="panel-row">
-          <span>온도</span>
-          <strong>23.4°C</strong>
-        </div>
-        <div className="panel-row">
-          <span>습도</span>
-          <strong>68%</strong>
-        </div>
-        <div className="panel-row">
-          <span>CO₂</span>
-          <strong>800 ppm</strong>
-        </div>
+        {items.map((item) => (
+          <div className="panel-row" key={item.id}>
+            <span>{item.label}</span>
+            <strong>
+              {item.value} {item.unit}
+            </strong>
+          </div>
+        ))}
       </div>
     </Panel>
   );

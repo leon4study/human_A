@@ -1,28 +1,35 @@
 import Panel from "../common/Panel";
+import type { CtpMetric } from "../../types/dashboard";
 
-function CtpStatusPanel() {
+interface CtpStatusPanelProps {
+  metrics: CtpMetric[];
+  selectedId: string | null;
+  onSelect: (metric: CtpMetric) => void;
+}
+
+function CtpStatusPanel({
+  metrics,
+  selectedId,
+  onSelect,
+}: CtpStatusPanelProps) {
   return (
     <Panel title="CTP 상태">
       <div className="ctp-grid">
-        <div className="ctp-card">
-          <span>펌프 토출 유량</span>
-          <strong>1.650</strong>
-        </div>
-
-        <div className="ctp-card is-alert">
-          <span>펌프 토출 압력</span>
-          <strong>650</strong>
-        </div>
-
-        <div className="ctp-card">
-          <span>필터 차압</span>
-          <strong>1.650</strong>
-        </div>
-
-        <div className="ctp-card is-warning">
-          <span>베어링 진동</span>
-          <strong>650</strong>
-        </div>
+        {metrics.map((item) => (
+          <button
+            type="button"
+            key={item.id}
+            className={`ctp-card ctp-card--${item.level} ${
+              selectedId === item.id ? "is-selected" : ""
+            }`}
+            onClick={() => onSelect(item)}
+          >
+            <span>{item.label}</span>
+            <strong>
+              {item.value} <em>{item.unit}</em>
+            </strong>
+          </button>
+        ))}
       </div>
     </Panel>
   );
