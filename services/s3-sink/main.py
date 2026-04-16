@@ -74,7 +74,7 @@ def on_connect(client, userdata, flags, rc, properties=None):
     """MQTT 브로커 연결 성공 시 호출"""
     if rc == 0:
         print(f"Connected to MQTT Broker at {MQTT_HOST}")
-        client.subscribe("farm/sensor/raw")
+        client.subscribe("sensor/data")
     else:
         print(f"Failed to connect, return code {rc}")
 
@@ -85,6 +85,10 @@ def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
         data_buffer.append(payload)
+
+        # [로그 추가] 데이터가 쌓이고 있는지 확인하세요
+        if len(data_buffer) % 10 == 0:
+            print(f"📦 현재 버킷에 {len(data_buffer)}개 데이터 쌓임...")
         
         # 현재 시간과 마지막 저장 시간 비교
         elapsed = (datetime.now() - last_flush_time).seconds
