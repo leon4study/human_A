@@ -1,0 +1,20 @@
+# 1. API 서버 관련
+fastapi==0.135.3
+uvicorn==0.44.0
+
+# 2. AI 및 데이터 처리 관련
+tensorflow-cpu==2.21.0
+pandas==3.0.2
+numpy==2.4.4
+joblib==1.5.3
+scikit-learn==1.8.0
+
+# 3. 데이터베이스 및 클라우드 저장소 관련
+psycopg2-binary==2.9.11
+SQLAlchemy  # 버전이 명시되지 않았으므로 최신 안정버전 권장
+boto3==1.42.89
+
+# 4. 유틸리티 및 통신
+python-dotenv==1.2.2
+apscheduler  # 버전이 명시되지 않았으므로 최신 안정버전 권장
+gmqtt==0.7.0
