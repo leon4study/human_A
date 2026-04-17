@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import "../styles/tailwind.css";
 import "../styles/dashboard.css";
 import CurrentTime from "../components/common/CurrentTime";
 import KpiPanel from "../components/side/KpiPanel";
