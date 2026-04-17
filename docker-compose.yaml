@@ -123,7 +123,7 @@ services:
       # 필요한 추가 환경 변수들...
     volumes:
       # 호스트의 모델 폴더를 컨테이너와 동기화 (S3에서 다운로드된 파일 반영용)
-      - ./models:/app/models
+      - ./services/inference/models:/app/models
     networks:
       - smartfarm-net
     depends_on:
