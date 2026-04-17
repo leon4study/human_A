@@ -42,8 +42,14 @@ s3 = boto3.client('s3',
 MODELS_DATA = {}
 
 # [경로 설정]
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # src 폴더
-MODEL_DIR = os.path.join(os.path.dirname(BASE_DIR), "models")
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # src 폴더
+# MODEL_DIR = os.path.join(os.path.dirname(BASE_DIR), "models")
+# 도커 내부의 작업 디렉토리(/app)를 기준으로 절대 경로를 설정합니다.
+MODEL_DIR = "/app/models"
+
+# 만약 로컬에서도 계속 테스트해야 한다면 아래처럼 쓰세요.
+if not os.path.exists(MODEL_DIR):
+    MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models")
 
 print(f"DEBUG: 모델 폴더 탐색 경로 -> {MODEL_DIR}") # 확인용 로그
 
