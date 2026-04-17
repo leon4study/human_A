@@ -1,5 +1,4 @@
-fastapi
-uvicorn
-sqlalchemy
-psycopg2-binary
-python-dotenv
+fastapi==0.135.3
+uvicorn[standard]
+paho-mqtt==2.1.0
+python-dotenv==1.2.2
