@@ -10,7 +10,7 @@ from dotenv import load_dotenv # 추가
 
 # 1. .env 파일 로드
 # 프로젝트 루트에 있는 .env를 읽어옵니다.
-load_dotenv()
+load_dotenv("../../.env")
 
 # 환경 변수 (Docker Compose에서 주입받을 예정)
 MQTT_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")

@@ -1,10 +1,13 @@
 import os
+from dotenv import load_dotenv
 import json
 import asyncio
 import threading
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 import paho.mqtt.client as mqtt
+
+load_dotenv("../../.env")
 
 app = FastAPI(title="Smart Farm Backend Hub")
 
@@ -60,7 +63,7 @@ def start_mqtt_loop(loop):
     client.on_connect = on_connect
     client.on_message = on_message
 
-    mqtt_host = os.getenv("MQTT_BROKER_HOST", "127.0.0.1")
+    mqtt_host = os.getenv("BE_MQTT_BROKER_HOST", "127.0.0.1")
     client.connect(mqtt_host, 1883, 60)
     client.loop_forever()
 
