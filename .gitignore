@@ -32,3 +32,8 @@ Thumbs.db
 tmp/
 
 services/frontend/node_modules
+
+# 모델 및 아티팩트 제외
+services/inference/models/*.keras
+services/inference/models/*.pkl
+services/inference/models/*.json
