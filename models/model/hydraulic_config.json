@@ -1,0 +1,1 @@
+{"model_name": "hydraulic", "threshold_caution": 0.03778699794718141, "threshold_warning": 0.05997759818825821, "threshold_error": 0.0767800596632644, "features": ["flow_rate_l_min", "hydraulic_power_kw", "bearing_vibration_rms_mm_s", "filter_pressure_in_kpa"]}

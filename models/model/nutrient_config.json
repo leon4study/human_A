@@ -1,0 +1,1 @@
+{"model_name": "nutrient", "threshold_caution": 0.002773631893296181, "threshold_warning": 0.004166308001683019, "threshold_error": 0.00605717137003022, "features": ["hydraulic_power_kw", "turbidity_ntu", "tank_a_level_pct", "bearing_temperature_c", "air_temp_c"]}

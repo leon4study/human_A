@@ -1,0 +1,18 @@
+﻿AE 모델,변수,정상 중앙값,이상 중앙값,변화율(%),MWU p,t-test p,KS p,효과크기 r,Bonferroni 기준,유의(MWU)
+motor_current_a,motor_current_a,6.267,0.085,-98.6,0.0,비정규,0.0,0.547,0.0125,V
+motor_current_a,motor_temperature_c,45.15,47.659,5.6,0.0,비정규,0.0,0.46,0.0125,V
+motor_current_a,pump_rpm,1726.831,1.037,-99.9,0.0,비정규,0.0,0.57,0.0125,V
+motor_current_a,discharge_pressure_kpa,186.578,3.053,-98.4,0.0,비정규,0.0,0.546,0.0125,V
+zone1_resistance,zone1_resistance,49.0854,86.3046,75.8,0.0,비정규,0.0,0.304,0.01667,V
+zone1_resistance,zone1_pressure_kpa,130.893,56.738,-56.7,0.0,비정규,0.0,0.302,0.01667,V
+zone1_resistance,zone1_flow_l_min,3.425,0.991,-71.1,0.0,비정규,0.0,0.408,0.01667,V
+wire_to_water_efficiency,wire_to_water_efficiency,0.029,0.0213,-26.7,0.0,비정규,0.0,0.243,0.01,V
+wire_to_water_efficiency,pump_rpm,1720.586,1707.054,-0.8,0.0,비정규,0.0,0.111,0.01,V
+wire_to_water_efficiency,motor_temperature_c,44.485,48.665,9.4,0.0,비정규,0.0,0.83,0.01,V
+wire_to_water_efficiency,suction_pressure_kpa,-10.464,-14.208,-35.8,0.0,비정규,0.0,0.305,0.01,V
+wire_to_water_efficiency,bearing_temperature_c,41.815,45.608,9.1,0.0,비정규,0.0,0.876,0.01,V
+mix_ph,mix_ph,5.8,5.8,0.0,0.08326,비정규,0.19021,0.007,0.01,X
+mix_ph,dosing_acid_ml_min,11.308,11.155,-1.4,0.0,비정규,0.0,0.056,0.01,V
+mix_ph,mix_temp_c,19.014,17.804,-6.4,0.0,비정규,0.0,0.565,0.01,V
+mix_ph,acid_tank_level_pct,63.46,40.0,-37.0,0.0,비정규,0.0,0.992,0.01,V
+mix_ph,mix_flow_l_min,19.14,12.214,-36.2,0.0,비정규,0.0,0.316,0.01,V

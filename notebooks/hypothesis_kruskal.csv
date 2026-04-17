@@ -1,0 +1,18 @@
+﻿AE 모델,변수,KW statistic,p-value,그룹간 차이,레벨0(정상),레벨1(주의),레벨2(경고),레벨3(위험)
+motor_current_a,motor_current_a,17398.83,0.0,V,6.142,9.2,0.083,0.088
+motor_current_a,motor_temperature_c,19819.5,0.0,V,44.936,50.543,47.576,47.825
+motor_current_a,pump_rpm,12491.94,0.0,V,1724.022,1755.97,0.977,1.145
+motor_current_a,discharge_pressure_kpa,17380.95,0.0,V,184.399,240.3375,3.042,3.071
+zone1_resistance,zone1_resistance,960.81,0.0,V,49.0986,31.0331,52.1481,1875500.0
+zone1_resistance,zone1_pressure_kpa,522.68,0.0,V,130.921,116.683,81.846,2.1405
+zone1_resistance,zone1_flow_l_min,1171.37,0.0,V,3.425,3.682,1.551,0.0
+wire_to_water_efficiency,wire_to_water_efficiency,4428.16,0.0,V,0.0294,0.0218,0.0217,0.0139
+wire_to_water_efficiency,pump_rpm,1566.19,0.0,V,1721.3215,1710.403,1710.5805,1187.4345
+wire_to_water_efficiency,motor_temperature_c,48039.74,0.0,V,44.334,48.422,48.7985,48.322
+wire_to_water_efficiency,suction_pressure_kpa,10588.87,0.0,V,-10.314,-13.985,-14.274,-8.4805
+wire_to_water_efficiency,bearing_temperature_c,52399.0,0.0,V,41.741,45.15,45.674,45.2715
+mix_ph,mix_ph,55.37,0.0,V,5.8,5.8,5.8,5.798
+mix_ph,dosing_acid_ml_min,803.83,0.0,V,11.302,11.464,11.123,11.807
+mix_ph,mix_temp_c,24795.77,0.0,V,19.038,17.521,17.792,20.2195
+mix_ph,acid_tank_level_pct,67658.25,0.0,V,64.247,45.68,40.0,40.0
+mix_ph,mix_flow_l_min,7103.53,0.0,V,20.062,15.3685,12.045,18.1935

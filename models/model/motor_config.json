@@ -1,0 +1,1 @@
+{"model_name": "motor", "threshold_caution": 0.00738998132157992, "threshold_warning": 0.01643516148537178, "threshold_error": 0.20945919382276604, "features": ["zone1_substrate_moisture_pct", "flow_baseline_l_min", "zone1_resistance"]}

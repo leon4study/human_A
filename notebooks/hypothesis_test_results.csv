@@ -1,0 +1,18 @@
+﻿AE 모델,역할,변수,정상 중앙값,이상 중앙값,변화율(%),p-value,유의,n_정상,n_이상
+motor_current_a,TARGET,motor_current_a,6.0195,0.084,-98.6,0.0,✅,106298,5595
+motor_current_a,FEATURE,motor_temperature_c,45.398,47.813,5.3,0.0,✅,106298,5595
+motor_current_a,FEATURE,pump_rpm,1720.8265,0.99,-99.9,0.0,✅,106298,5595
+motor_current_a,FEATURE,discharge_pressure_kpa,182.2585,3.034,-98.3,0.0,✅,106298,5595
+zone1_resistance,TARGET,zone1_resistance,52.0676,11.0374,-78.8,0.0,✅,106298,5595
+zone1_resistance,FEATURE,zone1_pressure_kpa,134.0435,124.43,-7.2,0.0,✅,106298,5595
+zone1_resistance,FEATURE,zone1_flow_l_min,3.222,11.217,248.1,0.0,✅,106298,5595
+wire_to_water_efficiency,TARGET,wire_to_water_efficiency,0.023,0.0285,23.6,0.0,✅,106298,5595
+wire_to_water_efficiency,FEATURE,pump_rpm,1712.58,1756.869,2.6,0.0,✅,106298,5595
+wire_to_water_efficiency,FEATURE,motor_temperature_c,45.4555,50.649,11.4,0.0,✅,106298,5595
+wire_to_water_efficiency,FEATURE,suction_pressure_kpa,-10.4905,-15.237,-45.2,0.0,✅,106298,5595
+wire_to_water_efficiency,FEATURE,bearing_temperature_c,42.615,46.65,9.5,0.0,✅,106298,5595
+mix_ph,TARGET,mix_ph,5.8,5.8,0.0,0.201166,❌,106298,5595
+mix_ph,FEATURE,dosing_acid_ml_min,11.338,0.164,-98.6,0.0,✅,106298,5595
+mix_ph,FEATURE,mix_temp_c,18.944,17.462,-7.8,0.0,✅,106298,5595
+mix_ph,FEATURE,acid_tank_level_pct,58.6945,40.0,-31.9,0.0,✅,106298,5595
+mix_ph,FEATURE,mix_flow_l_min,16.6165,0.046,-99.7,0.0,✅,106298,5595
