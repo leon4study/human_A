@@ -1,10 +1,10 @@
 import Panel from "../common/Panel";
-import type { CtpMetric } from "../../types/dashboard";
+import type { CtpVisualizationMetric } from "../../types/dashboard";
 
 interface CtpStatusPanelProps {
-  metrics: CtpMetric[];
+  metrics: CtpVisualizationMetric[];
   selectedId: string | null;
-  onSelect: (metric: CtpMetric) => void;
+  onSelect: (metricId: string) => void;
 }
 
 function CtpStatusPanel({
@@ -12,24 +12,48 @@ function CtpStatusPanel({
   selectedId,
   onSelect,
 }: CtpStatusPanelProps) {
+  const getStatus = (
+    value: number,
+    caution: number,
+    critical: number,
+  ): "normal" | "warning" | "danger" => {
+    if (value < caution) {
+      return "normal";
+    }
+
+    if (value < critical) {
+      return "warning";
+    }
+
+    return "danger";
+  };
+
   return (
     <Panel title="CTP 상태">
       <div className="ctp-grid">
-        {metrics.map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            className={`ctp-card ctp-card--${item.level} ${
-              selectedId === item.id ? "is-selected" : ""
-            }`}
-            onClick={() => onSelect(item)}
-          >
-            <span>{item.label}</span>
-            <strong>
-              {item.value} <em>{item.unit}</em>
-            </strong>
-          </button>
-        ))}
+        {metrics.map((metric) => {
+          const status = getStatus(
+            metric.value,
+            metric.caution,
+            metric.critical,
+          );
+
+          return (
+            <button
+              type="button"
+              key={metric.id}
+              className={`ctp-card ctp-card--${status} ${
+                selectedId === metric.id ? "is-selected" : ""
+              }`}
+              onClick={() => onSelect(metric.id)}
+            >
+              <span>{metric.label}</span>
+              <strong>
+                {metric.value} <em>{metric.unit}</em>
+              </strong>
+            </button>
+          );
+        })}
       </div>
     </Panel>
   );

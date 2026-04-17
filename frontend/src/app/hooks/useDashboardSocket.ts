@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import type {
   AlertItem,
-  CtpMetric,
+  CtpVisualizationMetric,
   DashboardSocketMessage,
   EnvironmentItem,
   KpiItem,
   ZoneItem,
 } from "../types/dashboard";
 import { environmentData } from "../data/environmentData";
-import { ctpData } from "../data/ctpData";
+import { ctpVisualizationData } from "../data/ctpVisualizationData";
 import { kpiData } from "../data/kpiData";
 import { alertData } from "../data/alertData";
 import { zoneData } from "../data/zoneData";
@@ -17,7 +17,7 @@ import type { SystemStatus } from "../components/common/SystemStatus";
 interface DashboardSocketState {
   systemStatus: SystemStatus;
   environment: EnvironmentItem[];
-  ctpMetrics: CtpMetric[];
+  ctpVisualizationMetrics: CtpVisualizationMetric[];
   kpiItems: KpiItem[];
   alertItems: AlertItem[];
   zoneItems: ZoneItem[];
@@ -26,10 +26,12 @@ interface DashboardSocketState {
 
 const SOCKET_URL = "ws://localhost:8080/ws/dashboard";
 
+
+
 function useDashboardSocket(): DashboardSocketState {
   const [systemStatus, setSystemStatus] = useState<SystemStatus>("warning");
   const [environment, setEnvironment] = useState<EnvironmentItem[]>(environmentData);
-  const [ctpMetrics, setCtpMetrics] = useState<CtpMetric[]>(ctpData);
+  const [ctpVisualizationMetrics, setCtpVisualizationMetrics] = useState<CtpVisualizationMetric[]>(ctpVisualizationData);
   const [kpiItems, setKpiItems] = useState<KpiItem[]>(kpiData);
   const [alertItems, setAlertItems] = useState<AlertItem[]>(alertData);
   const [zoneItems, setZoneItems] = useState<ZoneItem[]>(zoneData);
@@ -55,8 +57,9 @@ function useDashboardSocket(): DashboardSocketState {
           setEnvironment(payload.environment);
         }
 
-        if (payload.ctpMetrics) {
-          setCtpMetrics(payload.ctpMetrics);
+        // CTP 시각화 데이터
+        if (payload.ctpVisualizationMetrics) {
+          setCtpVisualizationMetrics(payload.ctpVisualizationMetrics);
         }
 
         if (payload.kpiItems) {
@@ -70,7 +73,6 @@ function useDashboardSocket(): DashboardSocketState {
         if (payload.zoneItems) {
           setZoneItems(payload.zoneItems);
         }
-
       } catch (error) {
         console.error("웹소켓 메시지 파싱 실패:", error);
       }
@@ -92,7 +94,7 @@ function useDashboardSocket(): DashboardSocketState {
   return {
     systemStatus,
     environment,
-    ctpMetrics,
+    ctpVisualizationMetrics,
     kpiItems,
     alertItems,
     zoneItems,

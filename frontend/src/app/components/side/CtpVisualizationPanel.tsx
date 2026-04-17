@@ -1,9 +1,9 @@
 import Panel from "../common/Panel";
-import type { CtpMetric } from "../../types/dashboard";
+import type { CtpVisualizationMetric } from "../../types/dashboard";
 
 // CTP 시각화 패널의 props 인터페이스
 interface CtpVisualizationPanelProps {
-  selectedMetric: CtpMetric | null;
+  selectedMetric: CtpVisualizationMetric | null;
 }
 
 // 그래프 좌표 타입
@@ -31,7 +31,7 @@ function CtpVisualizationPanel({
       <Panel title="CTP 시각화">
         {/* 컨테이너 공간 유지용 */}
         <div className="ctp-visualization ctp-visualization--empty">
-          <div className="ctp-visualization__placeholder"></div>
+          <div className="ctp-visualization__placeholder">시각화 할 CTP를 선택해주세요.</div>
         </div>
       </Panel>
     );
@@ -42,21 +42,21 @@ function CtpVisualizationPanel({
 
   // 그래프 Y축 최소값 계산 (critical 기준으로 여유 있게)
   const minValue =
-    Math.min(
-      ...values,
-      selectedMetric.w1,
-      selectedMetric.w2,
-      selectedMetric.critical
-    ) * 0.9;
+  Math.min(
+    ...values,
+    selectedMetric.caution,
+    selectedMetric.warning,
+    selectedMetric.critical
+  ) * 0.9;
 
   // 그래프 Y축 최대값 계산 (critical 기준으로 여유 있게)
   const maxValue =
-    Math.max(
-      ...values,
-      selectedMetric.w1,
-      selectedMetric.w2,
-      selectedMetric.critical
-    ) * 1.1;
+  Math.max(
+    ...values,
+    selectedMetric.caution,
+    selectedMetric.warning,
+    selectedMetric.critical
+  ) * 1.1;
 
   // x축 좌표 변환 함수 (index를 0~chartWidth 범위로 변환)
   const normalizeX = (index: number) => {
@@ -83,8 +83,8 @@ function CtpVisualizationPanel({
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ");
 
-  const w1Y = normalizeY(selectedMetric.w1);
-  const w2Y = normalizeY(selectedMetric.w2);
+  const cautionY = normalizeY(selectedMetric.caution);
+  const warningY = normalizeY(selectedMetric.warning);
   const criticalY = normalizeY(selectedMetric.critical);
 
   // critical 초과 여부 판단 함수
@@ -178,17 +178,17 @@ function CtpVisualizationPanel({
 
         <div className="ctp-chart">
           <div
-            className="ctp-chart__line-label ctp-chart__line-label--w1"
-            style={{ top: `${w1Y - 10}px` }}
+            className="ctp-chart__line-label ctp-chart__line-label--caution"
+            style={{ top: `${cautionY - 10}px` }}
           >
-            W1
+            Caution
           </div>
 
           <div
-            className="ctp-chart__line-label ctp-chart__line-label--w2"
-            style={{ top: `${w2Y - 10}px` }}
+            className="ctp-chart__line-label ctp-chart__line-label--warning"
+            style={{ top: `${warningY - 10}px` }}
           >
-            W2
+            Warning
           </div>
 
           <div
@@ -199,12 +199,12 @@ function CtpVisualizationPanel({
           </div>
 
           <div
-            className="ctp-chart__threshold ctp-chart__threshold--w1"
-            style={{ top: `${w1Y}px` }}
+            className="ctp-chart__threshold ctp-chart__threshold--caution"
+            style={{ top: `${cautionY}px` }}
           />
           <div
-            className="ctp-chart__threshold ctp-chart__threshold--w2"
-            style={{ top: `${w2Y}px` }}
+            className="ctp-chart__threshold ctp-chart__threshold--warning"
+            style={{ top: `${warningY}px` }}
           />
           <div
             className="ctp-chart__threshold ctp-chart__threshold--critical"

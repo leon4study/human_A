@@ -1,5 +1,21 @@
 import type { AlertItem } from "../types/dashboard";
 
+function formatDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}.${month}.${day}`;
+}
+
+function formatTime(date: Date) {
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  const second = String(date.getSeconds()).padStart(2, "0");
+
+  return `${hour}:${minute}:${second}`;
+}
+
 function createMockAlertData(count: number): AlertItem[] {
   const equipmentList = [
     "1호기 펌프",
@@ -29,18 +45,18 @@ function createMockAlertData(count: number): AlertItem[] {
     "막힘 가능성 감지",
   ];
 
-  const levelList = ["INFO", "WARNING", "CRITICAL"];
+  const levelList = ["CAUTION", "WARNING", "CRITICAL"];
 
   const result: AlertItem[] = [];
 
   for (let i = 0; i < count; i++) {
-    const hour = 8 + Math.floor(i / 12);
-    const minute = (i * 5) % 60;
-    const second = (i * 13) % 60;
+    const currentDate = new Date();
+    currentDate.setMinutes(currentDate.getMinutes() - i * 5);
 
     result.push({
       id: `alert-${i + 1}`,
-      time: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`,
+      date: formatDate(currentDate),
+      time: formatTime(currentDate),
       equipment: equipmentList[i % equipmentList.length],
       cause: causeList[i % causeList.length],
       level: levelList[i % levelList.length],

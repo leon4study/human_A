@@ -16,7 +16,7 @@ function DashboardFrame() {
   const {
     systemStatus,
     environment,
-    ctpMetrics,
+    ctpVisualizationMetrics,
     kpiItems,
     alertItems,
     zoneItems,
@@ -24,23 +24,25 @@ function DashboardFrame() {
 
   const currentStatus = systemStatusMap[systemStatus];
 
-  // 현재 선택된 CTP 항목 상태
+  // 현재 선택된 CTP 항목 id
   const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
   const [selectedZoneId, setSelectedZoneId] = useState<string>(
     zoneItems[0]?.id ?? "",
   );
 
+  // 시각화에서 사용할 선택 항목 찾기
   const selectedMetric = useMemo(() => {
     if (!selectedMetricId) {
       return null;
     }
 
-    return ctpMetrics.find((item) => item.id === selectedMetricId) ?? null;
-  }, [selectedMetricId, ctpMetrics]);
+    return (
+      ctpVisualizationMetrics.find((item) => item.id === selectedMetricId) ?? null
+    );
+  }, [selectedMetricId, ctpVisualizationMetrics]);
 
   return (
     <div className="dashboard">
-
       {/* 전체 배경 레이어 */}
       <div className="dashboard__bg">
         <CenterPlaceholder />
@@ -110,6 +112,7 @@ function DashboardFrame() {
           <div className="dashboard__center-wrap">
             {/* 중앙 영역 */}
             <div className="dashboard__center-spacer"></div>
+
             {/* 중앙 하단 영역 */}
             <div className="dashboard__bottom-panel">
               <AlertHistoryPanel items={alertItems} />
@@ -120,9 +123,9 @@ function DashboardFrame() {
           <aside className="dashboard__right-panels">
             <EnvironmentPanel items={environment} />
             <CtpStatusPanel
-              metrics={ctpMetrics}
+              metrics={ctpVisualizationMetrics}
               selectedId={selectedMetricId}
-              onSelect={(metric) => setSelectedMetricId(metric.id)}
+              onSelect={(metricId) => setSelectedMetricId(metricId)}
             />
             <CtpVisualizationPanel selectedMetric={selectedMetric} />
           </aside>
