@@ -109,3 +109,22 @@ services:
       - data-lake
     networks:
       - smartfarm-net
+  inference-api:
+    build:
+      context: ./services/inference
+      dockerfile: Dockerfile
+    container_name: smart-inference-api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@smart-db:5432/smartfarm
+      - S3_BUCKET_NAME=smart-farm-bucket
+      # 필요한 추가 환경 변수들...
+    volumes:
+      # 호스트의 모델 폴더를 컨테이너와 동기화 (S3에서 다운로드된 파일 반영용)
+      - ./models:/app/models
+    networks:
+      - smartfarm-net
+    depends_on:
+      - smart-db
