@@ -14,6 +14,10 @@ from fastapi import FastAPI, Body, HTTPException
 from typing import Dict, Any, List
 from logger import get_logger
 
+# 분리해둔 추론 함수들 불러오기
+from inference_core import get_alarm_status, calculate_rca, build_feature_details
+
+
 app = FastAPI(title="SmartFarm Multi-Domain 예지보전 API")
 logger = get_logger("API")
 
@@ -88,55 +92,51 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
             scaler = data["scaler"]
             config = data["config"]
             features = config["features"]
+            t_caut, t_warn, t_err = (
+                config["threshold_caution"],
+                config["threshold_warning"],
+                config["threshold_critical"],
+            )
 
-            # 1. 해당 모델 피처만 추출
+            # 1. 데이터 추출 및 추론
             input_values = [float(realtime_data.get(f, 0.0)) for f in features]
             raw_df = pd.DataFrame([input_values], columns=features)
 
-            # 2. 추론
             scaled_array = scaler.transform(raw_df)
             pred_array = model.predict(scaled_array, verbose=0)
             mse_score = float(np.mean(np.power(scaled_array - pred_array, 2)))
 
-            # 3. 임계값 비교 (저장된 설정값 사용)
-            t_caut = config["threshold_caution"]
-            t_warn = config["threshold_warning"]
-            t_err = config["threshold_error"]
+            # 2. [함수 사용] 알람 레벨 판정
+            alarm_level, label = get_alarm_status(mse_score, t_caut, t_warn, t_err)
 
-            alarm_level = 0
-            label = "Normal"
-            if mse_score >= t_err:
-                alarm_level = 3
-                label = "Error 🔴"
-            elif mse_score >= t_warn:
-                alarm_level = 2
-                label = "Warning 🟠"
-            elif mse_score >= t_caut:
-                alarm_level = 1
-                label = "Caution 🔸"
-
-            # 4. RCA (원인 분석)
+            # 3. [함수 사용] RCA(원인 분석) 계산
             feature_errors = np.power(scaled_array - pred_array, 2)[0]
-            sum_err = np.sum(feature_errors) if np.sum(feature_errors) > 0 else 1e-10
-            rca = sorted(
-                [
-                    {"feature": n, "contribution": round((float(e) / sum_err) * 100, 1)}
-                    for n, e in zip(features, feature_errors)
-                ],
-                key=lambda x: x["contribution"],
-                reverse=True,
-            )[:3]
+            rca = calculate_rca(feature_errors, features, top_n=3)
 
-            # 결과 저장
+            # 4. [함수 사용] 프론트엔드 차트용 상세 데이터(시그마 밴드 등) 생성
+            pred_raw_array = scaler.inverse_transform(pred_array)[
+                0
+            ]  # 1차원 리스트로 축소
+            feature_stats = config.get("feature_stats", {})
+            feature_details = build_feature_details(
+                input_values, pred_raw_array, features, feature_stats
+            )
+
+            # 5. 결과 조립
             final_results[sys_name] = {
-                "score": round(mse_score, 6),
+                "metrics": {
+                    "current_mse": round(mse_score, 6),
+                    "train_loss": config.get("train_loss", "N/A"),
+                    "val_loss": config.get("val_loss", "N/A"),
+                },
                 "alarm": {"level": alarm_level, "label": label},
-                "thresholds": {
+                "global_thresholds": {
                     "caution": round(t_caut, 6),
                     "warning": round(t_warn, 6),
-                    "error": round(t_err, 6),
+                    "critical": round(t_err, 6),
                 },
-                "rca": rca,
+                "rca_top3": rca,
+                "feature_details": feature_details,
             }
 
             # 전체 알람 수위 갱신 (가장 심각한 쪽 기준)
@@ -144,6 +144,7 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
                 total_alarm_level = alarm_level
                 overall_status = label
 
+        # 6. 최종 응답 페이로드
         response_payload = {
             "timestamp": realtime_data.get(
                 "timestamp", datetime.datetime.now().isoformat()
@@ -169,3 +170,10 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
         # exc_info=True 를 주면 에러가 난 몇 번째 줄인지 추적(Traceback) 정보까지 파일에 싹 다 저장됩니다.
         logger.error(f"❌ API 추론 중 내부 에러 발생: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    logger.info("🌐 Uvicorn 웹 서버를 시작합니다... (http://127.0.0.1:8000/docs)")
+    uvicorn.run("inference_api:app", host="0.0.0.0", port=8000, reload=True)

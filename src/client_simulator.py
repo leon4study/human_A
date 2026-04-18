@@ -61,33 +61,42 @@ def run_simulation():
 
                 # 🟠 하나라도 '주의' 이상이 발생하면 노트북 스타일의 상세 리포트 출력!
                 else:
-                    print(f"🚨 [이상 진단 리포트] 발생 시점: {current_time}")
+                    print(f"\n🚨 [이상 진단 리포트] 발생 시점: {current_time}")
+
                     # 3개의 도메인을 순회하며 각각의 상세 상태 출력
                     for sys_name, report in result["domain_reports"].items():
-                        alarm_lbl = report["alarm"]["label"]
-                        score = report["score"]
-                        th = report["thresholds"]
-                        rcas = report["rca"]
+                        if report["alarm"]["level"] > 0:
 
-                        print(f"\n[{sys_name.upper()} 도메인]")
-                        print(f"▶ 판정 결과: [{alarm_lbl}]")
-                        print(f"▶ 현재 Score (MSE): {score:.6f}")
-                        print(f"  🔸 주의(Caution) 기준선: {th['caution']:.6f}")
-                        print(f"  🟠 경고(Warning) 기준선: {th['warning']:.6f}")
-                        print(f"  🔴 에러(Error)   기준선: {th['error']:.6f}")
+                            # 1. API 응답에서 데이터 추출 (새로운 구조 적용)
+                            score = report["metrics"]["current_mse"]
+                            t_caut = report["global_thresholds"]["caution"]
+                            t_warn = report["global_thresholds"]["warning"]
+                            t_err = report["global_thresholds"]["critical"]
+                            rca = report["rca_top3"]
 
-                        # RCA 출력
-                        print("  [Root Cause Analysis - 원인 기여도]")
-                        for i, cause in enumerate(rcas):
+                            # 2. 콘솔 출력 로직
                             print(
-                                f"    Top{i+1}: {cause['feature']} ({cause['contribution']}%)"
+                                f"  👉 [{sys_name.upper()} 도메인] 상태: {report['alarm']['label']}"
                             )
+                            print(f"     ▶ 현재 Score (MSE): {score:.6f}")
+                            print(
+                                f"     ▶ 🔸 Caution(2σ): {t_caut:.6f} | 🟠 Warning(3σ): {t_warn:.6f} | 🔴 Critical(6σ): {t_err:.6f}"
+                            )
+                            print(f"     ▶ 🔍 주요 이상 원인 센서 (RCA):")
+                            for i, item in enumerate(rca):
+                                print(
+                                    f"       * Top {i+1}: {item['feature']} ({item['contribution']}% 기여)"
+                                )
 
-                        # 에러 발생 시 Action Required (조치 권고안) 출력
-                        if report["alarm"]["level"] > 0 and len(rcas) > 0:
-                            print(f"▶ Action_Required: Inspect {rcas[0]['feature']}")
+                            # 조치 권고안 출력
+                            if report["alarm"]["level"] > 0 and len(rca) > 0:
+                                print(
+                                    f"     ▶ 🛠️ Action Required: Inspect [{rca[0]['feature']}]"
+                                )
 
-                    print("-" * 60 + "\n")
+                            print("  " + "-" * 50)
+
+                    print("=" * 60 + "\n")
 
             else:
                 logger.error(
@@ -101,7 +110,7 @@ def run_simulation():
             break
 
         # 시뮬레이션 속도 조절 (예: 1초 대기)
-        time.sleep(7)
+        time.sleep(0.1)
 
     logger.info("🎉 모든 데이터 시뮬레이션 전송이 완료되었습니다!")
 
