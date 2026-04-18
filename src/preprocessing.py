@@ -40,7 +40,7 @@ def filter_active_periods(df):
 
 def create_modeling_features(df):
     """
-    주니어 님의 도메인 메모(List)를 100% 반영한 고도화된 파생변수 생성 함수입니다.
+    파생변수 생성 함수입니다.
     이 함수는 10분 단위 집계(Aggregation)를 하기 전, 1분 단위 Raw Data 상태에서 실행해야 가장 정확합니다.
     """
     df_feat = df.copy()
@@ -52,6 +52,19 @@ def create_modeling_features(df):
         dt_seconds = df_feat.index.to_series().diff().dt.total_seconds().fillna(60)
     else:
         dt_seconds = 60  # 기본값 1분(60초)
+
+    # 시간(Hour) 피처를 원형으로 변환하여 모델에게 '주기'를 알려줍니다.
+    # 하루 중 몇 번째 '분(Minute)'인지 계산 (0 ~ 1439)
+    df_feat["minute_of_day"] = df_feat.index.hour * 60 + df_feat.index.minute
+
+    # 24 대신 1440(하루 전체 분)으로 나누어 완벽하게 부드러운 원(Circle)을 만듭니다.
+    df_feat["time_sin"] = np.sin(2 * np.pi * df_feat["minute_of_day"] / 1440)
+    df_feat["time_cos"] = np.cos(2 * np.pi * df_feat["minute_of_day"] / 1440)
+
+    # "만약 오늘은 펌프를 평소보다 10분 늦게 켰다면?" AI는 시간이 어긋났다고 생각해 정상적인 스파이크를 에러로 오해할 수 있습니다.
+    # 따라서 '펌프 가동 시점의 짧고 강한 변동'을 모델이 완벽하게 이해하게 만들려면, 시간 피처와 더불어 '변화량(Delta)' 피처를 하나 더 만들어주는 것이 MLOps의 필살기입니다.
+    # [옵션] 이전 시간 대비 압력이 얼마나 급변했는지(Delta)를 피처로 줍니다.
+    df_feat["pressure_diff"] = df_feat["discharge_pressure_kpa"].diff().fillna(0)
 
     # =====================================================================
     # 1. 압력 & 유량 & 전력 기본 조합 지표 (해석용과 학습용 공통 사용 가능)
@@ -228,29 +241,45 @@ def create_modeling_features(df):
 # ==============================================================================
 # 3. 데이터 시계열 윈도우 집계 (Tumbling vs Sliding)
 # ==============================================================================
+# 센서값(압력, 유량)은 .mean()으로 부드럽게 만들되,
+# 시간값(time_sin 등)은 무조건 윈도우의 **가장 마지막 값(.last())**을 가져오도록
+# 딕셔너리를 사용해 명확하게 분리해야 합니다.
 def aggregate_time_window(
     df, method="tumbling", window_size="10min", slide_step="1min"
 ):
     """
     연속된 시계열 데이터를 머신러닝 모델이 소화하기 좋게 윈도우 단위로 묶어줍니다.
     """
-    # 연속형 수치 데이터만 평균(mean)으로 집계한다고 가정
+    # 1. 전체 숫자형 컬럼 및 센서/시간 컬럼 분리
     numeric_cols = df.select_dtypes(include=[np.number]).columns
+    time_cols = ["minute_of_day", "time_sin", "time_cos"]
+    sensor_cols = [col for col in numeric_cols if col not in time_cols]
 
     if method == "tumbling":
-        # 1. 텀블링 윈도우 (Non-overlapping)
-        # 1시간을 10분씩 겹치지 않게 딱 6개로 쪼갭니다. 데이터 크기가 작아지고 학습이 빠릅니다.
-        df_agg = df[numeric_cols].resample(window_size).mean()
+        # 🌟 텀블링: resample은 'last'를 지원하므로 딕셔너리 방식 사용
+        agg_dict = {col: "mean" for col in sensor_cols}
+        for t_col in time_cols:
+            if t_col in df.columns:
+                agg_dict[t_col] = "last"
+        df_agg = df.resample(window_size).agg(agg_dict)
 
     elif method == "sliding":
-        # 2. 슬라이딩 윈도우 (Overlapping)
-        # 10분 크기의 창을 1분(slide_step)씩 옆으로 밀면서 집계합니다.
-        # 데이터 포인트가 많아져 AutoEncoder가 더 미세한 패턴 변화를 학습하기 좋습니다. (현업 추천)
-        df_agg = df[numeric_cols].rolling(window=window_size).mean()
-        # rolling은 기본적으로 데이터 주파수를 바꾸지 않으므로, step 주기로 샘플링
-        df_agg = df_agg.resample(slide_step).first()
+        # 🌟 슬라이딩: rolling은 센서 데이터만 평균 계산! (연산 속도 최적화)
+        df_agg = df[sensor_cols].rolling(window=window_size).mean()
 
-    # 집계 후 결측치 발생 구간(가동 중지 구간 등) 제거
+        # 시간 데이터는 어차피 현재 인덱스의 값이 '윈도우의 끝점(last)'이므로
+        # 원본(df)에서 그대로 복사해옵니다. (lambda 쓰는 것보다 훨씬 빠름)
+        for t_col in time_cols:
+            if t_col in df.columns:
+                df_agg[t_col] = df[t_col]
+
+        # rolling은 주파수를 바꾸지 않으므로, slide_step(예: 1분) 간격으로 솎아냄
+        df_agg = df_agg.resample(slide_step).last()
+
+    else:
+        raise ValueError("method는 'tumbling' 또는 'sliding'이어야 합니다.")
+
+    # 집계 후 결측치 발생 구간(가동 중지 구간, 초기 rolling 구간 등) 제거
     return df_agg.dropna()
 
 

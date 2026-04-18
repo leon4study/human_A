@@ -22,10 +22,6 @@ from preprocessing import step1_prepare_window_data, step2_clean_and_drop_collin
 def get_shap_importance(X, y, target_name, n_estimators=100, random_state=42):
     print(f"[{target_name}] 모델 학습 및 SHAP 계산 중... (전체 데이터: {len(X)}개)")
 
-    """
-    
-    """
-
     # 1. 모델 학습 (학습은 빠르므로 전체 데이터 43,199개 모두 사용)
     # 트리가 너무 깊어지는 것을 방지하기 위해 max_depth를 15 정도로 제한하면 훨씬 빠르고 과적합도 막아줍니다.
     model = RandomForestRegressor(
@@ -114,6 +110,8 @@ def get_shap_importance_kmeans(X, y, target_name, n_estimators=100, random_state
     )
 
     return explainer, shap_values, X_background, importance_df
+
+
 
 
 # =====================================================================
@@ -231,7 +229,7 @@ def step3_4_select_features_and_finalize(
     print("-" * 60)
 
     # 3. 최종 학습용 데이터셋(X_train_ae) 구축
-    X_train_ae = df_clean[ensemble_lists["robust"]].copy()  
+    X_train_ae = df_clean[ensemble_lists["robust"]].copy()
 
     print(f"\n✅ 최종 데이터 준비 완료!")
     print(f"  - 오토인코더 학습용 데이터 (X_train_ae) 형태: {X_train_ae.shape}")
