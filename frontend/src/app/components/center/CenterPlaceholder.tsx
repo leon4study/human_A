@@ -1,14 +1,16 @@
 import FacilityDiagram from "./FacilityDiagram";
+import type { Equipment } from "./facility/facilityTypes";
 
-function CenterPlaceholder() {
+interface CenterPlaceholderProps {
+  onEquipmentSelect?: (equipment: Equipment) => void;
+}
+
+// 중앙 구조도
+function CenterPlaceholder({ onEquipmentSelect }: CenterPlaceholderProps) {
   return (
-    <div className="dashboard__bg-safe-area">
-      <div className="dashboard__bg-model-frame">
-        <div className="dashboard__bg-model">
-          <FacilityDiagram />
-        </div>
-      </div>
-    </div> 
+    <div className="dashboard__center-layer">
+      <FacilityDiagram onEquipmentSelect={onEquipmentSelect} />
+    </div>
   );
 }
 

@@ -138,7 +138,7 @@ export function TankSVG({ fillLevel, color = '#3b82f6', label, width = 100, heig
       
       {/* 측면 강조 하이라이트 */}
       <rect x="16" y="25" width="5" height="90" fill="white" opacity="0.15"/>
-      <rect x="78" y="25" width="6" height="90" fill="black" opacity="0.4"/>
+      <rect x="78" y="25" width="6" height="90" fill="black" opacity="0.1"/>
       
       {/* 중앙 하이라이트 */}
       <rect x="48" y="25" width="4" height="90" fill="white" opacity="0.08"/>
@@ -169,7 +169,7 @@ export function TankSVG({ fillLevel, color = '#3b82f6', label, width = 100, heig
       
       {/* 배관 연결구 */}
       <g>
-        <rect x="83" y="116" width="8" height="6" fill="#334155" stroke="#64748b" strokeWidth="1"/>
+        <rect x="8" y="116" width="8" height="6" fill="#334155" stroke="#64748b" strokeWidth="1"/>
         <circle cx="91" cy="119" r="3" fill="#475569" stroke="#64748b" strokeWidth="1"/>
       </g>
       

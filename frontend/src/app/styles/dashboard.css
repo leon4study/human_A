@@ -35,6 +35,7 @@ button {
   position: absolute;
   inset: 0; /* 부모를 덮는다 */
   z-index: 1;
+  overflow: hidden;
   background:
     radial-gradient(circle at top, rgba(118, 228, 255, 0.12), transparent 28%),  /* 위에서 원형 또는 타원형으로 내려오는 빛 */
     /* radial-gradient(circle at right center, rgba(79, 200, 247, 1), transparent 24%), */
@@ -257,52 +258,24 @@ button {
   flex-direction: column;
 }
 
-/* 모델링이 들어갈 영역 */
-.dashboard__center {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  background: transparent;
-}
-
-/* 전체 배경 씬을 담는 영역 */
-.dashboard__bg-safe-area {
+/* 중앙 구조도 배경 레이어 */
+.dashboard__center-layer {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;      /* 아래쪽 기준으로 배치 */
-  justify-content: center;    /* 가로 중앙 */
-  padding: 80px 260px 110px; /* 헤더/좌우패널/하단영역 피해서 여백 */
-  pointer-events: none;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 180px;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: auto;
 }
 
-/* 실제 배치도 프레임 */
-.dashboard__bg-model-frame {
-  position: relative;
+/* FacilityDiagram이 center-layer 안을 꽉 채우도록 */
+.dashboard__center-layer > * {
   width: 100%;
   height: 100%;
-  display: flex;
-  /* align-items: flex-end;      구조물이 바닥 쪽에 놓인 느낌 */
-  justify-content: center;
 }
 
-/* 실제 도식화/모델 자리 */
-.dashboard__bg-model {
-  position: relative;
-  width: min(1100px, 100%);
-  height: min(700px, 100%);
-  background:
-    radial-gradient(circle at center, rgba(120, 210, 255, 0.12), transparent 62%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(235, 248, 255, 0.72);
-  font-size: 20px;
-  font-weight: 600;
-}
 
 .dashboard__left-panels,
 .dashboard__right-panels {
@@ -322,11 +295,12 @@ button {
   flex-shrink: 0;
   margin-top: auto;
   padding: 0 100px;
+  text-align: center;
   z-index: 6;
 }
 
 .dashboard__bottom-panel .panel {
-  padding: 10px 10px 0;
+  padding: 10px 20px 0;
   border: 1px solid #0e477ccb;
   border-radius: 30px;
 }

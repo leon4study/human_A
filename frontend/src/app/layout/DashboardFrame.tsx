@@ -12,6 +12,8 @@ import CenterPlaceholder from "../components/center/CenterPlaceholder";
 import { systemStatusMap } from "../components/common/SystemStatus";
 import useDashboardSocket from "../hooks/useDashboardSocket";
 import ZoneCauseTopPanel from "../components/side/ZoneCauseTopPanel";
+import EquipmentModal from "../components/detail/EquipmentModal";
+import type { Equipment } from "../components/center/facility/facilityTypes";
 
 function DashboardFrame() {
   const {
@@ -27,8 +29,15 @@ function DashboardFrame() {
 
   // 현재 선택된 CTP 항목 id
   const [selectedMetricId, setSelectedMetricId] = useState<string | null>(null);
+
+  // 현재 선택된 구역 id
   const [selectedZoneId, setSelectedZoneId] = useState<string>(
     zoneItems[0]?.id ?? "",
+  );
+
+  // 현재 팝업으로 띄울 장비 정보
+  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(
+    null,
   );
 
   // 시각화에서 사용할 선택 항목 찾기
@@ -38,16 +47,15 @@ function DashboardFrame() {
     }
 
     return (
-      ctpVisualizationMetrics.find((item) => item.id === selectedMetricId) ?? null
+      ctpVisualizationMetrics.find((item) => item.id === selectedMetricId) ??
+      null
     );
   }, [selectedMetricId, ctpVisualizationMetrics]);
 
   return (
     <div className="dashboard">
       {/* 전체 배경 레이어 */}
-      <div className="dashboard__bg">
-        <CenterPlaceholder />
-      </div>
+      <div className="dashboard__bg"></div>
 
       {/* UI 오버레이 레이어 */}
       <div className="dashboard__overlay">
@@ -111,7 +119,9 @@ function DashboardFrame() {
 
           {/* 중앙 묶음 영역 */}
           <div className="dashboard__center-wrap">
-            {/* 중앙 영역 */}
+            {/* 여기로 중앙 구조도를 옮겨야 클릭이 됩니다 */}
+            <CenterPlaceholder onEquipmentSelect={setSelectedEquipment} />
+
             <div className="dashboard__center-spacer"></div>
 
             {/* 중앙 하단 영역 */}
@@ -134,24 +144,13 @@ function DashboardFrame() {
 
         {/* 하단 효과용 */}
         <div className="dashboard__bottom-fade"></div>
-
-        {/* 연결 상태 확인용 */}
-        {/* <div
-        style={{
-          position: "fixed",
-          right: "20px",
-          bottom: "20px",
-          padding: "8px 12px",
-          borderRadius: "10px",
-          background: "rgba(0,0,0,0.6)",
-          color: "#fff",
-          fontSize: "12px",
-          zIndex: 9999,
-        }}
-      >
-        WebSocket: {socketStatus}
-      </div> */}
       </div>
+
+      {/* 장비 상세 팝업 */}
+      <EquipmentModal
+        equipment={selectedEquipment}
+        onClose={() => setSelectedEquipment(null)}
+      />
     </div>
   );
 }
