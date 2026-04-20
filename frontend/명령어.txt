@@ -1,6 +1,6 @@
 # ==============================
 # 리액트-타입스크립트 작업환경 명령어
-#==============================
+# ==============================
 
 # node.js 다운
 - node.js가 설치되어 있지 않은 경우 먼저 다운로드
@@ -20,3 +20,54 @@
 > npm run build
 > npm run dev
 
+# ==============================
+# 컬럼명 한글화
+#==============================
+
+| 영문 컬럼명                       | 한글 컬럼명     |
+| ---------------------------- | ---------- |
+| timestamp                    | 측정 시각      |
+| light_ppfd_umol_m2_s         | 광량(PPFD)   |
+| air_temp_c                   | 공기 온도      |
+| relative_humidity_pct        | 상대습도       |
+| co2_ppm                      | 이산화탄소 농도   |
+| raw_tank_level_pct           | 원수 탱크 수위   |
+| raw_water_temp_c             | 원수 온도      |
+| pump_rpm                     | 펌프 회전 속도   |
+| flow_rate_l_min              | 펌프 토출 유량   |
+| suction_pressure_kpa         | 펌프 흡입 압력   |
+| discharge_pressure_kpa       | 펌프 토출 압력   |
+| motor_current_a              | 모터 소비 전류   |
+| motor_power_kw               | 모터 소비 전력   |
+| bearing_vibration_rms_mm_s   | 베어링 진동 실효값 |
+| motor_temperature_c          | 모터 온도      |
+| bearing_temperature_c        | 베어링 온도     |
+| filter_pressure_in_kpa       | 필터 입구 압력   |
+| filter_pressure_out_kpa      | 필터 출구 압력   |
+| turbidity_ntu                | 탁도         |
+| mix_target_ec_ds_m           | 목표 EC      |
+| mix_ec_ds_m                  | 실제 EC      |
+| mix_target_ph                | 목표 pH      |
+| mix_ph                       | 실제 pH      |
+| mix_temp_c                   | 혼합액 온도     |
+| mix_flow_l_min               | 혼합액 유량     |
+| dosing_acid_ml_min           | 산 투입량      |
+| drain_ec_ds_m                | 배액 EC      |
+| tank_a_level_pct             | A탱크 수위     |
+| tank_b_level_pct             | B탱크 수위     |
+| acid_tank_level_pct          | 산 탱크 수위    |
+| zone1_flow_l_min             | 1구역 유량     |
+| zone1_pressure_kpa           | 1구역 압력     |
+| zone1_substrate_moisture_pct | 1구역 배지 수분  |
+| zone1_substrate_ec_ds_m      | 1구역 배지 EC  |
+| zone1_substrate_ph           | 1구역 배지 pH  |
+| zone2_flow_l_min             | 2구역 유량     |
+| zone2_pressure_kpa           | 2구역 압력     |
+| zone2_substrate_moisture_pct | 2구역 배지 수분  |
+| zone2_substrate_ec_ds_m      | 2구역 배지 EC  |
+| zone2_substrate_ph           | 2구역 배지 pH  |
+| zone3_flow_l_min             | 3구역 유량     |
+| zone3_pressure_kpa           | 3구역 압력     |
+| zone3_substrate_moisture_pct | 3구역 배지 수분  |
+| zone3_substrate_ec_ds_m      | 3구역 배지 EC  |
+| zone3_substrate_ph           | 3구역 배지 pH  |

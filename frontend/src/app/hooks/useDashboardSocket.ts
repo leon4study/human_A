@@ -29,7 +29,7 @@ const SOCKET_URL = "ws://localhost:8080/ws/dashboard";
 
 
 function useDashboardSocket(): DashboardSocketState {
-  const [systemStatus, setSystemStatus] = useState<SystemStatus>("warning");
+  const [systemStatus, setSystemStatus] = useState<SystemStatus>("danger");
   const [environment, setEnvironment] = useState<EnvironmentItem[]>(environmentData);
   const [ctpVisualizationMetrics, setCtpVisualizationMetrics] = useState<CtpVisualizationMetric[]>(ctpVisualizationData);
   const [kpiItems, setKpiItems] = useState<KpiItem[]>(kpiData);
