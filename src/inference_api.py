@@ -144,23 +144,35 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
                 total_alarm_level = alarm_level
                 overall_status = label
 
-        # 6. 최종 응답 페이로드
+        # 6. 스파이크 정보 추출 (시뮬레이터가 전처리 후 넘겨준 값 passthrough)
+        spike_info = {
+            "is_spike": bool(realtime_data.get("is_spike", False)),
+            "is_startup_spike": bool(realtime_data.get("is_startup_spike", False)),
+            "is_anomaly_spike": bool(realtime_data.get("is_anomaly_spike", False)),
+        }
+
+        # 7. 최종 응답 페이로드
         response_payload = {
             "timestamp": realtime_data.get(
                 "timestamp", datetime.datetime.now().isoformat()
             ),
             "overall_alarm_level": total_alarm_level,
             "overall_status": overall_status,
+            "spike_info": spike_info,
             "domain_reports": final_results,
             "action_required": (
                 "System check recommended" if total_alarm_level >= 2 else "Optimal"
             ),
         }
 
-        # 🌟 핵심 로그 1: 시스템에 주의(Caution) 이상의 이상징후가 포착되었을 때만 로그를 남김!
         if total_alarm_level > 0:
+            spike_tag = ""
+            if spike_info["is_anomaly_spike"]:
+                spike_tag = " ⚡[이상 스파이크]"
+            elif spike_info["is_startup_spike"]:
+                spike_tag = " 🔄[기동 스파이크]"
             logger.warning(
-                f"🚨 [이상 감지] Level {total_alarm_level} ({overall_status}) - 타임스탬프: {response_payload['timestamp']}"
+                f"🚨 [이상 감지] Level {total_alarm_level} ({overall_status}){spike_tag} - 타임스탬프: {response_payload['timestamp']}"
             )
 
         return response_payload
