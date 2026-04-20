@@ -5,7 +5,6 @@ networks:
     driver: bridge
 
 services:
-  # 1. MQTT 브로커 (메시지 통로)
   mqtt-broker:
     image: eclipse-mosquitto:latest
     container_name: mqtt-broker
@@ -17,32 +16,26 @@ services:
     networks:
       - smartfarm-net
 
-  # 2. PostgreSQL (인사이트 저장소)
   smart-db:
     image: postgres:15
     container_name: smart-db
     restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+    env_file:
+      - ${ENV_FILE}
     ports:
       - "5432:5432"
     volumes:
       - ./data/db-data:/var/lib/postgresql/data
-      # [CRITICAL 수정] 초기 스키마 자동 실행을 위한 마운트
       - ./infra/postgres/initdb.d:/docker-entrypoint-initdb.d
     networks:
       - smartfarm-net
 
-  # 3. MinIO (S3 Mock - 데이터 레이크)
   data-lake:
     image: minio/minio:latest
     container_name: data-lake
     restart: always
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    env_file:
+      - ${ENV_FILE}
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -51,80 +44,60 @@ services:
       - ./data/s3-bucket:/data
     networks:
       - smartfarm-net
-  
-  # 4. [추가] 센서 시뮬레이터
+
   sensor-simulator:
     build: 
-      context: ./services/sensor-simulator # Dockerfile이 있는 위치
-      dockerfile: Dockerfile
+      context: ./services/sensor-simulator
     container_name: sensor-simulator
-    restart: on-failure # 에러 시 재시작 (MQTT나 MinIO 대기 목적)
-    environment:
-      - MQTT_BROKER_HOST=mqtt-broker
-      - S3_ENDPOINT=http://data-lake:9000
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    restart: on-failure
+    env_file:
+      - ${ENV_FILE}
     depends_on:
       - mqtt-broker
       - data-lake
     networks:
       - smartfarm-net
 
-  # 5. [추가] 백엔드 허브 (API 및 웹소켓 서버)
   backend-hub:
     build:
       context: ./services/backend
-      dockerfile: Dockerfile
     container_name: backend-hub
     restart: always
     ports:
-      - "8080:8080" # 외부 접속용 포트 (호스트:컨테이너)
-    environment:
-      - BE_MQTT_BROKER_HOST=mqtt-broker
-      - POSTGRES_HOST=smart-db
-      # .env 파일의 값을 컨테이너 메모리로 주입
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - "8080:8080"
+    env_file:
+      - ${ENV_FILE}
     depends_on:
       - mqtt-broker
       - smart-db
     networks:
       - smartfarm-net
-  
-  # ６. S3 Sink (MQTT 데이터를 10분마다 CSV로 MinIO에 저장)
+
   s3-sink:
     build:
       context: ./services/s3-sink
-      dockerfile: Dockerfile
     container_name: s3-sink
     restart: always
-    environment:
-      - MQTT_BROKER_HOST=mqtt-broker
-      - S3_ENDPOINT=http://data-lake:9000
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    env_file:
+      - ${ENV_FILE}
     depends_on:
       - mqtt-broker
       - data-lake
     networks:
       - smartfarm-net
+
   inference-api:
     build:
       context: ./services/inference
-      dockerfile: Dockerfile
     container_name: smart-inference-api
     restart: always
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://user:password@smart-db:5432/smartfarm
-      - S3_BUCKET_NAME=smart-farm-bucket
-      # 필요한 추가 환경 변수들...
+    env_file:
+      - ${ENV_FILE}
     volumes:
-      # 호스트의 모델 폴더를 컨테이너와 동기화 (S3에서 다운로드된 파일 반영용)
       - ./services/inference/models:/app/models
-    networks:
-      - smartfarm-net
     depends_on:
       - smart-db
+    networks:
+      - smartfarm-net
