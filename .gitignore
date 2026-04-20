@@ -288,3 +288,43 @@ processor*
 /sim
 
 .vscode
+node_modules/.package-lock.json
+node_modules/.vite/deps/react-dom_client.js
+node_modules/.vite/deps/react-dom_client.js.map
+node_modules/.vite/deps/package.json
+node_modules/.vite/deps/_metadata.json
+node_modules/.vite/deps/react-FLDBkK74.js
+
+# dependencies
+node_modules/
+frontend/node_modules/
+
+# build output
+dist/
+build/
+frontend/dist/
+frontend/build/
+
+# vite cache
+.vite/
+frontend/.vite/
+
+# logs
+*.log
+npm-debug.log*
+
+# env
+.env
+.env.*
+!.env.example
+
+# editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# typescript cache
+*.tsbuildinfo
