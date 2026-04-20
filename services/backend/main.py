@@ -70,7 +70,7 @@ def run_scheduled_batch():
             "sensor_id": row.sensor_id,
             "overall_alarm_level": row.overall_level,
             "overall_status": row.overall_status,
-            "domain_reports": json.loads(row.inference_result),
+            "domain_reports": row.inference_result,
             "action_required": row.action_required,
             "timestamp": row.data_timestamp.isoformat() if row.data_timestamp else None
         }
