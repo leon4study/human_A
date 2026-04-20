@@ -16,5 +16,4 @@ boto3==1.42.89
 
 # 4. 유틸리티 및 통신
 python-dotenv==1.2.2
-requests  # 백엔드로 리포트 전송용 추가
-gmqtt==0.7.0
+apscheduler
