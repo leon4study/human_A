@@ -348,6 +348,8 @@ def aggregate_time_window(
         "pump_on", "minutes_since_startup", "is_startup_phase",
         "pump_start_event", "pump_stop_event", "minutes_since_shutdown", "is_off_phase",
         "cleaning_event_flag",
+        # data_gen_test.py가 부여하는 평가용 정답 라벨 — 평균 집계되면 안 되므로 phase로 분리
+        "anomaly_label", "composite_z_score",
     ]
     time_cols = ["minute_of_day", "time_sin", "time_cos"]
     sensor_cols = [col for col in numeric_cols if col not in time_cols + phase_cols]
@@ -361,6 +363,9 @@ def aggregate_time_window(
             "pump_start_event": "max", "pump_stop_event": "max",
             "minutes_since_shutdown": "last", "is_off_phase": "max",
             "cleaning_event_flag": "max",
+            # 평가용 라벨: 윈도우 내 1개라도 이상이면 윈도우도 이상, worst-case z 유지
+            "anomaly_label": "max",
+            "composite_z_score": "max",
         }
         agg_dict.update({k: v for k, v in phase_agg.items() if k in df.columns})
 
@@ -380,14 +385,19 @@ def aggregate_time_window(
         ]
         df_phase = df[_phase_cols]
 
-        # cleaning_event_flag: 윈도우 내 언제든 발생하면 1로 남겨야 필터가 작동
-        df_clean_flag = None
-        if "cleaning_event_flag" in df.columns:
-            df_clean_flag = df["cleaning_event_flag"].rolling(window=window_size).max()
+        # 윈도우 내 max로 유지해야 하는 플래그/스코어 컬럼:
+        # - cleaning_event_flag : 1이면 윈도우에 세척 이벤트 포함 → 학습 제외 필터용
+        # - anomaly_label       : data_gen_test.py 평가용 이진 정답 (한번이라도 이상이면 윈도우=이상)
+        # - composite_z_score   : 평가용 연속 z-score (윈도우 worst-case 보존)
+        maxflag_cols = ["cleaning_event_flag", "anomaly_label", "composite_z_score"]
+        df_maxflags = pd.DataFrame(index=df_sensor.index)
+        for _col in maxflag_cols:
+            if _col in df.columns:
+                df_maxflags[_col] = df[_col].rolling(window=window_size).max()
 
         df_agg = pd.concat([df_sensor, df_phase], axis=1)
-        if df_clean_flag is not None:
-            df_agg["cleaning_event_flag"] = df_clean_flag
+        if not df_maxflags.empty:
+            df_agg = pd.concat([df_agg, df_maxflags], axis=1)
 
         # 시간 데이터는 어차피 현재 인덱스의 값이 '윈도우의 끝점(last)'이므로
         # 원본(df)에서 그대로 복사해옵니다. (lambda 쓰는 것보다 훨씬 빠름)
