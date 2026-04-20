@@ -10,7 +10,7 @@ from preprocessing import step1_prepare_window_data
 
 logger = get_logger("SIMULATOR")
 
-API_URL = "http://127.0.0.1:8000/predict"
+API_URL = "http://127.0.0.1:9977/predict"
 
 # 4개 도메인(motor, hydraulic, nutrient, zone_drip) 전체 타겟 컬럼
 # step1_prepare_window_data의 extra_cols로 전달 → model_cols 필터에서 살아남음
@@ -30,7 +30,7 @@ def run_simulation():
     data_path = os.path.join(
         project_root,
         "data",
-        "smartfarm_nutrient_pump_rawdata_3months_clog_focus_v2_stronger_1min.csv",
+        "generated_data_from_dabin_0420.csv",
     )
 
     logger.info(f"📂 CSV 데이터 로딩 중... ({data_path})")

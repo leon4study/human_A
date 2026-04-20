@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -6,7 +7,13 @@ from pathlib import Path
 # 이후 30일치는 템플릿 반복 + 작은 gaussian 노이즈로 합성 → 소스의 주간 cleaning
 # event와 선형 drift가 결과 데이터에 들어오지 않음. 월1 AE 학습용 구조적 평탄 보장.
 src = Path("/Users/jun/GitStudy/human_A/data/dabin.csv")
-out_path = Path("/Users/jun/GitStudy/human_A/data/generated_data_from_dabin_0420.csv")
+# out_path와 seed는 env로 오버라이드 가능 (테스트 데이터 생성 시 data_gen_test.py가 설정)
+out_path = Path(
+    os.environ.get(
+        "DABIN_OUT_PATH",
+        "/Users/jun/GitStudy/human_A/data/generated_data_from_dabin_0420.csv",
+    )
+)
 
 # ── [Step 1] dabin day-1 일중 템플릿 추출 (1440분 × 컬럼) ────────────────────
 ref = pd.read_csv(src)
@@ -27,7 +34,7 @@ mod_arr = (idx.hour * 60 + idx.minute).to_numpy()
 
 out = pd.DataFrame({"timestamp": idx})
 
-rng = np.random.default_rng(20260501)
+rng = np.random.default_rng(int(os.environ.get("DABIN_SEED", "20260501")))
 _numeric_cols = [
     c
     for c in day1.columns
@@ -254,13 +261,13 @@ for col in [
     )
 
 # ── [세척 이벤트] ─────────────────────────────────────────────────────────────
-# 월1(day 0~30)은 AE 정상 학습 구간이므로 cleaning event 금지.
-# day 32부터 7일마다 (08:00~08:30) 산 세척 이벤트 → 월2 이후에만 발생.
-# 세척 중: acid 도징 급증 + pH 약간 하락 (산 투입 효과)
+# 매주 1회 (day 6부터 7일마다, 08:00~08:30) 산 세척 이벤트 — 정상 운영 루틴.
+# 세척 중: acid 도징 급증 + pH 약간 하락 (산 투입 효과).
+# cleaning_event_flag로 마킹 → preprocessing이 학습 창에서 제외 처리.
 days_arr = days.to_numpy()
 hour_arr = hour.to_numpy()
 clean_mask = np.zeros(len(out), dtype=int)
-for d in range(32, int(days_arr.max()) + 1, 7):
+for d in range(6, int(days_arr.max()) + 1, 7):
     clean_window = (
         (days_arr >= d) & (days_arr < d + 1) & (hour_arr >= 8.0) & (hour_arr < 8.5)
     )

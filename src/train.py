@@ -172,7 +172,7 @@ if __name__ == "__main__":
     # /Users/... 대신 project_main_folder/data 폴더를 찾아가도록 설정
     # (주의: 파일명은 주니어님이 사용하시는 데이터 파일명과 정확히 맞춰주세요)
     data_filename = (
-        "smartfarm_nutrient_pump_rawdata_3months_clog_focus_v2_stronger_1min.csv"
+        "/Users/jun/GitStudy/human_A/data/generated_data_from_dabin_0420.csv"
     )
     data_path = os.path.join(project_root, "data", data_filename)
 

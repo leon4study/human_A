@@ -29,16 +29,19 @@ def calculate_rca(feature_errors: np.ndarray, features: list, top_n: int = 3):
 
 
 def build_feature_details(
-    act_vals: list, exp_vals: list, features: list, feature_stats: dict
+    act_vals: list, exp_vals: list, features: list, feature_stds: dict
 ):
-    """프론트엔드 시계열 차트 및 3시그마 밴드를 그리기 위한 상세 데이터를 생성합니다."""
+    """프론트엔드 시계열 차트 및 3시그마 밴드를 그리기 위한 상세 데이터를 생성합니다.
+
+    feature_stds: {feature_name: std_value} 형태의 평탄 dict (train.py 저장 포맷).
+    """
     details = []
     for i, f_name in enumerate(features):
         act_val = float(act_vals[i])
         exp_val = float(exp_vals[i])
 
-        # 저장된 통계가 없으면 임시로 기대값의 5%를 1시그마로 사용
-        std_val = feature_stats.get(f_name, {}).get("std", exp_val * 0.05)
+        # 저장된 std가 없으면 임시로 기대값의 5%를 1시그마로 사용
+        std_val = float(feature_stds.get(f_name, exp_val * 0.05))
 
         details.append(
             {

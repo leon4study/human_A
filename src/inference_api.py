@@ -117,9 +117,11 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
             pred_raw_array = scaler.inverse_transform(pred_array)[
                 0
             ]  # 1차원 리스트로 축소
-            feature_stats = config.get("feature_stats", {})
+            # train.py는 "feature_stds"(평탄 dict: name→std값)로 저장하므로
+            # 기존 config와 호환되게 같은 키로 읽는다.
+            feature_stds = config.get("feature_stds", {})
             feature_details = build_feature_details(
-                input_values, pred_raw_array, features, feature_stats
+                input_values, pred_raw_array, features, feature_stds
             )
 
             # 5. 결과 조립
