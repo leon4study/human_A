@@ -74,8 +74,21 @@ export interface DashboardSocketPayload {
   zoneItems?: ZoneItem[];
 }
 
+// 백엔드 원시 센서 메시지 타입
+export interface BackendRawMessage {
+  type: "RAW" | "INFERENCE";
+  payload: {
+    sensor_data?: Record<string, unknown>;
+    is_anomaly?: boolean;
+    anomaly_score?: number;
+    [key: string]: unknown;
+  };
+}
+
 // 대시보드 소켓 메시지 타입
 export interface DashboardSocketMessage {
   type: "dashboard_init" | "dashboard_update";
   payload: DashboardSocketPayload;
 }
+
+export type AnySocketMessage = DashboardSocketMessage | BackendRawMessage;
