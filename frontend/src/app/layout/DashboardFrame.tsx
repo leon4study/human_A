@@ -13,7 +13,7 @@ import { systemStatusMap } from "../components/common/SystemStatus";
 import useDashboardSocket from "../hooks/useDashboardSocket";
 import ZoneCauseTopPanel from "../components/side/ZoneCauseTopPanel";
 import EquipmentModal from "../components/detail/EquipmentModal";
-import type { Equipment } from "../components/center/facility/facilityTypes";
+import type { Equipment } from "../components/center/facility/model/facility.types";
 
 function DashboardFrame() {
   const {

@@ -1,5 +1,5 @@
 import FacilityDiagram from "./FacilityDiagram";
-import type { Equipment } from "./facility/facilityTypes";
+import type { Equipment } from "./facility/model/facility.types";
 
 interface CenterPlaceholderProps {
   onEquipmentSelect?: (equipment: Equipment) => void;

@@ -1,27 +1,21 @@
-import type { Equipment } from "../center/facility/facilityTypes";
+import type { Equipment } from "../center/facility/model/facility.types";
 import "./equipment-modal.css";
 
 interface EquipmentModalProps {
-  equipment: Equipment | null;   // 현재 선택된 장비
-  onClose: () => void;   // 닫기 함수
+  equipment: Equipment | null;
+  onClose: () => void;
 }
 
-// 장비 상세 팝업
 function EquipmentModal({ equipment, onClose }: EquipmentModalProps) {
   if (!equipment) return null;
 
   return (
     <div className="equipment-modal-overlay" onClick={onClose}>
-      <div
-        className="equipment-modal"
-        onClick={(e) => e.stopPropagation()}   // 모달 내부 클릭 시 닫힘 방지
-      >
+      <div className="equipment-modal" onClick={(e) => e.stopPropagation()}>
         <div className="equipment-modal-header">
           <div>
             <div className="equipment-modal-title">{equipment.name}</div>
-            <div className="equipment-modal-subtitle">
-              {equipment.type}
-            </div>
+            <div className="equipment-modal-subtitle">{equipment.type}</div>
           </div>
 
           <button className="equipment-modal-close" onClick={onClose}>
@@ -36,6 +30,11 @@ function EquipmentModal({ equipment, onClose }: EquipmentModalProps) {
             <div className="equipment-modal-row">
               <span className="equipment-modal-label">장비 ID</span>
               <span className="equipment-modal-value">{equipment.id}</span>
+            </div>
+
+            <div className="equipment-modal-row">
+              <span className="equipment-modal-label">장비 분류</span>
+              <span className="equipment-modal-value">{equipment.category}</span>
             </div>
 
             <div className="equipment-modal-row">
