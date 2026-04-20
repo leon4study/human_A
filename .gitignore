@@ -288,12 +288,6 @@ processor*
 /sim
 
 .vscode
-node_modules/.package-lock.json
-node_modules/.vite/deps/react-dom_client.js
-node_modules/.vite/deps/react-dom_client.js.map
-node_modules/.vite/deps/package.json
-node_modules/.vite/deps/_metadata.json
-node_modules/.vite/deps/react-FLDBkK74.js
 
 # dependencies
 node_modules/
@@ -304,6 +298,7 @@ dist/
 build/
 frontend/dist/
 frontend/build/
+coverage/
 
 # vite cache
 .vite/
@@ -321,6 +316,7 @@ npm-debug.log*
 # editor
 .vscode/
 .idea/
+*.iml
 
 # OS files
 .DS_Store
@@ -328,3 +324,14 @@ Thumbs.db
 
 # typescript cache
 *.tsbuildinfo
+
+# Spring Boot / Java
+target/
+backend/target/
+.gradle/
+backend/.gradle/
+out/
+bin/
+*.class
+*.jar
+*.war

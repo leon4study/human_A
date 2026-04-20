@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "sockjs-client": "^1.6.1",
-    "stompjs": "^2.3.3"
+    "stompjs": "^2.3.3",
+    "@tailwindcss/vite": "^4.2.2",
+    "tailwindcss": "^4.2.2"
   }
 }
