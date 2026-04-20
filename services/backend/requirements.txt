@@ -1,4 +1,14 @@
+# API 서버 및 통신
 fastapi==0.135.3
 uvicorn[standard]
 paho-mqtt==2.1.0
+requests  # 추론 서버 호출용 추가
+
+# S3 및 데이터 처리 (추론 서버에서 이사 옴)
+boto3==1.42.89
+pandas==3.0.2
+numpy==2.4.4
+
+# 유틸리티
 python-dotenv==1.2.2
+apscheduler  # 배치 스케줄러용 추가
