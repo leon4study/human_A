@@ -100,9 +100,9 @@ def on_message(client, userdata, msg):
     
     try:
         payload = json.loads(msg.payload.decode())
+        print(f"[RAW] MQTT 수신 | {json.dumps(payload, ensure_ascii=False)}")
         data_buffer.append(payload)
 
-        # [로그 추가] 데이터가 쌓이고 있는지 확인하세요
         if len(data_buffer) % 10 == 0:
             print(f"📦 현재 버킷에 {len(data_buffer)}개 데이터 쌓임...")
         

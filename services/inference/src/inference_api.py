@@ -7,12 +7,13 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import sqlalchemy as sa
-import requests
+import boto3
 from io import BytesIO
 from fastapi import FastAPI, Body, HTTPException
 from typing import Dict, Any
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # =====================================================================
 # 1. 환경 설정 및 인프라 연결
@@ -35,11 +36,20 @@ else:
     # 배포 환경 (Docker 등)에서는 이 로그가 출력됩니다.
     print(f"🚀 [DEPLOY] '{ENV}' 모드입니다. 시스템(Docker) 환경 변수를 사용합니다.")
 
-# DB 및 백엔드 설정
+# DB 설정
 DB_URL = os.getenv("AI_DATABASE_URL", "postgresql://farmer:plant_rich@localhost:5432/smartfarm")
-BACKEND_REPORT_URL = os.getenv("BACKEND_REPORT_URL", "http://localhost:8080/api/inference-report")
-
 engine = sa.create_engine(DB_URL)
+
+# S3 설정
+S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://localhost:9000")
+S3_ACCESS_KEY = os.getenv("MINIO_ROOT_USER", "admin")
+S3_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD", "password123")
+BUCKET_NAME = "raw-data"
+s3 = boto3.client('s3',
+                  endpoint_url=S3_ENDPOINT,
+                  aws_access_key_id=S3_ACCESS_KEY,
+                  aws_secret_access_key=S3_SECRET_KEY,
+                  region_name='us-east-1')
 
 # 모델 관리 변수
 MODELS_DATA = {}
@@ -56,6 +66,7 @@ print(f"DEBUG: 모델 폴더 탐색 경로 -> {MODEL_DIR}")
 # =====================================================================
 def process_inference_and_save(data: Dict[str, Any]):
     """실시간 혹은 백엔드로부터 전달받은 배치 데이터를 모델별 추론 후 DB 저장 및 백엔드 전송"""
+    print(f"[RAW] 추론 입력 수신 | {json.dumps(data, ensure_ascii=False, default=str)}")
     if not MODELS_DATA:
         print("⚠️ 로드된 모델이 없어 추론을 건너뜁니다.")
         return {"error": "no models loaded"}
@@ -96,6 +107,7 @@ def process_inference_and_save(data: Dict[str, Any]):
                 "alarm": {"level": lvl, "label": lbl},
                 "rca": rca
             }
+            print(f"[INFERENCE] {sys_name.upper()} | score={round(mse,6)} | alarm={lbl} | rca={rca}")
 
             if lvl > max_level:
                 max_level, final_status = lvl, lbl
@@ -109,6 +121,8 @@ def process_inference_and_save(data: Dict[str, Any]):
             "domain_reports": domain_reports,
             "action_required": "System check needed" if max_level >= 2 else "Optimal"
         }
+
+        print(f"[INFERENCE] 최종 결과 | overall_level={max_level} | status={final_status} | {json.dumps(domain_reports, ensure_ascii=False)}")
 
         # 6) DB 저장
         with engine.connect() as conn:
@@ -125,12 +139,6 @@ def process_inference_and_save(data: Dict[str, Any]):
             })
             conn.commit()
 
-        # 7) 백엔드 실시간 전송 (리액트 웹소켓 브로드캐스트용)
-        try:
-            requests.post(BACKEND_REPORT_URL, json=payload, timeout=1)
-        except:
-            pass
-
         return payload
 
     except Exception as e:
@@ -138,7 +146,34 @@ def process_inference_and_save(data: Dict[str, Any]):
         return {"error": str(e)}
 
 # =====================================================================
-# 3. FastAPI Lifespan 및 서버 설정
+# 3. 추론 배치 (1분마다 S3 최신 데이터 → 추론 → DB 저장)
+# =====================================================================
+def run_inference_batch():
+    try:
+        print(f"🔬 [추론 배치] S3 최신 파일 탐색 중...")
+        response = s3.list_objects_v2(Bucket=BUCKET_NAME)
+        if 'Contents' not in response:
+            print("⚠️ [추론 배치] S3 버킷이 비어있음, 스킵")
+            return
+
+        csv_files = [f for f in response['Contents'] if f['Key'].endswith('.csv')]
+        if not csv_files:
+            return
+
+        latest_file = sorted(csv_files, key=lambda x: x['LastModified'], reverse=True)[0]
+        obj = s3.get_object(Bucket=BUCKET_NAME, Key=latest_file['Key'])
+        df = pd.read_csv(BytesIO(obj['Body'].read()))
+
+        if not df.empty:
+            avg_record = df.mean(numeric_only=True).to_dict()
+            avg_record["timestamp"] = latest_file['LastModified'].isoformat()
+            print(f"🚀 [추론 배치] 추론 시작 | 파일={latest_file['Key']}")
+            process_inference_and_save(avg_record)
+    except Exception as e:
+        print(f"❌ [추론 배치 Error] {e}")
+
+# =====================================================================
+# 4. FastAPI Lifespan 및 서버 설정
 # =====================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -164,8 +199,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"❌ [Load Error] {sys_name} 로딩 실패: {e}")
 
-    print(f"⏰ 총 {len(MODELS_DATA)}개 모델 로드됨. 외부 요청 대기 중...")
+    print(f"⏰ 총 {len(MODELS_DATA)}개 모델 로드됨. 배치 스케줄러 가동 중...")
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_inference_batch, 'interval', minutes=1)
+    scheduler.start()
     yield
+    scheduler.shutdown()
     print("🛑 시스템 종료")
 
 app = FastAPI(title="Smart Farm AI Engine", lifespan=lifespan)
