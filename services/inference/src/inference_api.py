@@ -17,7 +17,11 @@ from contextlib import asynccontextmanager
 # =====================================================================
 # 1. 환경 설정 및 인프라 연결
 # =====================================================================
-load_dotenv("../../../.env")
+
+ENV = os.getenv("ENV", "local")
+
+if ENV == "local":
+    load_dotenv("../../../.env.local")
 
 # DB 및 백엔드 설정
 DB_URL = os.getenv("AI_DATABASE_URL", "postgresql://farmer:plant_rich@smart-db:5432/smartfarm")

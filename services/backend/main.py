@@ -12,7 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import paho.mqtt.client as mqtt
 from apscheduler.schedulers.background import BackgroundScheduler
 
-load_dotenv("../../.env")
+ENV = os.getenv("ENV", "local")
+
+if ENV == "local":
+    load_dotenv("../../.env.local")
+
 
 app = FastAPI(title="Smart Farm Backend Hub")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
