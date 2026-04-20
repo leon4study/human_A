@@ -1,0 +1,128 @@
+version: '3.8'
+
+networks:
+  smartfarm-net:
+    driver: bridge
+
+services:
+  # 1. MQTT 브로커
+  mqtt-broker:
+    image: eclipse-mosquitto:latest
+    container_name: mqtt-broker
+    restart: always
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./infra/mosquitto/config:/mosquitto/config
+    networks:
+      - smartfarm-net
+
+  # 2. PostgreSQL
+  smart-db:
+    image: postgres:15
+    container_name: smart-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/db-data:/var/lib/postgresql/data
+      - ./infra/postgres/initdb.d:/docker-entrypoint-initdb.d
+    networks:
+      - smartfarm-net
+
+  # 3. MinIO (S3 Mock)
+  data-lake:
+    image: minio/minio:latest
+    container_name: data-lake
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./data/s3-bucket:/data
+    networks:
+      - smartfarm-net
+
+  # 4. 센서 시뮬레이터
+  sensor-simulator:
+    build: 
+      context: ./services/sensor-simulator
+    container_name: sensor-simulator
+    restart: on-failure
+    environment:
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    depends_on:
+      - mqtt-broker
+      - data-lake
+    networks:
+      - smartfarm-net
+
+  # 5. 백엔드 허브
+  backend-hub:
+    build:
+      context: ./services/backend
+    container_name: backend-hub
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - BE_DATABASE_URL=${BE_DATABASE_URL}
+      - BE_MQTT_BROKER_HOST=${BE_MQTT_BROKER_HOST}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    depends_on:
+      - mqtt-broker
+      - smart-db
+    networks:
+      - smartfarm-net
+
+  # 6. S3 Sink
+  s3-sink:
+    build:
+      context: ./services/s3-sink
+    container_name: s3-sink
+    restart: always
+    environment:
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    depends_on:
+      - mqtt-broker
+      - data-lake
+    networks:
+      - smartfarm-net
+
+  # 7. 추론 API 서버
+  inference-api:
+    build:
+      context: ./services/inference
+    container_name: smart-inference-api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - AI_DATABASE_URL=${AI_DATABASE_URL}
+      - DATABASE_URL=${DATABASE_URL}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./services/inference/models:/app/models
+    networks:
+      - smartfarm-net
+    depends_on:
+      - smart-db
