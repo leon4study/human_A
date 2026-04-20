@@ -1,6 +1,8 @@
 # 1. 파이썬 실행 환경 설정 (경량화된 슬림 버전)
 FROM python:3.11-slim
 
+ENV PYTHONUNBUFFERED=1
+
 # 2. OS 레벨의 필수 시스템 도구 설치
 # - build-essential: C/C++ 컴파일러 (Pandas, Numpy 빌드 시 필요)
 # - libpq-dev: PostgreSQL 라이브러리 (psycopg2 실행 시 필요)
