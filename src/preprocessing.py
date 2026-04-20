@@ -10,7 +10,6 @@
 
 import pandas as pd
 import numpy as np
-import time
 
 eps = 1e-6  # 0 나누기 방지
 
@@ -38,10 +37,21 @@ def filter_active_periods(df):
 # ==============================================================================
 
 
-def create_modeling_features(df):
+def create_modeling_features(df, extra_cols=None):
     """
     파생변수 생성 함수입니다.
     이 함수는 10분 단위 집계(Aggregation)를 하기 전, 1분 단위 Raw Data 상태에서 실행해야 가장 정확합니다.
+
+    Parameters
+    ----------
+    extra_cols : list, optional
+        SHAP 타겟 컬럼 등 model_cols 필터에서 반드시 살아남아야 할 컬럼들.
+
+    Returns
+    -------
+    (df_model, df_interpret) : tuple
+        df_model  — 오토인코더 입력용 (model_cols 필터 적용)
+        df_interpret — 해석/모니터링용
     """
     df_feat = df.copy()
     eps = 1e-6
@@ -106,56 +116,94 @@ def create_modeling_features(df):
         df_feat["motor_power_kw"] + eps
     )
 
-    #"펌프가 켜진 지 몇 분 지났는가?" (Time Since Startup)
-    # 펌프가 꺼져있으면 0, 켜지면 1, 2, 3... 분 단위로 카운트가 올라갑니다.
-    # 이렇게 하면 AI가 "아! 켜진 직후 1~5분 사이에는 값이 튀는 게 정상이구나!" 라고 완벽히 학습합니다.
-    pump_status = df_feat["pump_on"] # (실제 펌프 가동 여부를 나타내는 컬럼명 사용)
-    # 펌프가 꺼지면 그룹을 나누기 위한 트릭
-    pump_group = (pump_status != pump_status.shift()).cumsum()
-    
-    # 펌프가 켜져 있을 때만 누적 카운트 (꺼져있으면 0)
-    df_feat["minutes_since_startup"] = df_feat.groupby(pump_group).cumcount()
-    df_feat["minutes_since_startup"] = df_feat["minutes_since_startup"] * pump_status
-    
-    # [옵션] 가동 초기(Transient) 플래그: 켜진 직후 10분 이내인가? (1/0)
-    df_feat["is_startup_phase"] = ((df_feat["minutes_since_startup"] > 0) & 
-                                (df_feat["minutes_since_startup"] <= 5)).astype(int)
+    # "펌프가 켜진 지 몇 분 지났는가?" (Time Since Startup)
+    # 변동성(rpm_std) + 유량 + rpm 수준으로 pump_on을 동적 판정 → 기동 스파이크를 정상으로 학습
+    rpm_std = df_feat["pump_rpm"].rolling(window=5, min_periods=1).std().fillna(0)
+    flow_on = df_feat["flow_rate_l_min"] > 0.1
+    std_threshold = rpm_std.quantile(0.8)
+    dynamic_on = rpm_std > std_threshold
+    rpm_high = df_feat["pump_rpm"] > df_feat["pump_rpm"].quantile(0.7)
+
+    df_feat["pump_on"] = (flow_on | dynamic_on | rpm_high).astype(int)
+    df_feat["pump_on"] = df_feat["pump_on"].rolling(3, min_periods=1).max().astype(int)
+
+    pump_on = df_feat["pump_on"].astype(int)
+
+    start_event = pump_on.eq(1) & pump_on.shift(1, fill_value=0).eq(0)
+    cycle_id = start_event.cumsum()
+    on_steps = pump_on.groupby(cycle_id).cumsum()
+
+    df_feat["minutes_since_startup"] = np.where(
+        pump_on.eq(1), on_steps - 1, 0
+    ).astype(int)
+
+    df_feat["pump_start_event"] = start_event.astype(int)
+    df_feat["is_startup_phase"] = (
+        pump_on.eq(1) & df_feat["minutes_since_startup"].between(0, 5)
+    ).astype(int)
+
+    # OFF 상태 추적
+    pump_off = (df_feat["pump_on"] == 0).astype(int)
+    stop_event = pump_off.eq(1) & pump_off.shift(1, fill_value=0).eq(0)
+    stop_cycle_id = stop_event.cumsum()
+    off_steps = pump_off.groupby(stop_cycle_id).cumsum()
+
+    df_feat["minutes_since_shutdown"] = np.where(
+        pump_off.eq(1), off_steps - 1, 0
+    ).astype(int)
+
+    df_feat["pump_stop_event"] = stop_event.astype(int)
+    df_feat["is_off_phase"] = (
+        pump_off.eq(1) & df_feat["minutes_since_shutdown"].between(0, 5)
+    ).astype(int)
     
     # =====================================================================
     # 2. 온도 & 진동 동특성 지표
     # =====================================================================
     # 초당 모터 온도 변화율 (Temperature Slope)
-    # 1초당 온도가 몇 도(℃) 상승/하강하는지 나타냅니다.
-    # [Rule] 모터나 베어링이 갈리거나 장기적으로 막혀 부하가 심해지면, 온도가 서서히 올라가며 이 값이 지속적인 양수(+)를 띕니다.
     df_feat["temp_slope_c_per_s"] = df_feat["motor_temperature_c"].diff() / dt_seconds
 
+    # 유량/RPM 변화율 및 가속도
+    df_feat["flow_diff"] = df_feat["flow_rate_l_min"].diff().fillna(0)
+    df_feat["rpm_slope"] = df_feat["pump_rpm"].diff() / dt_seconds
+    df_feat["rpm_acc"] = df_feat["rpm_slope"].diff().fillna(0)
+
     # RPM 안정성 지수 (RPM Stability Index)
-    # 목표 RPM(또는 평균 RPM) 대비 현재 RPM의 떨림 정도입니다. (여기서는 직전 10분 평균 대비 차이로 계산)
     # [Rule] 펌프에 공기가 차거나 난류가 발생하면 RPM이 목표값을 유지하지 못하고 요동칩니다.
-    rpm_mean = df_feat["pump_rpm"].rolling(window=10, min_periods=1).mean()
-    df_feat["rpm_stability_index"] = np.abs(df_feat["pump_rpm"] - rpm_mean) / (
-        rpm_mean + eps
+    rpm_mean_10 = df_feat["pump_rpm"].rolling(window=10, min_periods=1).mean()
+    df_feat["rpm_stability_index"] = np.abs(df_feat["pump_rpm"] - rpm_mean_10) / (
+        rpm_mean_10 + eps
     )
 
     # =====================================================================
     # 3. 양액/수질 및 환경 고도화 지표
     # =====================================================================
     # 제어기 목표 추종 오차 (PID Error EC / pH)
-    # 기계가 목표로 한 EC/pH 값과 실제 섞여서 나온 값의 차이입니다.
     # [Rule] 오차가 지속적으로 크면 조제기 밸브 노후화, 산/비료 원액 고갈, 혼합 모터 고장을 의미합니다.
     df_feat["pid_error_ec"] = df_feat["mix_ec_ds_m"] - df_feat["mix_target_ec_ds_m"]
     df_feat["pid_error_ph"] = df_feat["mix_ph"] - df_feat["mix_target_ph"]
 
     # pH 불안정성 (침전 발생 임계점 6.5 초과 여부)
-    # 배관 막힘의 주원인인 '칼슘/인산 침전'이 발생하는 pH 6.5 이상의 위험 상태를 플래그(1/0)로 만듭니다.
-    # [Rule] 이 플래그가 켜진 상태가 오래 유지되면, 곧 배관이 막힌다는 강력한 예지 시그널입니다.
     df_feat["ph_instability_flag"] = (df_feat["mix_ph"] > 6.5).astype(np.int8)
 
-    # 누적 염분 부하량 추정치 (Cumulative Salt Load)
-    # 배지에서 빠져나오는 배액 EC와 들어가는 공급 EC의 차이를 의미합니다.
-    # [Rule] 배액 EC가 공급 EC보다 지속적으로 높으면 염류가 축적(막힘 유발)되고, 낮으면 식물이 영양결핍 상태입니다.
+    # 누적 염분 부하량
     df_feat["salt_accumulation_delta"] = (
         df_feat["drain_ec_ds_m"] - df_feat["mix_ec_ds_m"]
+    )
+
+    # 추세형 피처
+    df_feat["pressure_roll_mean_10"] = df_feat["differential_pressure_kpa"].rolling(
+        window=10, min_periods=1
+    ).mean()
+    df_feat["flow_roll_mean_10"] = df_feat["flow_rate_l_min"].rolling(
+        window=10, min_periods=1
+    ).mean()
+    df_feat["pressure_trend_10"] = df_feat["pressure_roll_mean_10"].diff().fillna(0)
+    df_feat["flow_trend_10"] = df_feat["flow_roll_mean_10"].diff().fillna(0)
+    df_feat["ph_roll_mean_30"] = df_feat["mix_ph"].rolling(window=30, min_periods=1).mean()
+    df_feat["ph_trend_30"] = df_feat["ph_roll_mean_30"].diff().fillna(0)
+    df_feat["pressure_flow_ratio"] = (
+        df_feat["differential_pressure_kpa"] / (df_feat["flow_rate_l_min"] + eps)
     )
 
     # 광합성 유효 광량자속 밀도 누적 프록시 (DLI Proxy)
@@ -250,7 +298,35 @@ def create_modeling_features(df):
             df_feat[f"zone{i}_substrate_ec_ds_m"] - df_feat["mix_ec_ds_m"]
         )
 
-    return df_feat
+    # =========================================================
+    # 7. 모델 입력용 / 해석용 분리
+    # =========================================================
+    model_cols = [
+        # raw sensors
+        "flow_rate_l_min", "motor_power_kw", "pump_rpm",
+        "discharge_pressure_kpa", "suction_pressure_kpa", "motor_temperature_c",
+        "mix_ph", "mix_ec_ds_m", "mix_target_ec_ds_m", "mix_target_ph", "drain_ec_ds_m",
+        "air_temp_c", "relative_humidity_pct",
+        # time / state
+        "time_sin", "time_cos", "pump_on", "pump_start_event", "pump_stop_event",
+        "minutes_since_startup", "minutes_since_shutdown", "is_startup_phase", "is_off_phase",
+        # dynamics
+        "pressure_diff", "differential_pressure_kpa", "flow_diff", "flow_drop_rate",
+        "wire_to_water_efficiency", "rpm_slope", "rpm_acc", "rpm_stability_index",
+        "temp_slope_c_per_s", "pid_error_ec", "pid_error_ph", "salt_accumulation_delta",
+        "pressure_roll_mean_10", "flow_roll_mean_10", "pressure_trend_10", "flow_trend_10",
+        "ph_roll_mean_30", "ph_trend_30", "pressure_flow_ratio",
+    ]
+
+    # extra_cols: SHAP 타겟처럼 반드시 보존해야 하는 컬럼들
+    if extra_cols:
+        model_cols = list(set(model_cols) | set(extra_cols))
+    model_cols = [c for c in model_cols if c in df_feat.columns]
+    df_model = df_feat[model_cols].copy()
+
+    df_interpret = extract_interpretation_features(df_feat)
+
+    return df_model, df_interpret
 
 
 # ==============================================================================
@@ -265,22 +341,43 @@ def aggregate_time_window(
     """
     연속된 시계열 데이터를 머신러닝 모델이 소화하기 좋게 윈도우 단위로 묶어줍니다.
     """
-    # 1. 전체 숫자형 컬럼 및 센서/시간 컬럼 분리
+    # 1. 전체 숫자형 컬럼 및 센서/시간/상태 컬럼 분리
     numeric_cols = df.select_dtypes(include=[np.number]).columns
+    phase_cols = [
+        "pump_on", "minutes_since_startup", "is_startup_phase",
+        "pump_start_event", "pump_stop_event", "minutes_since_shutdown", "is_off_phase"
+    ]
     time_cols = ["minute_of_day", "time_sin", "time_cos"]
-    sensor_cols = [col for col in numeric_cols if col not in time_cols]
+    sensor_cols = [col for col in numeric_cols if col not in time_cols + phase_cols]
 
     if method == "tumbling":
         # 🌟 텀블링: resample은 'last'를 지원하므로 딕셔너리 방식 사용
-        agg_dict = {col: "mean" for col in sensor_cols}
+        agg_dict = {col: "mean" for col in sensor_cols if col in df.columns}
+
+        phase_agg = {
+            "pump_on": "last", "minutes_since_startup": "last", "is_startup_phase": "max",
+            "pump_start_event": "max", "pump_stop_event": "max",
+            "minutes_since_shutdown": "last", "is_off_phase": "max"
+        }
+        agg_dict.update({k: v for k, v in phase_agg.items() if k in df.columns})
+
         for t_col in time_cols:
             if t_col in df.columns:
                 agg_dict[t_col] = "last"
-        df_agg = df.resample(window_size).agg(agg_dict)
+
+        df_agg = df.resample(window_size).agg(agg_dict)  # ← 집계 실행
 
     elif method == "sliding":
         # 🌟 슬라이딩: rolling은 센서 데이터만 평균 계산! (연산 속도 최적화)
-        df_agg = df[sensor_cols].rolling(window=window_size).mean()
+        df_sensor = df[sensor_cols].rolling(window=window_size).mean()
+
+        # phase는 윈도우 끝 상태(last)가 중요
+        _phase_cols = [
+            c for c in ["pump_on", "minutes_since_startup", "is_startup_phase"] if c in df.columns
+        ]
+        df_phase = df[_phase_cols]
+
+        df_agg = pd.concat([df_sensor, df_phase], axis=1)
 
         # 시간 데이터는 어차피 현재 인덱스의 값이 '윈도우의 끝점(last)'이므로
         # 원본(df)에서 그대로 복사해옵니다. (lambda 쓰는 것보다 훨씬 빠름)
@@ -355,22 +452,88 @@ def extract_interpretation_features(df_agg):
             flow_baseline_10m - df_agg["flow_rate_l_min"]
         ) / (flow_baseline_10m + eps)
 
+    # ---------------------------------------------------------
+    # 0-time. 시간 피처 (VIP 주입용 — AE 입력 보강)
+    # ---------------------------------------------------------
+    for col in ["time_sin", "time_cos"]:
+        if col in df_agg.columns:
+            df_interpret[col] = df_agg[col]
+
+    # ---------------------------------------------------------
+    # 6-zone. 구역 점적 시스템 해석 컬럼
+    # ---------------------------------------------------------
+    for col in ["zone1_resistance", "zone1_moisture_response_pct", "zone1_ec_accumulation"]:
+        if col in df_agg.columns:
+            df_interpret[col] = df_agg[col]
+
+    if "supply_balance_index" in df_agg.columns:
+        df_interpret["supply_balance_index"] = df_agg["supply_balance_index"]
+
+    if "ph_instability_flag" in df_agg.columns:
+        df_interpret["ph_instability_flag"] = df_agg["ph_instability_flag"]
+
+    # VPD (보조 모니터링용 — AE 타겟 아님)
+    if "calculated_vpd_kpa" in df_agg.columns:
+        df_interpret["calculated_vpd_kpa"] = df_agg["calculated_vpd_kpa"]
+
+    # ---------------------------------------------------------
+    # 6. 초기 Spike 탐지 (startup 구간 vs 비정상 구간 분리)
+    # ---------------------------------------------------------
+    for col in [
+        "is_startup_phase", "pump_start_event", "minutes_since_startup",
+        "is_off_phase", "pump_on"
+    ]:
+        if col in df_agg.columns:
+            df_interpret[col] = df_agg[col]
+
+    # 압력 spike: |pressure_diff| 가 rolling 80th 분위 초과
+    if "pressure_diff" in df_agg.columns:
+        df_interpret["pressure_diff"] = df_agg["pressure_diff"]
+        p_thresh = df_agg["pressure_diff"].abs().rolling(window=60, min_periods=1).quantile(0.80)
+        df_interpret["is_pressure_spike"] = (df_agg["pressure_diff"].abs() > p_thresh).astype(int)
+    else:
+        df_interpret["is_pressure_spike"] = 0
+
+    # RPM spike: rpm_slope 가 rolling 80th 분위 초과
+    if "rpm_slope" in df_agg.columns:
+        df_interpret["rpm_slope"] = df_agg["rpm_slope"]
+        r_thresh = df_agg["rpm_slope"].abs().rolling(window=60, min_periods=1).quantile(0.80)
+        df_interpret["is_rpm_spike"] = (df_agg["rpm_slope"].abs() > r_thresh).astype(int)
+    else:
+        df_interpret["is_rpm_spike"] = 0
+
+    # 복합 spike 여부 (압력 OR rpm)
+    df_interpret["is_spike"] = (
+        (df_interpret["is_pressure_spike"] == 1) | (df_interpret["is_rpm_spike"] == 1)
+    ).astype(int)
+
+    # 정상 spike: startup 구간 내 spike (예상된 거동)
+    startup = df_interpret.get("is_startup_phase", 0)
+    df_interpret["is_startup_spike"] = (
+        (df_interpret["is_spike"] == 1) & (startup == 1)
+    ).astype(int)
+
+    # 비정상 spike: startup 구간 밖의 spike (이상 징후)
+    df_interpret["is_anomaly_spike"] = (
+        (df_interpret["is_spike"] == 1) & (startup != 1)
+    ).astype(int)
+
     return df_interpret
 
 
 # ==============================================================================
 # [Pipeline Step 1] 파생변수 생성 및 윈도우 집계
 # ==============================================================================
-def step1_prepare_window_data(df_raw, window_method="sliding"):
+def step1_prepare_window_data(df_raw, window_method="sliding", target_cols=None):
     print(f"⏳ [Step 1] 파생변수 생성 및 {window_method.upper()} 윈도우 집계 시작...")
 
     # 1. 로우 데이터에서 물리적 파생변수 생성 (공통)
-    df_features = create_modeling_features(df_raw)
+    df_features, _ = create_modeling_features(df_raw, extra_cols=target_cols)
 
     # 2. 윈도우 집계 (인자에 따라 다르게 동작)
     if window_method == "sliding":
         df_agg = aggregate_time_window(
-            df_features, method="sliding", window_size="10min", slide_step="1min"
+            df_features, method="sliding", window_size="5min", slide_step="1min"
         )
     elif window_method == "tumbling":
         df_agg = aggregate_time_window(
@@ -431,6 +594,55 @@ def step2_clean_and_drop_collinear(df_agg):
     print(
         f"  -> 중복/노이즈 변수 {len(collinear_drop_list)}개 제거 완료! (남은 피처 수: {len(df_clean.columns)})"
     )
+
+    return df_clean
+
+
+# ==============================================================================
+# [Pipeline Step 2 - 동적 버전] 상관계수 기반 다중공선성 동적 제거 (권장)
+# ==============================================================================
+def step2_clean_and_drop_collinear_dynamic(df_agg, corr_threshold=0.85, protected_cols=None):
+    print(f"\n🧹 [Step 2] 데이터 정제 및 다중공선성(상관계수 > {corr_threshold}) 변수 동적 제거 시작...")
+
+    df_clean = df_agg.copy()
+
+    # 1. 결측치 및 무한대 처리 (시계열 특성 반영: 선형 보간 → bfill)
+    df_clean.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df_clean = df_clean.interpolate(method='time')
+    df_clean.bfill(inplace=True)
+
+    # 2. 보호해야 할 핵심 도메인 피처 (절대 자동 삭제되면 안 되는 변수들)
+    whitelist = [
+        # ── 기본 센서 (도메인 핵심값)
+        "calculated_vpd_kpa", "mix_ec_ds_m", "mix_ph", "air_temp_c",
+        "discharge_pressure_kpa", "flow_rate_l_min", "motor_power_kw",
+        "pump_rpm", "motor_temperature_c",
+        # ── 시간/주기
+        "time_sin", "time_cos",
+        # ── Spike 탐지 필수 (상관필터에서 절대 제거 금지)
+        "pump_on", "pump_start_event", "is_startup_phase",
+        "minutes_since_startup", "pressure_diff", "rpm_slope", "rpm_acc",
+        # ── 환경 도메인 핵심
+        "zone1_substrate_moisture_pct", "daily_light_integral_mol_m2_d",
+    ]
+    if protected_cols:
+        whitelist = list(set(whitelist) | set(protected_cols))
+
+    # 3. 상관계수 행렬 계산 (숫자형 변수만)
+    corr_matrix = df_clean.select_dtypes(include=[np.number]).corr().abs()
+
+    # 4. 상삼각행렬(Upper triangle) 추출 (자기 자신(1.0) 및 중복 비교 제거)
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+
+    # 5. 임계값 초과 컬럼 탐색 → whitelist 구출
+    to_drop = [column for column in upper.columns if any(upper[column] > corr_threshold)]
+    final_drop_list = [col for col in to_drop if col not in whitelist]
+
+    df_clean.drop(columns=final_drop_list, inplace=True, errors='ignore')
+
+    print(f"  -> 동적 중복/노이즈 변수 {len(final_drop_list)}개 제거 완료!")
+    print(f"  -> 삭제된 컬럼: {final_drop_list}")
+    print(f"  -> 남은 피처 수: {len(df_clean.columns)}")
 
     return df_clean
 

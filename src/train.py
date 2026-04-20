@@ -1,12 +1,14 @@
 # train.py 는 1분단위의 데이터를 학습시켜야 성능이 우수함.
 
 import os
+import csv
 import json
 import joblib
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 import time
+from datetime import datetime
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
@@ -15,13 +17,41 @@ from sklearn.preprocessing import MinMaxScaler
 
 # 우리가 만들어둔 '메인 셰프(파이프라인 매니저)' 모듈 불러오기
 from feature_selection import run_feature_selection_experiment
-from logger import get_logger, save_experiment_to_csv
+from logger import get_logger
 from math_utils import calculate_sigma_thresholds
 from model_builder import build_autoencoder
 from utils import save_model_artifacts
 
 # 로거 생성
 logger = get_logger("TRAIN")
+
+
+# ==============================================================================
+# 실험 결과 기록 (리더보드 CSV)
+# ==============================================================================
+def save_experiment_to_csv(model_name, mse_mean, t_caut, t_warn, t_cri):
+    """리더보드(CSV)에 실험 결과를 누적 저장합니다."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    csv_path = os.path.join(project_root, "logs", "experiment_board.csv")
+
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    file_exists = os.path.isfile(csv_path)
+
+    with open(csv_path, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(
+                ["Date", "Domain", "Mean_MSE", "Threshold_Caution", "Threshold_Warning", "Threshold_Error"]
+            )
+        writer.writerow([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            model_name,
+            round(mse_mean, 6),
+            round(t_caut, 6),
+            round(t_warn, 6),
+            round(t_cri, 6),
+        ])
 
 
 # ==============================================================================
@@ -103,7 +133,7 @@ def train_and_save_model(X_train_ae, model_name):
         "feature_stds": X_train_ae.std().to_dict(),
     }
 
-    # 6. 아티팩트 저장 (utils.py 에게 외주)
+    # 6. 아티팩트 저장
     current_dir = os.path.dirname(os.path.abspath(__file__))
     save_dir = os.path.join(os.path.dirname(current_dir), "models")
 
@@ -176,32 +206,35 @@ if __name__ == "__main__":
             "pid_error_ec": ["mix_ec_ds_m", "mix_target_ec_ds_m"],
             "salt_accumulation_delta": ["drain_ec_ds_m", "mix_ec_ds_m"],
         },
+        "zone_drip": {  # 구역 점적 시스템 도메인
+            "zone1_moisture_response_pct": ["zone1_substrate_moisture_pct"],
+            "zone1_ec_accumulation": ["zone1_substrate_ec_ds_m", "mix_ec_ds_m"],
+        },
     }
 
     # 🌟 [수정포인트 4] For 루프를 돌면서 각각 독립적인 모델을 학습시킵니다.
     for system_name, target_dict in subsystem_targets.items():
         logger.info(f"[{system_name.upper()} 도메인] 분석 파이프라인 시작")
 
-        # 1. 도메인별 피처 셀렉션 (🌟 df_agg를 세 번째 인자로 받아옵니다!)
-        robust_features, X_train_ae, df_agg, _ = run_feature_selection_experiment(
+        # 1. 도메인별 피처 셀렉션
+        robust_features, X_train_ae, df_interpret_result, _ = run_feature_selection_experiment(
             df_raw=df_raw, window_method="sliding", target_dict=target_dict
         )
 
-        # 🌟 [추가 2] VIP 프리패스 수정본! (중복 방지 로직 포함)
+        # VIP 피처 강제 주입 (time_sin/time_cos 가 SHAP 선택에서 빠졌을 때 보완)
         vip_cols = ["time_sin", "time_cos"]
 
-        # 이미 X_train_ae에 포함된 VIP 피처(예: pressure_diff)는 빼고 남은 것만 추립니다.
         missing_vips = [
             col
             for col in vip_cols
-            if col not in X_train_ae.columns and col in df_agg.columns
+            if col not in X_train_ae.columns and col in df_interpret_result.columns
         ]
 
         if missing_vips:
             logger.info(
                 f"🔗 오토인코더 입력 데이터에 VIP 피처 강제 주입: {missing_vips}"
             )
-            time_features = df_agg[missing_vips]
+            time_features = df_interpret_result[missing_vips]
             X_train_ae = pd.concat([X_train_ae, time_features], axis=1)
 
         # 2. 도메인별 모델 학습 및 저장 (이름을 같이 넘겨줌)
@@ -210,7 +243,7 @@ if __name__ == "__main__":
     total_end_time = time.time()
     t_min, t_sec = divmod(total_end_time - total_start_time, 60)
     logger.info(
-        "🎉 모든 서브시스템(Motor, Hydraulic, Nutrient)의 모델 학습이 성공적으로 종료되었습니다!"
+        "🎉 모든 서브시스템(Motor, Hydraulic, Nutrient, Zone Drip)의 모델 학습이 성공적으로 종료되었습니다!"
     )
     logger.info(
         f"🏆 전체 파이프라인 구동 완료! (총 소요 시간: {int(t_min)}분 {t_sec:.2f}초)"
