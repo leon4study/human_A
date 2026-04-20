@@ -19,8 +19,9 @@ day1["mod"] = day1["timestamp"].dt.hour * 60 + day1["timestamp"].dt.minute
 day1 = day1.set_index("mod").sort_index()
 day1 = day1.reindex(range(1440)).ffill().bfill()  # 1440행 보장
 
-# ── [Step 2] 30일 합성: 매 분 = template[minute_of_day] + 작은 gaussian 노이즈 ─
-N_DAYS = 30
+# ── [Step 2] N일 합성: 매 분 = template[minute_of_day] + 작은 gaussian 노이즈 ─
+# 월1(0~30) flat 학습 구간 + 월2(32~) phase 기반 drift 확인하려면 N_DAYS=60+ 권장
+N_DAYS = 90
 idx = pd.date_range(start, periods=N_DAYS * 1440, freq="1min")
 mod_arr = (idx.hour * 60 + idx.minute).to_numpy()
 
@@ -28,7 +29,8 @@ out = pd.DataFrame({"timestamp": idx})
 
 rng = np.random.default_rng(20260501)
 _numeric_cols = [
-    c for c in day1.columns
+    c
+    for c in day1.columns
     if c != "timestamp" and pd.api.types.is_numeric_dtype(day1[c])
 ]
 for _col in _numeric_cols:
