@@ -9,7 +9,7 @@ def build_autoencoder(input_dim: int) -> Model:
     충분한 용량(Capacity)을 가진 Deep AutoEncoder 모델을 생성합니다.
     """
     # 병목층 크기는 최소 4개 이상 보장하여 정보 손실 방지
-    bottleneck_size = max(4, input_dim // 2)
+    bottleneck_size = max(4, input_dim // 4)
 
     input_layer = Input(shape=(input_dim,))
 
