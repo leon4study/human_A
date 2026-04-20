@@ -9,7 +9,11 @@ from dotenv import load_dotenv
 
 # 1. 환경 설정 로드
 # 프로젝트 루트 혹은 현재 폴더의 .env를 읽어옵니다.
-load_dotenv()
+
+ENV = os.getenv("ENV", "local")
+
+if ENV == "local":
+    load_dotenv("../../.env.local")
 
 # 환경 변수 (설정이 없으면 기본값 사용)
 MQTT_HOST = os.getenv("MQTT_BROKER_HOST", "localhost")

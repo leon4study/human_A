@@ -10,12 +10,15 @@ from dotenv import load_dotenv # 추가
 
 # 1. .env 파일 로드
 # 프로젝트 루트에 있는 .env를 읽어옵니다.
-env = os.getenv("ENV", "local")  # 기본 local
-load_dotenv(f".env.{env}")
+
+ENV = os.getenv("ENV", "local")
+
+if ENV == "local":
+    load_dotenv("../../.env.local")
 
 # 환경 변수 (Docker Compose에서 주입받을 예정)
 MQTT_HOST = os.getenv("MQTT_BROKER_HOST", "mqtt-broker")
-S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://data-lake:9000")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://localhost:9000")
 S3_ACCESS_KEY = os.getenv("MINIO_ROOT_USER", "admin")
 S3_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD", "password123")
 BUCKET_NAME = "sensor-data" 
