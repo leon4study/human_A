@@ -187,5 +187,5 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info("🌐 Uvicorn 웹 서버를 시작합니다... (http://127.0.0.1:8000/docs)")
-    uvicorn.run("inference_api:app", host="0.0.0.0", port=8000, reload=True)
+    logger.info("🌐 Uvicorn 웹 서버를 시작합니다... (http://127.0.0.1:9977/docs)")
+    uvicorn.run("inference_api:app", host="0.0.0.0", port=9977, reload=True)

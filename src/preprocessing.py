@@ -343,9 +343,11 @@ def aggregate_time_window(
     """
     # 1. 전체 숫자형 컬럼 및 센서/시간/상태 컬럼 분리
     numeric_cols = df.select_dtypes(include=[np.number]).columns
+    # 바이너리/상태 플래그는 평균 집계하면 의미가 깨지므로 phase로 분리
     phase_cols = [
         "pump_on", "minutes_since_startup", "is_startup_phase",
-        "pump_start_event", "pump_stop_event", "minutes_since_shutdown", "is_off_phase"
+        "pump_start_event", "pump_stop_event", "minutes_since_shutdown", "is_off_phase",
+        "cleaning_event_flag",
     ]
     time_cols = ["minute_of_day", "time_sin", "time_cos"]
     sensor_cols = [col for col in numeric_cols if col not in time_cols + phase_cols]
@@ -357,7 +359,8 @@ def aggregate_time_window(
         phase_agg = {
             "pump_on": "last", "minutes_since_startup": "last", "is_startup_phase": "max",
             "pump_start_event": "max", "pump_stop_event": "max",
-            "minutes_since_shutdown": "last", "is_off_phase": "max"
+            "minutes_since_shutdown": "last", "is_off_phase": "max",
+            "cleaning_event_flag": "max",
         }
         agg_dict.update({k: v for k, v in phase_agg.items() if k in df.columns})
 
@@ -377,7 +380,14 @@ def aggregate_time_window(
         ]
         df_phase = df[_phase_cols]
 
+        # cleaning_event_flag: 윈도우 내 언제든 발생하면 1로 남겨야 필터가 작동
+        df_clean_flag = None
+        if "cleaning_event_flag" in df.columns:
+            df_clean_flag = df["cleaning_event_flag"].rolling(window=window_size).max()
+
         df_agg = pd.concat([df_sensor, df_phase], axis=1)
+        if df_clean_flag is not None:
+            df_agg["cleaning_event_flag"] = df_clean_flag
 
         # 시간 데이터는 어차피 현재 인덱스의 값이 '윈도우의 끝점(last)'이므로
         # 원본(df)에서 그대로 복사해옵니다. (lambda 쓰는 것보다 훨씬 빠름)
@@ -650,10 +660,13 @@ def step2_clean_and_drop_collinear_dynamic(df_agg, corr_threshold=0.85, protecte
 # ==============================================================================
 # [Pipeline Step 2.5] 오토인코더 학습용 '순수 정상 데이터' 추출
 # ==============================================================================
-def extract_normal_training_data(df_clean):
+def extract_normal_training_data(df_clean, df_interpret=None):
     """
     오토인코더가 '정상'만을 완벽히 학습할 수 있도록,
     고장이 의심되거나 물리적으로 비정상적인 극단치(Outlier)를 학습 데이터에서 아예 도려냅니다.
+
+    df_interpret가 주어지면 is_anomaly_spike로 "startup 밖 spike"를 추가 제외합니다.
+    startup 구간 내 spike(is_startup_spike=1)는 정상 과도 동작이므로 학습에 포함.
     """
     print(
         "\n🛡️ [Step 2.5] 오토인코더 학습을 위한 '순수 정상 범주' 데이터 필터링 시작..."
@@ -672,30 +685,22 @@ def extract_normal_training_data(df_clean):
         df_normal = df_normal[df_normal["flow_rate_l_min"] >= 0]
 
     # ----------------------------------------------------------------
-    # 2. 통계적 이상치 제거 (IQR 방식을 적용한 꼬리 자르기)
+    # 2. 플래그 기반 이상 데이터 제외 (IQR 필터는 사용하지 않음)
     # ----------------------------------------------------------------
-    # 오토인코더의 학습을 방해하는 극단적인 '튐(Spike)' 현상을 통계적으로 잘라냅니다.
-    # 모델에 들어갈 모든 숫자형 변수에 대해 깐깐하게 검사합니다.
-    numeric_cols = df_normal.select_dtypes(include=[np.number]).columns
-
-    # 시간 관련 피처(원형 데이터)는 이상치 개념이 없으므로 제외
-    exclude_cols = ["minute_of_day", "time_sin", "time_cos"]
-    check_cols = [col for col in numeric_cols if col not in exclude_cols]
-
-    for col in check_cols:
-        # 상하위 5%, 95%를 기준으로 삼아 너무 빡빡하지 않게 이상치를 잡습니다.
-        Q1 = df_normal[col].quantile(0.05)
-        Q3 = df_normal[col].quantile(0.95)
-        IQR = Q3 - Q1
-
-        # IQR의 1.5배를 벗어나는 값은 '정상 범주를 벗어난 고장 데이터'로 간주하고 날립니다.
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-
-        # 정상 범위 안에 있는 데이터만 남깁니다.
-        df_normal = df_normal[
-            (df_normal[col] >= lower_bound) & (df_normal[col] <= upper_bound)
-        ]
+    # IQR 꼬리 자르기는 startup overshoot·야간 전환 같은 "정상 과도 패턴"까지 잘라내
+    # AE가 매일 아침 startup을 이상으로 오판하게 됨. 따라서 사용 금지.
+    # 대신 preprocessing에서 이미 생성한 명시적 플래그로 필터링:
+    #   - is_anomaly_spike==1  : startup 밖에서 발생한 spike (비정상)
+    #   - cleaning_event_flag==1 : 주기적 산 세척 이벤트 (학습 제외)
+    # startup spike(is_startup_spike==1)는 정상 과도 구동이므로 **유지**.
+    drop_mask = pd.Series(False, index=df_normal.index)
+    if "cleaning_event_flag" in df_normal.columns:
+        drop_mask |= df_normal["cleaning_event_flag"] == 1
+    # is_anomaly_spike는 df_interpret에만 있으므로 인덱스로 조인해서 참조
+    if df_interpret is not None and "is_anomaly_spike" in df_interpret.columns:
+        spike = df_interpret["is_anomaly_spike"].reindex(df_normal.index).fillna(0)
+        drop_mask |= spike == 1
+    df_normal = df_normal[~drop_mask]
 
     final_len = len(df_normal)
     removed_len = initial_len - final_len
