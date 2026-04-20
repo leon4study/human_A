@@ -106,6 +106,21 @@ def create_modeling_features(df):
         df_feat["motor_power_kw"] + eps
     )
 
+    #"펌프가 켜진 지 몇 분 지났는가?" (Time Since Startup)
+    # 펌프가 꺼져있으면 0, 켜지면 1, 2, 3... 분 단위로 카운트가 올라갑니다.
+    # 이렇게 하면 AI가 "아! 켜진 직후 1~5분 사이에는 값이 튀는 게 정상이구나!" 라고 완벽히 학습합니다.
+    pump_status = df_feat["pump_on"] # (실제 펌프 가동 여부를 나타내는 컬럼명 사용)
+    # 펌프가 꺼지면 그룹을 나누기 위한 트릭
+    pump_group = (pump_status != pump_status.shift()).cumsum()
+    
+    # 펌프가 켜져 있을 때만 누적 카운트 (꺼져있으면 0)
+    df_feat["minutes_since_startup"] = df_feat.groupby(pump_group).cumcount()
+    df_feat["minutes_since_startup"] = df_feat["minutes_since_startup"] * pump_status
+    
+    # [옵션] 가동 초기(Transient) 플래그: 켜진 직후 10분 이내인가? (1/0)
+    df_feat["is_startup_phase"] = ((df_feat["minutes_since_startup"] > 0) & 
+                                (df_feat["minutes_since_startup"] <= 5)).astype(int)
+    
     # =====================================================================
     # 2. 온도 & 진동 동특성 지표
     # =====================================================================
@@ -288,8 +303,6 @@ def aggregate_time_window(
 # ==============================================================================
 
 # extract_interpretation_features 함수는 텀블링 윈도우든 슬라이딩 윈도우든 전혀 수정할 필요 없이 그대로 사용하면 됨.
-
-
 def extract_interpretation_features(df_agg):
     """
     AutoEncoder의 입력으로 쓰지 않고,
@@ -420,3 +433,63 @@ def step2_clean_and_drop_collinear(df_agg):
     )
 
     return df_clean
+
+
+# ==============================================================================
+# [Pipeline Step 2.5] 오토인코더 학습용 '순수 정상 데이터' 추출
+# ==============================================================================
+def extract_normal_training_data(df_clean):
+    """
+    오토인코더가 '정상'만을 완벽히 학습할 수 있도록,
+    고장이 의심되거나 물리적으로 비정상적인 극단치(Outlier)를 학습 데이터에서 아예 도려냅니다.
+    """
+    print(
+        "\n🛡️ [Step 2.5] 오토인코더 학습을 위한 '순수 정상 범주' 데이터 필터링 시작..."
+    )
+    df_normal = df_clean.copy()
+    initial_len = len(df_normal)
+
+    # ----------------------------------------------------------------
+    # 1. 도메인 규칙 기반 하드 필터링 (Domain Rules)
+    # ----------------------------------------------------------------
+    # 예시: 펌프 토출 압력이나 유량이 마이너스(-)인 물리적 오류 데이터 제거
+    if "discharge_pressure_kpa" in df_normal.columns:
+        df_normal = df_normal[df_normal["discharge_pressure_kpa"] >= 0]
+
+    if "flow_rate_l_min" in df_normal.columns:
+        df_normal = df_normal[df_normal["flow_rate_l_min"] >= 0]
+
+    # ----------------------------------------------------------------
+    # 2. 통계적 이상치 제거 (IQR 방식을 적용한 꼬리 자르기)
+    # ----------------------------------------------------------------
+    # 오토인코더의 학습을 방해하는 극단적인 '튐(Spike)' 현상을 통계적으로 잘라냅니다.
+    # 모델에 들어갈 모든 숫자형 변수에 대해 깐깐하게 검사합니다.
+    numeric_cols = df_normal.select_dtypes(include=[np.number]).columns
+
+    # 시간 관련 피처(원형 데이터)는 이상치 개념이 없으므로 제외
+    exclude_cols = ["minute_of_day", "time_sin", "time_cos"]
+    check_cols = [col for col in numeric_cols if col not in exclude_cols]
+
+    for col in check_cols:
+        # 상하위 5%, 95%를 기준으로 삼아 너무 빡빡하지 않게 이상치를 잡습니다.
+        Q1 = df_normal[col].quantile(0.05)
+        Q3 = df_normal[col].quantile(0.95)
+        IQR = Q3 - Q1
+
+        # IQR의 1.5배를 벗어나는 값은 '정상 범주를 벗어난 고장 데이터'로 간주하고 날립니다.
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+
+        # 정상 범위 안에 있는 데이터만 남깁니다.
+        df_normal = df_normal[
+            (df_normal[col] >= lower_bound) & (df_normal[col] <= upper_bound)
+        ]
+
+    final_len = len(df_normal)
+    removed_len = initial_len - final_len
+
+    print(f"  -> 초기 데이터: {initial_len}개")
+    print(f"  -> ✂️ 비정상/극단치 데이터 {removed_len}개 제거 완료!")
+    print(f"  -> 🌟 최종 학습용 정상 데이터: {final_len}개 남음")
+
+    return df_normal
