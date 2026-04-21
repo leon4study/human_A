@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Panel from "../common/Panel";
 import "../../styles/kpipanel.css";
 import type { KpiItem } from "../../types/dashboard";
@@ -64,4 +65,4 @@ function KpiPanel({ items }: KpiPanelProps) {
   );
 }
 
-export default KpiPanel;
+export default memo(KpiPanel);

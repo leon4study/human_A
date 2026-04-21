@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Panel from "../common/Panel";
 import type { CtpVisualizationMetric } from "../../types/dashboard";
 
@@ -49,7 +50,7 @@ function CtpStatusPanel({
             >
               <span>{metric.label}</span>
               <strong>
-                {metric.value} <em>{metric.unit}</em>
+                {metric.value} <em className="ctp-card__unit">{metric.unit}</em>
               </strong>
             </button>
           );
@@ -59,4 +60,4 @@ function CtpStatusPanel({
   );
 }
 
-export default CtpStatusPanel;
+export default memo(CtpStatusPanel);

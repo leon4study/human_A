@@ -32,6 +32,10 @@ export function PipeRun({
   flowWidth = 0.3,
   duration = "1.8s",
   reverseFlow = false,
+  flowing = true,
+  flowColor,
+  bodyColor,
+  shellColor,
 }: {
   d: string;
   tone: PipeTone;
@@ -39,8 +43,19 @@ export function PipeRun({
   flowWidth?: number;
   duration?: string;
   reverseFlow?: boolean;
+  /** false이면 흐름 점선과 애니메이션을 렌더하지 않음 (밸브 잠김 등) */
+  flowing?: boolean;
+  /** 흐름 점선 색을 override (탱크 액체 색상 등). 미지정 시 tone 기본값 사용. */
+  flowColor?: string;
+  /** 파이프 본체 색 override — 회색 톤으로 주면 내부 액체 흐름이 돋보임 */
+  bodyColor?: string;
+  /** 파이프 외곽(shell) 색 override */
+  shellColor?: string;
 }) {
   const palette = pipePalette[tone];
+  const flowStroke = flowColor ?? palette.flow;
+  const bodyStroke = bodyColor ?? palette.body;
+  const shellStroke = shellColor ?? palette.shell;
 
   return (
     <g>
@@ -48,7 +63,7 @@ export function PipeRun({
       <path
         d={d}
         fill="none"
-        stroke={palette.shell}
+        stroke={shellStroke}
         strokeWidth={width + 0.3}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -57,29 +72,31 @@ export function PipeRun({
       <path
         d={d}
         fill="none"
-        stroke={palette.body}
+        stroke={bodyStroke}
         strokeWidth={width}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* 흐름감을 주는 점선 애니메이션 */}
-      <path
-        d={d}
-        fill="none"
-        stroke={palette.flow}
-        strokeWidth={flowWidth}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeDasharray="10 18"
-      >
-        <animate
-          attributeName="stroke-dashoffset"
-          from="0"
-          to={reverseFlow ? "28" : "-28"}
-          dur={duration}
-          repeatCount="indefinite"
-        />
-      </path>
+      {/* 흐름감을 주는 점선 애니메이션 (flowing일 때만) */}
+      {flowing && (
+        <path
+          d={d}
+          fill="none"
+          stroke={flowStroke}
+          strokeWidth={flowWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray="10 18"
+        >
+          <animate
+            attributeName="stroke-dashoffset"
+            from="0"
+            to={reverseFlow ? "28" : "-28"}
+            dur={duration}
+            repeatCount="indefinite"
+          />
+        </path>
+      )}
       {/* 약한 글로우 오버레이 */}
       <path
         d={d}
@@ -127,6 +144,70 @@ export function PipeJoint({
         r={size * 0.35}
         fill={palette.glow}
         opacity="0.45"
+      />
+    </g>
+  );
+}
+
+// 파이프 라인에 박힌 타원형 밸브 (핸들 없이 심플하게)
+//  - 열림: 초록 코어 + 느린 펄스
+//  - 잠김: 빨간 코어 + 정적
+export function SmallValve({
+  x,
+  y,
+  isOpen = true,
+  size = 0.8,
+}: {
+  x: number;
+  y: number;
+  isOpen?: boolean;
+  size?: number;
+}) {
+  const coreFill = isOpen ? "#22c55e" : "#ef4444";
+  const coreStroke = isOpen ? "#16a34a" : "#b91c1c";
+
+  // 수직 파이프 위이므로 세로로 긴 타원이 자연스러움
+  const rx = size * 0.85;
+  const ry = size * 1.25;
+
+  return (
+    <g>
+      {/* 외곽 섀도우 */}
+      <ellipse
+        cx={x}
+        cy={y}
+        rx={rx + 0.12}
+        ry={ry + 0.12}
+        fill="#020617"
+      />
+      {/* 메탈 바디 */}
+      <ellipse
+        cx={x}
+        cy={y}
+        rx={rx}
+        ry={ry}
+        fill="#334155"
+        stroke="#94a3b8"
+        strokeWidth="0.12"
+      />
+      {/* 상태 코어 */}
+      <ellipse
+        cx={x}
+        cy={y}
+        rx={rx * 0.55}
+        ry={ry * 0.6}
+        fill={coreFill}
+        stroke={coreStroke}
+        strokeWidth="0.1"
+      />
+      {/* 윗면 하이라이트 */}
+      <ellipse
+        cx={x - rx * 0.25}
+        cy={y - ry * 0.4}
+        rx={rx * 0.3}
+        ry={ry * 0.22}
+        fill="white"
+        opacity="0.35"
       />
     </g>
   );

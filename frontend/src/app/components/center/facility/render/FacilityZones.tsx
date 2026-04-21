@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { growingZones } from "../model/facility.layout";
 
@@ -6,7 +7,7 @@ type FacilityZonesProps = {
 };
 
 // 하단 재배 베드 시각화와 클릭 영역을 렌더링
-export function FacilityZones({ onEquipmentClick }: FacilityZonesProps) {
+function FacilityZonesImpl({ onEquipmentClick }: FacilityZonesProps) {
   return (
     <>
       {growingZones.map((zone, index) => (
@@ -77,3 +78,6 @@ export function FacilityZones({ onEquipmentClick }: FacilityZonesProps) {
     </>
   );
 }
+
+// onEquipmentClick이 안정적이라면 sensorData 변경에도 리렌더되지 않도록 memo
+export const FacilityZones = memo(FacilityZonesImpl);

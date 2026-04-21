@@ -13,6 +13,7 @@ import { systemStatusMap } from "../components/common/SystemStatus";
 import useDashboardSocket from "../hooks/useDashboardSocket";
 import ZoneCauseTopPanel from "../components/side/ZoneCauseTopPanel";
 import EquipmentModal from "../components/detail/EquipmentModal";
+import AiAnalysisModal from "../components/detail/AiAnalysisModal";
 import type { Equipment } from "../components/center/facility/model/facility.types";
 
 function DashboardFrame() {
@@ -40,6 +41,9 @@ function DashboardFrame() {
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(
     null,
   );
+
+  // AI 분석 팝업 열림 여부
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
   // 시각화에서 사용할 선택 항목 찾기
   const selectedMetric = useMemo(() => {
@@ -93,7 +97,10 @@ function DashboardFrame() {
 
           {/* 상단 우측 바 */}
           <div className="dashboard__header-right">
-            <button className="dashboard__ai-button">
+            <button
+              className="dashboard__ai-button"
+              onClick={() => setIsAiModalOpen(true)}
+            >
               AI 분석결과 페이지 버튼
             </button>
             <div className="dashboard__time">
@@ -140,7 +147,7 @@ function DashboardFrame() {
             <CtpStatusPanel
               metrics={ctpVisualizationMetrics}
               selectedId={selectedMetricId}
-              onSelect={(metricId) => setSelectedMetricId(metricId)}
+              onSelect={setSelectedMetricId}
             />
             <CtpVisualizationPanel selectedMetric={selectedMetric} />
           </aside>
@@ -154,6 +161,12 @@ function DashboardFrame() {
       <EquipmentModal
         equipment={selectedEquipment}
         onClose={() => setSelectedEquipment(null)}
+      />
+
+      {/* AI 분석 결과 팝업 */}
+      <AiAnalysisModal
+        open={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
       />
     </div>
   );

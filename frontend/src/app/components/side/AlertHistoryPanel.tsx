@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Panel from "../common/Panel";
 import type { AlertItem } from "../../types/dashboard";
 
@@ -29,7 +30,7 @@ function AlertHistoryPanel({ items }: AlertHistoryPanelProps) {
         <div className="alert-table__head">
           <span>날짜</span>
           <span>시간</span>
-          <span>장비</span>
+          <span>유형</span>
           <span>원인</span>
           <span>위험도</span>
         </div>
@@ -39,7 +40,7 @@ function AlertHistoryPanel({ items }: AlertHistoryPanelProps) {
             <div className="alert-table__row" key={item.id}>
               <span>{item.date}</span>
               <span>{item.time}</span>
-              <span>{item.equipment}</span>
+              <span>{item.type}</span>
               <span>{item.cause}</span>
               <span className={getAlertLevelClass(item.level)}>
                 {item.level}
@@ -52,4 +53,4 @@ function AlertHistoryPanel({ items }: AlertHistoryPanelProps) {
   );
 }
 
-export default AlertHistoryPanel;
+export default memo(AlertHistoryPanel);

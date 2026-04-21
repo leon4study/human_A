@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef } from "react";
 import { initialSensorData } from "./facility/model/facility.status";
 import type { FacilityDiagramProps } from "./facility/model/facility.types";
 import { FacilityEquipment } from "./facility/render/FacilityEquipment";
@@ -11,14 +12,24 @@ import "./facility/facility-diagram.css";
 function FacilityDiagram({ onEquipmentSelect, sensorData }: FacilityDiagramProps) {
   const effectiveSensorData = sensorData ?? initialSensorData;
 
-  const handleEquipmentClick = (
-    id: string,
-    currentValue?: number,
-    unit?: string,
-  ) => {
-    const equipment = createEquipment(id, effectiveSensorData, currentValue, unit);
-    onEquipmentSelect?.(equipment);
-  };
+  // 콜백이 매번 재생성되면 하위 memo가 무의미해지므로 sensorData는 ref로 읽는다
+  const sensorDataRef = useRef(effectiveSensorData);
+  useEffect(() => {
+    sensorDataRef.current = effectiveSensorData;
+  }, [effectiveSensorData]);
+
+  const handleEquipmentClick = useCallback(
+    (id: string, currentValue?: number, unit?: string) => {
+      const equipment = createEquipment(
+        id,
+        sensorDataRef.current,
+        currentValue,
+        unit,
+      );
+      onEquipmentSelect?.(equipment);
+    },
+    [onEquipmentSelect],
+  );
 
   return (
     <div className="facility-diagram-wrap">
@@ -34,7 +45,7 @@ function FacilityDiagram({ onEquipmentSelect, sensorData }: FacilityDiagramProps
               onEquipmentClick={handleEquipmentClick}
             />
             {/* 하단 재배 구역 카드 레이어 */}
-            <FacilityZones onEquipmentClick={(id) => handleEquipmentClick(id)} />
+            <FacilityZones onEquipmentClick={handleEquipmentClick} />
           </div>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Panel from "../common/Panel";
 import { zoneCauseTopData } from "../../data/zoneCauseTopData";
 import type { ZoneItem } from "../../types/dashboard";
@@ -22,7 +23,7 @@ function ZoneCauseTopPanel({
   const maxCount = Math.max(...items.map((item) => item.count), 1);
 
   return (
-    <Panel title={`구역별 막힘 원인 Top 3 (${selectedZone?.label ?? "-"})`}>
+    <Panel title={`호기별 막힘 원인 Top 3 (${selectedZone?.label ?? "-"})`}>
       <div className="zone-cause-top">
         {items.map((item) => (
           <div key={item.id} className="zone-cause-top__row">
@@ -46,4 +47,4 @@ function ZoneCauseTopPanel({
   );
 }
 
-export default ZoneCauseTopPanel;
+export default memo(ZoneCauseTopPanel);

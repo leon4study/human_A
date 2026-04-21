@@ -38,11 +38,14 @@ export interface KpiItem {
 }
 
 // Alert 이력
+//  - type: 유형 (domain 한글명, 예: "모터", "수압/유압")
+//  - cause: 원인 (domain_reports[domain].rca_top3에서 추출한 원인 피처의 한글 라벨)
+//  - level: 위험도 문자열 ("CAUTION" | "WARNING" | "CRITICAL")
 export interface AlertItem {
   id: string;
   date: string;
   time: string;
-  equipment: string;
+  type: string;
   cause: string;
   level: string;
 }
@@ -124,15 +127,36 @@ export interface RawSensorPayload {
   [key: string]: unknown;
 }
 
-// 백엔드 INFERENCE 배치 페이로드
+// INFERENCE 도메인 리포트 (INFERENCE_API.md 3-2 참조)
+export interface InferenceRcaItem {
+  feature: string;
+  contribution: number;
+}
+
+export interface InferenceDomainAlarm {
+  level: number; // 0=Normal, 1=Caution, 2=Warning, 3=Critical
+  label: string;
+}
+
+export interface InferenceDomainReport {
+  alarm: InferenceDomainAlarm;
+  rca_top3: InferenceRcaItem[];
+  metrics?: unknown;
+  global_thresholds?: unknown;
+  feature_details?: unknown;
+}
+
+// 백엔드 INFERENCE 페이로드 (inference_history + POST /predict 응답 스키마 결합)
+//  - overall_alarm_level: 0=Normal, 1=Caution, 2=Warning, 3=Critical
+//  - domain_reports: 도메인 코드(motor/hydraulic/nutrient/zone_drip)별 리포트
+//  - action_required: 권고 조치 텍스트
 export interface InferencePayload {
   sensor_id?: string;
-  overall_alarm_level?: string;
-  overall_status?: string;
-  domain_reports?: unknown;
-  action_required?: boolean;
-  timestamp?: string;
-  [key: string]: unknown;
+  overall_alarm_level: number;
+  overall_status: string | null;
+  domain_reports: Record<string, InferenceDomainReport>;
+  action_required: string | null;
+  timestamp: string;
 }
 
 // 백엔드 → 프론트 웹소켓 메시지

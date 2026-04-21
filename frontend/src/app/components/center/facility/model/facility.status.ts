@@ -3,7 +3,7 @@ import type { SensorData } from "./facility.types";
 // 설비의 고정 동작 상태
 export const staticEquipmentStatus = {
   rawWaterPump: true,
-  valves: [true, true, false],
+  valves: [true, false, true],
 } as const;
 
 // 센서 시뮬레이션의 초기값

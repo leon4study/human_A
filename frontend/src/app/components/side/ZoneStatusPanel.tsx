@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Panel from "../common/Panel";
 import type { ZoneItem } from "../../types/dashboard";
 
@@ -32,7 +33,7 @@ function ZoneStatusPanel({
   };
 
   return (
-    <Panel title="구역별 상태 (막힘율)">
+    <Panel title="호기별 상태 (막힘율)">
       <div className="zone-status">
         <div className="zone-status__summary">
           {/* <div className="zone-status__badge zone-status__badge--worst">
@@ -80,4 +81,4 @@ function ZoneStatusPanel({
   );
 }
 
-export default ZoneStatusPanel;
+export default memo(ZoneStatusPanel);

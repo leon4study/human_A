@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Panel from "../common/Panel";
 import type { CtpVisualizationMetric } from "../../types/dashboard";
 
@@ -272,4 +273,4 @@ function CtpVisualizationPanel({
   );
 }
 
-export default CtpVisualizationPanel;
+export default memo(CtpVisualizationPanel);

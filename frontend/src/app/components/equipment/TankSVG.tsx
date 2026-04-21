@@ -1,3 +1,6 @@
+import { memo } from "react";
+import { motion } from "framer-motion";
+
 interface TankSVGProps {
   fillLevel: number; // 0-100
   color?: string;
@@ -6,7 +9,10 @@ interface TankSVGProps {
   height?: number;
 }
 
-export function TankSVG({ fillLevel, color = '#3b82f6', label, width = 100, height = 140 }: TankSVGProps) {
+// 값 갱신 시 부드럽게 전환되도록 하는 공통 transition
+const LIQUID_TRANSITION = { duration: 0.6, ease: "easeOut" } as const;
+
+function TankSVGImpl({ fillLevel, color = '#3b82f6', label, width = 100, height = 140 }: TankSVGProps) {
   const fillHeight = (fillLevel / 100) * 100;
   const liquidSurfaceY = 120 - fillHeight;
   const percentageTextY = Math.min(112, Math.max(34, liquidSurfaceY + 14));
@@ -73,62 +79,76 @@ export function TankSVG({ fillLevel, color = '#3b82f6', label, width = 100, heig
       {/* 액체 */}
       {fillLevel > 0 && (
         <>
-          <rect 
-            x="16" 
-            y={120 - fillHeight} 
-            width="68" 
-            height={fillHeight} 
+          <motion.rect
+            x="16"
+            width="68"
             fill={`url(#liquidGradient-${label})`}
             opacity="0.95"
+            initial={false}
+            animate={{ y: 120 - fillHeight, height: fillHeight }}
+            transition={LIQUID_TRANSITION}
           />
-          
+
           {/* 액체 내부 하이라이트 */}
-          <rect 
-            x="18" 
-            y={122 - fillHeight} 
-            width="8" 
-            height={Math.max(0, fillHeight - 4)} 
-            fill="white" 
+          <motion.rect
+            x="18"
+            width="8"
+            fill="white"
             opacity="0.15"
+            initial={false}
+            animate={{
+              y: 122 - fillHeight,
+              height: Math.max(0, fillHeight - 4),
+            }}
+            transition={LIQUID_TRANSITION}
           />
-          
+
           {/* 액체 표면 타원 */}
-          <ellipse 
-            cx="50" 
-            cy={liquidSurfaceY} 
-            rx="34" 
-            ry="6" 
+          <motion.ellipse
+            cx="50"
+            rx="34"
+            ry="6"
             fill={`url(#surfaceShine-${label})`}
+            initial={false}
+            animate={{ cy: liquidSurfaceY }}
+            transition={LIQUID_TRANSITION}
           />
-          
+
           {/* 표면 애니메이션 */}
-          <ellipse 
-            cx="50" 
-            cy={liquidSurfaceY} 
-            rx="34" 
-            ry="5" 
-            fill={color} 
+          <motion.ellipse
+            cx="50"
+            rx="34"
+            ry="5"
+            fill={color}
             opacity="0.4"
+            initial={false}
+            animate={{ cy: liquidSurfaceY }}
+            transition={LIQUID_TRANSITION}
           >
-            <animate 
-              attributeName="opacity" 
-              values="0.3;0.5;0.3" 
-              dur="3s" 
+            <animate
+              attributeName="opacity"
+              values="0.3;0.5;0.3"
+              dur="3s"
               repeatCount="indefinite"
             />
-          </ellipse>
+          </motion.ellipse>
 
-          <text
+          <motion.text
             x="50"
-            y={percentageTextY}
             fill="white"
-            fontSize="11"
-            fontWeight="700"
+            fontSize="16"
+            fontWeight="800"
             textAnchor="middle"
             dominantBaseline="middle"
+            stroke="rgba(0, 0, 0, 0.45)"
+            strokeWidth="0.6"
+            paintOrder="stroke"
+            initial={false}
+            animate={{ y: percentageTextY }}
+            transition={LIQUID_TRANSITION}
           >
             {`${Math.round(fillLevel)}%`}
-          </text>
+          </motion.text>
         </>
       )}
       
@@ -189,3 +209,6 @@ export function TankSVG({ fillLevel, color = '#3b82f6', label, width = 100, heig
     </svg>
   );
 }
+
+// fillLevel이 같은 탱크는 리렌더 스킵 (5개 탱크 중 1개만 변해도 나머지 4개 재렌더 방지)
+export const TankSVG = memo(TankSVGImpl);

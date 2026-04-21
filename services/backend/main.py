@@ -28,6 +28,11 @@ engine = sa.create_engine(DB_URL)
 
 main_loop = None
 
+# 마지막으로 웹소켓에 broadcast 한 inference_history.id
+# 서버 기동 시점의 MAX(id)로 초기화해 이미 존재하던 이력은 재전송하지 않는다.
+# (프론트는 GET /inference/history 로 초기 이력을 별도 로드)
+last_broadcast_inference_id = 0
+
 # ---------------------------------------------------------------------
 # [웹소켓 관리자]
 # ---------------------------------------------------------------------
@@ -47,39 +52,40 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 # ---------------------------------------------------------------------
-# [DB 배치] 1분마다 DB 최신 추론 결과 → WebSocket 브로드캐스트
+# [DB 폴링] 5초 간격으로 "새로 생긴 이상(level > 0) 이력" 만 즉시 broadcast
 # ---------------------------------------------------------------------
 def run_scheduled_batch():
+    global last_broadcast_inference_id
     try:
-        print(f"🕵️ [배치] DB에서 최신 추론 결과 조회 중...")
         with engine.connect() as conn:
             result = conn.execute(sa.text("""
-                SELECT sensor_id, overall_level, overall_status,
+                SELECT id, sensor_id, overall_level, overall_status,
                        inference_result, action_required, data_timestamp
                 FROM inference_history
-                ORDER BY created_at DESC
-                LIMIT 1
-            """))
-            row = result.fetchone()
+                WHERE id > :last_id AND overall_level > 0
+                ORDER BY id ASC
+            """), {"last_id": last_broadcast_inference_id})
+            rows = result.fetchall()
 
-        if not row:
-            print("⚠️ [배치] DB에 추론 결과 없음, 스킵")
+        if not rows:
             return
 
-        payload = {
-            "sensor_id": row.sensor_id,
-            "overall_alarm_level": row.overall_level,
-            "overall_status": row.overall_status,
-            "domain_reports": row.inference_result,
-            "action_required": row.action_required,
-            "timestamp": row.data_timestamp.isoformat() if row.data_timestamp else None
-        }
-        print(f"[INFERENCE] DB 조회 완료 | level={row.overall_level} | status={row.overall_status}")
+        for row in rows:
+            payload = {
+                "sensor_id": row.sensor_id,
+                "overall_alarm_level": row.overall_level,
+                "overall_status": row.overall_status,
+                "domain_reports": row.inference_result,
+                "action_required": row.action_required,
+                "timestamp": row.data_timestamp.isoformat() if row.data_timestamp else None
+            }
+            print(f"[INFERENCE] 신규 이상 감지 | id={row.id} | level={row.overall_level} | status={row.overall_status}")
 
-        if main_loop:
-            asyncio.run_coroutine_threadsafe(
-                manager.broadcast({"type": "INFERENCE", "payload": payload}), main_loop
-            )
+            if main_loop:
+                asyncio.run_coroutine_threadsafe(
+                    manager.broadcast({"type": "INFERENCE", "payload": payload}), main_loop
+                )
+            last_broadcast_inference_id = row.id
     except Exception as e:
         print(f"❌ [Batch Error] {e}")
 
@@ -110,13 +116,25 @@ def start_mqtt_loop(loop):
 # ---------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global main_loop
+    global main_loop, last_broadcast_inference_id
     main_loop = asyncio.get_running_loop()
+
+    # 기동 시점의 MAX(id)를 기준점으로 삼아 이미 있던 이력은 재전송하지 않음
+    try:
+        with engine.connect() as conn:
+            max_id = conn.execute(
+                sa.text("SELECT COALESCE(MAX(id), 0) FROM inference_history")
+            ).scalar()
+            last_broadcast_inference_id = int(max_id or 0)
+            print(f"✅ 시작 시점 inference_history MAX(id) = {last_broadcast_inference_id}")
+    except Exception as e:
+        print(f"⚠️ MAX(id) 조회 실패 → 0으로 시작: {e}")
+
     threading.Thread(target=start_mqtt_loop, args=(main_loop,), daemon=True).start()
     scheduler = BackgroundScheduler()
-    scheduler.add_job(run_scheduled_batch, 'interval', minutes=1)
+    scheduler.add_job(run_scheduled_batch, 'interval', seconds=5)
     scheduler.start()
-    print("✅ 백엔드 허브 및 스케줄러 가동 준비 완료")
+    print("✅ 백엔드 허브 및 스케줄러 가동 준비 완료 (폴링 주기: 5초)")
     yield
     scheduler.shutdown()
 
@@ -129,3 +147,33 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True: await websocket.receive_text()
     except WebSocketDisconnect: manager.disconnect(websocket)
+
+# ---------------------------------------------------------------------
+# [REST] 누적된 추론 이력 조회 — 프론트 초기 로드용
+# ---------------------------------------------------------------------
+@app.get("/inference/history")
+def get_inference_history(limit: int = 200):
+    # Alert 이력은 "이상이 발생한 건"만 노출 → overall_level > 0 필터
+    limit = max(1, min(limit, 1000))
+    with engine.connect() as conn:
+        result = conn.execute(sa.text("""
+            SELECT sensor_id, overall_level, overall_status,
+                   inference_result, action_required, data_timestamp
+            FROM inference_history
+            WHERE overall_level > 0
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """), {"limit": limit})
+        rows = result.fetchall()
+
+    return [
+        {
+            "sensor_id": row.sensor_id,
+            "overall_alarm_level": row.overall_level,
+            "overall_status": row.overall_status,
+            "domain_reports": row.inference_result,
+            "action_required": row.action_required,
+            "timestamp": row.data_timestamp.isoformat() if row.data_timestamp else None,
+        }
+        for row in rows
+    ]

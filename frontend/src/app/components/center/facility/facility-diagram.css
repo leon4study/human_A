@@ -38,13 +38,14 @@
   pointer-events: none;
 }
 
-/* 장비/구역 렌더링 메인 영역 */
+/* 장비/구역 렌더링 메인 영역
+   z-index를 지정하지 않아 스태킹 컨텍스트를 만들지 않음.
+   내부 장비·밭·배관 SVG 들이 동일한 기준에서 z-index를 비교하도록 함. */
 .facility-content-area {
   position: relative;
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 30;
 }
 
 /* 클릭 가능한 장비 공통 */
@@ -116,6 +117,7 @@
     rgba(6, 78, 59, 0.25),
     rgba(69, 26, 3, 0.7)
   );
+  z-index: 30;
   box-shadow: 0 20px 45px rgba(0, 0, 0, 0.28);
 }
 

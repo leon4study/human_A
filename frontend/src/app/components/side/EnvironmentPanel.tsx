@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Panel from "../common/Panel";
 import type { EnvironmentItem } from "../../types/dashboard";
 
@@ -22,4 +23,4 @@ function EnvironmentPanel({ items }: EnvironmentPanelProps) {
   );
 }
 
-export default EnvironmentPanel;
+export default memo(EnvironmentPanel);
