@@ -33,14 +33,14 @@ export function PumpSVG({
           <stop offset="70%" stopColor="#475569" />
           <stop offset="100%" stopColor="#1e293b" />
         </linearGradient>
-        
+
         {/* 원형 하우징 그라데이션 */}
         <radialGradient id="housingGradient">
           <stop offset="0%" stopColor="#475569" />
           <stop offset="50%" stopColor="#334155" />
           <stop offset="100%" stopColor="#0f172a" />
         </radialGradient>
-        
+
         {/* 활성화 상태 글로우 */}
         <filter id="activeGlow">
           <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
@@ -49,7 +49,7 @@ export function PumpSVG({
             <feMergeNode in="SourceGraphic"/>
           </feMerge>
         </filter>
-        
+
         {/* 그림자 */}
         <filter id="pumpShadow">
           <feDropShadow dx="2" dy="3" stdDeviation="3" floodOpacity="0.5"/>
@@ -71,7 +71,7 @@ export function PumpSVG({
         strokeWidth="2"
         filter="url(#pumpShadow)"
       />
-      
+
       {/* 베이스 상단 하이라이트 */}
       <rect
         x="10"
@@ -82,7 +82,7 @@ export function PumpSVG({
         fill="white"
         opacity="0.15"
       />
-      
+
       {/* 베이스 리벳 */}
       {[15, 30, 50, 65].map((x) => (
         <circle key={x} cx={x} cy="70" r="2" fill="#94a3b8" stroke="#64748b" strokeWidth="0.5"/>
@@ -97,7 +97,7 @@ export function PumpSVG({
         stroke="#64748b"
         strokeWidth="2.5"
       />
-      
+
       {/* 본체 하이라이트 */}
       <circle
         cx="40"
@@ -118,7 +118,7 @@ export function PumpSVG({
         stroke="#475569"
         strokeWidth="2"
       />
-      
+
       {/* 하우징 내부 링 */}
       <circle
         cx="40"
@@ -149,10 +149,9 @@ export function PumpSVG({
             const y2 = 35 + 14 * Math.sin(rad);
             const cx = 40 + 10 * Math.cos(rad);
             const cy = 35 + 10 * Math.sin(rad);
-            
+
             return (
               <g key={angle}>
-                {/* 블레이드 */}
                 <path
                   d={`M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`}
                   stroke={color}
@@ -160,7 +159,6 @@ export function PumpSVG({
                   strokeLinecap="round"
                   fill="none"
                 />
-                {/* 블레이드 하이라이트 */}
                 <path
                   d={`M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`}
                   stroke="white"
@@ -185,7 +183,7 @@ export function PumpSVG({
             const y2 = 35 + 14 * Math.sin(rad);
             const cx = 40 + 10 * Math.cos(rad);
             const cy = 35 + 10 * Math.sin(rad);
-            
+
             return (
               <path
                 key={angle}
@@ -309,7 +307,7 @@ export function PumpSVG({
         stroke="#64748b"
         strokeWidth="1.5"
       />
-      
+
       {/* 냉각 핀 */}
       {[13, 16].map((y) => (
         <rect
@@ -361,7 +359,7 @@ export function PumpSVG({
           />
         )}
       </g>
-      
+
       {/* 명판 */}
       <rect
         x="25"
@@ -374,7 +372,7 @@ export function PumpSVG({
         strokeWidth="0.5"
         opacity="0.7"
       />
-      
+
       {/* 볼트 디테일 */}
       {[[25, 20], [55, 20], [25, 50], [55, 50]].map(([x, y], i) => (
         <circle

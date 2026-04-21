@@ -13,12 +13,21 @@ function ZoneStatusPanel({
   selectedZoneId,
   onSelectZone,
 }: ZoneStatusPanelProps) {
+  if (zoneItems.length === 0) {
+    return (
+      <Panel title="호기별 상태 (막힘율)">
+        <div className="zone-status__empty">표시할 호기 데이터가 없습니다.</div>
+      </Panel>
+    );
+  }
+
   const sortedZones = [...zoneItems].sort(
     (a, b) => b.blockageRate - a.blockageRate
   );
 
   const worstZone = sortedZones[0];
   const goldenZone = sortedZones[sortedZones.length - 1];
+  const showGoldenRank = sortedZones.length > 1 && goldenZone.id !== worstZone.id;
 
   const getBarClassName = (value: number) => {
     if (value >= 61) {
@@ -58,7 +67,7 @@ function ZoneStatusPanel({
                   {zone.id === worstZone.id && (
                     <span className="zone-rank zone-rank--worst">Worst</span>
                   )}
-                  {zone.id === goldenZone.id && (
+                  {showGoldenRank && zone.id === goldenZone.id && (
                     <span className="zone-rank zone-rank--golden">Golden</span>
                   )}
                   <span className="zone-chart-row__value">

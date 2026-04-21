@@ -242,22 +242,30 @@ const TYPE_LABEL_MAP: Record<string, string> = {
   zone_drip: "구역 점적",
 };
 
-// 피처 영문 키 → 원인 한글명
+// 피처 영문 키 → 원인 한글명 (실제 모델 피처 기준)
 const FEATURE_LABEL_MAP: Record<string, string> = {
-  discharge_pressure_kpa: "토출 압력 이상",
-  pressure_roll_mean_10: "압력 10분 이동평균 이상",
-  pressure_trend_10: "압력 10분 트렌드 이상",
-  pressure_flow_ratio: "압력/유량 비율 이상",
+  // hydraulic 모델
+  flow_rate_l_min: "메인 라인 유량 이상",
+  hydraulic_power_kw: "수력 동력 이상",
+  bearing_vibration_rms_mm_s: "베어링 진동 이상",
+  filter_pressure_in_kpa: "필터 입구 압력 이상",
+  // motor 모델
+  zone1_substrate_moisture_pct: "구역 배지 수분 이상",
+  flow_baseline_l_min: "기준 유량 이상",
+  zone1_resistance: "배관 저항 이상",
+  // nutrient 모델
+  turbidity_ntu: "탁도 이상",
+  tank_a_level_pct: "A 비료통 수위 이상",
+  bearing_temperature_c: "베어링 온도 이상",
   air_temp_c: "실내 기온 이상",
-  motor_temperature_c: "모터 온도 상승 영향",
 };
 
-// rca_top3가 모두 제외 피처일 때 fallback으로 사용할 도메인별 대표 피처
+// rca가 모두 제외 피처일 때 fallback으로 사용할 도메인별 대표 피처
 const DOMAIN_FEATURE_MAP: Record<string, string[]> = {
-  motor: ["discharge_pressure_kpa"],
-  hydraulic: ["pressure_roll_mean_10", "pressure_trend_10"],
-  nutrient: ["air_temp_c", "motor_temperature_c"],
-  zone_drip: ["pressure_flow_ratio", "motor_temperature_c"],
+  motor: ["flow_baseline_l_min", "zone1_resistance"],
+  hydraulic: ["flow_rate_l_min", "hydraulic_power_kw"],
+  nutrient: ["air_temp_c", "turbidity_ntu"],
+  zone_drip: ["flow_rate_l_min", "hydraulic_power_kw"],
 };
 
 // 원인 추출에서 제외할 컨텍스트 피처
@@ -297,7 +305,7 @@ export function mapInferenceToAlerts(payload: InferencePayload): AlertItem[] {
     if (typeof level !== "number" || level === LEVEL_NORMAL) continue;
 
     const typeLabel = TYPE_LABEL_MAP[domain] ?? domain;
-    const causeFeature = resolveCauseFeature(domain, report.rca_top3);
+    const causeFeature = resolveCauseFeature(domain, report.rca);
     const causeLabel = causeFeature
       ? (FEATURE_LABEL_MAP[causeFeature] ?? causeFeature)
       : "이상 감지";

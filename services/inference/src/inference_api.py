@@ -201,7 +201,7 @@ async def lifespan(app: FastAPI):
 
     print(f"⏰ 총 {len(MODELS_DATA)}개 모델 로드됨. 배치 스케줄러 가동 중...")
     scheduler = BackgroundScheduler()
-    scheduler.add_job(run_inference_batch, 'interval', minutes=1)
+    scheduler.add_job(run_inference_batch, 'interval', minutes=1, misfire_grace_time=None, coalesce=True)
     scheduler.start()
     yield
     scheduler.shutdown()

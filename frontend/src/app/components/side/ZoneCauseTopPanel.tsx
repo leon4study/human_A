@@ -21,10 +21,18 @@ function ZoneCauseTopPanel({
     .slice(0, 3);
 
   const maxCount = Math.max(...items.map((item) => item.count), 1);
+  const title = selectedZone
+    ? `호기별 막힘 원인 Top 3 (${selectedZone.label})`
+    : "호기별 막힘 원인 Top 3";
 
   return (
-    <Panel title={`호기별 막힘 원인 Top 3 (${selectedZone?.label ?? "-"})`}>
+    <Panel title={title}>
       <div className="zone-cause-top">
+        {items.length === 0 && (
+          <div className="zone-cause-top__empty">
+            선택된 호기에 대한 원인 데이터가 없습니다.
+          </div>
+        )}
         {items.map((item) => (
           <div key={item.id} className="zone-cause-top__row">
             <div className="zone-cause-top__top">

@@ -3,17 +3,17 @@ import type { ZoneItem } from "../types/dashboard";
 export const zoneData: ZoneItem[] = [
   {
     id: "zone1",
-    label: "1구역",
+    label: "1호기",
     blockageRate: 72,
   },
   {
     id: "zone2",
-    label: "2구역",
+    label: "2호기",
     blockageRate: 41,
   },
   {
     id: "zone3",
-    label: "3구역",
+    label: "3호기",
     blockageRate: 18,
   },
   // {

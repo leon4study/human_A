@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "../styles/tailwind.css";
 import "../styles/dashboard.css";
 import CurrentTime from "../components/common/CurrentTime";
@@ -25,6 +25,10 @@ function DashboardFrame() {
     alertItems,
     zoneItems,
     sensorData,
+    rawSensorPayload,
+    latestInference,
+    chartSnapshot,
+    comparativeMetrics,
   } = useDashboardSocket();
 
   const currentStatus = systemStatusMap[systemStatus];
@@ -57,6 +61,20 @@ function DashboardFrame() {
     );
   }, [selectedMetricId, ctpVisualizationMetrics]);
 
+  useEffect(() => {
+    if (zoneItems.length === 0) {
+      if (selectedZoneId !== "") {
+        setSelectedZoneId("");
+      }
+      return;
+    }
+
+    const hasSelectedZone = zoneItems.some((item) => item.id === selectedZoneId);
+    if (!hasSelectedZone) {
+      setSelectedZoneId(zoneItems[0].id);
+    }
+  }, [selectedZoneId, zoneItems]);
+
   return (
     <div className="dashboard">
       {/* 전체 배경 레이어 */}
@@ -88,11 +106,16 @@ function DashboardFrame() {
 
           {/* 상단 중앙 바 */}
           <footer className="dashboard__header-center">
-            <button className="dashboard__top-device-button is-active">
-              1호기
-            </button>
-            <button className="dashboard__top-device-button">2호기</button>
-            <button className="dashboard__top-device-button">3호기</button>
+            {zoneItems.map((zone) => (
+              <button
+                key={zone.id}
+                type="button"
+                className={`dashboard__top-device-button ${selectedZoneId === zone.id ? "is-active" : ""}`}
+                onClick={() => setSelectedZoneId(zone.id)}
+              >
+                {zone.label}
+              </button>
+            ))}
           </footer>
 
           {/* 상단 우측 바 */}
@@ -160,12 +183,17 @@ function DashboardFrame() {
       {/* 장비 상세 팝업 */}
       <EquipmentModal
         equipment={selectedEquipment}
+        sensorPayload={rawSensorPayload}
+        chartSnapshot={chartSnapshot}
         onClose={() => setSelectedEquipment(null)}
       />
 
       {/* AI 분석 결과 팝업 */}
       <AiAnalysisModal
         open={isAiModalOpen}
+        inference={latestInference}
+        chartSnapshot={chartSnapshot}
+        comparativeMetrics={comparativeMetrics}
         onClose={() => setIsAiModalOpen(false)}
       />
     </div>

@@ -139,11 +139,18 @@ export interface InferenceDomainAlarm {
 }
 
 export interface InferenceDomainReport {
+  score?: number;
   alarm: InferenceDomainAlarm;
-  rca_top3: InferenceRcaItem[];
+  rca: InferenceRcaItem[];
   metrics?: unknown;
   global_thresholds?: unknown;
   feature_details?: unknown;
+}
+
+export interface SpikeInfo {
+  is_spike?: boolean;
+  is_startup_spike?: boolean;
+  is_anomaly_spike?: boolean;
 }
 
 // 백엔드 INFERENCE 페이로드 (inference_history + POST /predict 응답 스키마 결합)
@@ -154,6 +161,7 @@ export interface InferencePayload {
   sensor_id?: string;
   overall_alarm_level: number;
   overall_status: string | null;
+  spike_info?: SpikeInfo;
   domain_reports: Record<string, InferenceDomainReport>;
   action_required: string | null;
   timestamp: string;

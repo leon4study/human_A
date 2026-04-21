@@ -233,3 +233,12 @@
   border-radius: 9999px;
 }
 
+@keyframes pipe-flow-fwd { to { stroke-dashoffset: -28; } }
+@keyframes pipe-flow-rev { to { stroke-dashoffset:  28; } }
+
+@keyframes tank-surface-pulse {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 0.5; }
+}
+
+

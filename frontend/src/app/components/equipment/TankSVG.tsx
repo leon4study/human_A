@@ -68,7 +68,7 @@ function TankSVGImpl({ fillLevel, color = '#3b82f6', label, width = 100, height 
       
       {/* 탱크 상단 타원 - 3D 효과 */}
       <ellipse cx="50" cy="20" rx="36" ry="8" fill="#1e293b" stroke="#475569" strokeWidth="1"/>
-      <ellipse cx="50" cy="20" rx="35" ry="7.5" fill="url(#tankMetalGradient-rawWater)" stroke="#64748b" strokeWidth="1.5"/>
+      <ellipse cx="50" cy="20" rx="35" ry="7.5" fill={`url(#tankMetalGradient-${label})`} stroke="#64748b" strokeWidth="1.5"/>
       
       {/* 탱크 몸통 */}
       <rect x="14" y="20" width="72" height="100" fill={`url(#tankMetalGradient-${label})`} stroke="#64748b" strokeWidth="2"/>
@@ -114,24 +114,15 @@ function TankSVGImpl({ fillLevel, color = '#3b82f6', label, width = 100, height 
             transition={LIQUID_TRANSITION}
           />
 
-          {/* 표면 애니메이션 */}
-          <motion.ellipse
+          {/* 표면 맥박 — 일반 ellipse + CSS opacity 루프 (Framer Motion 충돌 없음) */}
+          <ellipse
             cx="50"
+            cy={liquidSurfaceY}
             rx="34"
             ry="5"
             fill={color}
-            opacity="0.4"
-            initial={false}
-            animate={{ cy: liquidSurfaceY }}
-            transition={LIQUID_TRANSITION}
-          >
-            <animate
-              attributeName="opacity"
-              values="0.3;0.5;0.3"
-              dur="3s"
-              repeatCount="indefinite"
-            />
-          </motion.ellipse>
+            style={{ animation: "tank-surface-pulse 3s ease-in-out infinite" }}
+          />
 
           <motion.text
             x="50"
@@ -159,9 +150,6 @@ function TankSVGImpl({ fillLevel, color = '#3b82f6', label, width = 100, height 
       {/* 측면 강조 하이라이트 */}
       <rect x="16" y="25" width="5" height="90" fill="white" opacity="0.15"/>
       <rect x="78" y="25" width="6" height="90" fill="black" opacity="0.1"/>
-      
-      {/* 중앙 하이라이트 */}
-      <rect x="48" y="25" width="4" height="90" fill="white" opacity="0.08"/>
       
       
       {/* 게이지 눈금 */}

@@ -124,3 +124,96 @@
   font-weight: 600;
   color: #ffffff;
 }
+
+.equipment-modal--wide {
+  max-width: 640px;
+}
+
+.equipment-modal-subheader {
+  margin-top: 12px;
+  margin-bottom: 2px;
+  padding: 5px 0 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(159, 231, 255, 0.55);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── AI 분석 모달 차트 ────────────────────────────────────── */
+
+/* 차트 행: 차트(좌) + 설명(우) */
+.ai-chart-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ai-chart-row:last-child {
+  border-bottom: none;
+}
+
+.ai-chart-cell {
+  flex-shrink: 0;
+}
+
+.ai-chart-desc {
+  flex: 1;
+  padding-top: 16px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 차트 위 라벨 */
+.ai-chart-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(220, 242, 255, 0.6);
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+/* 차트 없을 때 빈 상태 */
+.ai-chart-empty {
+  width: 200px;
+  height: 75px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+
+/* 차트 아래 현재값 */
+.ai-chart-value {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
+  margin-top: 3px;
+}
+
+/* 스파이크 배지 */
+.ai-spike-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ai-spike-badge--danger {
+  background: rgba(244, 67, 54, 0.13);
+  color: #f44336;
+  border: 1px solid rgba(244, 67, 54, 0.4);
+}
+
+.ai-spike-badge--muted {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(220, 242, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
