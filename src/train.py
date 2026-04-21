@@ -16,7 +16,9 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 # 우리가 만들어둔 '메인 셰프(파이프라인 매니저)' 모듈 불러오기
+from feature_engineering import VIP_FEATURES, inject_vip_features
 from feature_selection import run_feature_selection_experiment
+from inference_core import actionable_feature_mask, build_target_reference_profiles
 from logger import get_logger
 from math_utils import calculate_sigma_thresholds
 from model_builder import build_autoencoder
@@ -57,7 +59,7 @@ def save_experiment_to_csv(model_name, mse_mean, t_caut, t_warn, t_cri):
 # ==============================================================================
 # 🛠️ [모델 학습 및 아티팩트 저장 통합 함수]
 # ==============================================================================
-def train_and_save_model(X_train_ae, model_name):
+def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=None):
     """
     특정 도메인(예: motor, hydraulic)의 데이터를 받아
     독립적인 AutoEncoder 모델을 학습하고 아티팩트를 저장합니다.
@@ -94,7 +96,27 @@ def train_and_save_model(X_train_ae, model_name):
     # 4. 추론 및 시그마 임계값 계산 (math_utils.py 에게 외주)
     logger.info("🎯 [Phase 5-4] 이상 탐지 임계값(Threshold) 계산...")
     reconstructed = autoencoder.predict(X_scaled)
-    mse_scores = np.mean(np.power(X_scaled - reconstructed, 2), axis=1)
+    sq_err = np.power(X_scaled - reconstructed, 2)
+
+    # 🌟 알람 근거 == 설명 일치:
+    # 시간·상태 컨텍스트 피처는 MSE 점수 계산에서 제외해, 실센서 복원 오차만으로
+    # threshold를 세운다. 그래야 RCA(같은 제외 셋)와 같은 피처에 대해 판정/설명이
+    # 일관된다. (inference_core.DEFAULT_CONTEXT_FEATURES 단일 소스)
+    feature_cols = X_train_ae.columns.tolist()
+    scoring_mask = actionable_feature_mask(feature_cols)
+    if scoring_mask.sum() == 0:
+        logger.warning(
+            "⚠️ 모든 피처가 컨텍스트로 제외되어 scoring_mask가 비어있습니다. "
+            "전체 피처로 폴백합니다."
+        )
+        scoring_mask = np.ones(len(feature_cols), dtype=bool)
+    scoring_features = [f for f, keep in zip(feature_cols, scoring_mask) if keep]
+    logger.info(
+        f"  ▶ MSE scoring features: {len(scoring_features)}/{len(feature_cols)}개 "
+        f"(컨텍스트 제외: {sorted(set(feature_cols) - set(scoring_features))})"
+    )
+
+    mse_scores = np.mean(sq_err[:, scoring_mask], axis=1)
 
     # 6-Sigma 기법
     """
@@ -116,21 +138,54 @@ def train_and_save_model(X_train_ae, model_name):
     logger.info(f"  🟠 Warning(3σ): {thresholds['warning']:.6f}")
     logger.info(f"  🔴 Critical(6σ): {thresholds['critical']:.6f}")
 
+    # 🔬 피처별 재구성오차 시그마 컷 (스케일 공간 기준, 도메인 컷과 동일 정책 2/3/6σ)
+    # 도메인 MSE는 axis=1 평균으로 F차원을 압축하지만, sq_err 자체는 (N x F) 행렬이라
+    # 피처별 분포가 그대로 살아있다. 열별(axis=0)로 평균·표준편차를 내면
+    # 각 센서가 "AE 재구성 대비 얼마나 튀어야 이상인지" 독립 임계치를 얻을 수 있다.
+    per_feature_thresholds = {}
+    for j, fname in enumerate(feature_cols):
+        if not scoring_mask[j]:
+            continue  # 컨텍스트 피처는 제외 (RCA/알람 근거 셋과 동일)
+        col_err = sq_err[:, j]
+        mu = float(col_err.mean())
+        sd = float(col_err.std())
+        per_feature_thresholds[fname] = {
+            "mean":     round(mu, 8),
+            "std":      round(sd, 8),
+            "caution":  round(mu + 2 * sd, 8),
+            "warning":  round(mu + 3 * sd, 8),
+            "critical": round(mu + 6 * sd, 8),
+        }
+    logger.info(
+        f"  📊 피처별 threshold 계산 완료: {len(per_feature_thresholds)}개 피처"
+    )
+
     # 5. 프론트엔드용 메타데이터(Config) 조립
 
     logger.info("💾 [Phase 5-5] 서버 배포용 아티팩트(Artifacts) 저장...")
+    target_reference_profiles = {}
+    if target_dict and df_reference is not None:
+        target_reference_profiles = build_target_reference_profiles(
+            df_reference, target_dict
+        )
+
     config = {
         "model_name": model_name,
         "features": X_train_ae.columns.tolist(),
+        # threshold 계산과 동일한 피처 셋으로 추론 시에도 MSE를 내야 일관성 유지
+        "scoring_features": scoring_features,
+        "target_feature_map": target_dict or {},
         "threshold_caution": thresholds["caution"],
         "threshold_warning": thresholds["warning"],
         "threshold_critical": thresholds["critical"],
+        "per_feature_thresholds": per_feature_thresholds,
         "metrics": {
             "train_loss": [float(l) for l in history.history["loss"]],
             "val_loss": [float(l) for l in history.history["val_loss"]],
             "final_mse_mean": thresholds["mean"],
         },
         "feature_stds": X_train_ae.std().to_dict(),
+        "target_reference_profiles": target_reference_profiles,
     }
 
     # 6. 아티팩트 저장
@@ -170,7 +225,6 @@ if __name__ == "__main__":
     project_root = os.path.dirname(current_dir)
 
     # /Users/... 대신 project_main_folder/data 폴더를 찾아가도록 설정
-    # (주의: 파일명은 주니어님이 사용하시는 데이터 파일명과 정확히 맞춰주세요)
     data_filename = (
         "/Users/jun/GitStudy/human_A/data/generated_data_from_dabin_0420.csv"
     )
@@ -203,6 +257,9 @@ if __name__ == "__main__":
             ],
         },
         "nutrient": {  # 양액/수질/환경 도메인
+            # A-3 롤백(2026-04-20): raw 센서 target 재편안을 시도했으나 재학습 후 전 도메인 악화
+            # (motor F1 0.527→0.106, zone_drip 완전 붕괴). 원인 미규명 → A-2 상태 복구.
+            # 현재는 nutrient를 evaluate의 overall voting에서 제외하는 운영(EXCLUDE_FROM_OVERALL)로 운용.
             "pid_error_ec": ["mix_ec_ds_m", "mix_target_ec_ds_m"],
             "salt_accumulation_delta": ["drain_ec_ds_m", "mix_ec_ds_m"],
         },
@@ -217,28 +274,32 @@ if __name__ == "__main__":
         logger.info(f"[{system_name.upper()} 도메인] 분석 파이프라인 시작")
 
         # 1. 도메인별 피처 셀렉션
-        robust_features, X_train_ae, df_interpret_result, _ = run_feature_selection_experiment(
+        # df_agg: target_reference_profiles 계산용(raw 센서 이름 유지 윈도우 집계본)
+        robust_features, X_train_ae, df_interpret_result, _, df_agg = run_feature_selection_experiment(
             df_raw=df_raw, window_method="sliding", target_dict=target_dict
         )
 
-        # VIP 피처 강제 주입 (time_sin/time_cos 가 SHAP 선택에서 빠졌을 때 보완)
-        vip_cols = ["time_sin", "time_cos"]
-
-        missing_vips = [
-            col
-            for col in vip_cols
-            if col not in X_train_ae.columns and col in df_interpret_result.columns
-        ]
-
-        if missing_vips:
+        # VIP 피처 강제 주입: 시간 피처 + 운전 모드 피처 (기동/정지 맥락)
+        # → SHAP에서 빠져도 AE가 '기동 스파이크는 정상 루틴'임을 학습할 수 있도록 보완.
+        # VIP_FEATURES 정의는 feature_engineering.py (Tier 3 LSTM-AE 전환 시에도 그대로 재사용).
+        X_train_ae, injected_vips = inject_vip_features(
+            X_train_ae, df_interpret_result, VIP_FEATURES
+        )
+        if injected_vips:
             logger.info(
-                f"🔗 오토인코더 입력 데이터에 VIP 피처 강제 주입: {missing_vips}"
+                f"🔗 오토인코더 입력 데이터에 VIP 피처 강제 주입: {injected_vips}"
             )
-            time_features = df_interpret_result[missing_vips]
-            X_train_ae = pd.concat([X_train_ae, time_features], axis=1)
 
         # 2. 도메인별 모델 학습 및 저장 (이름을 같이 넘겨줌)
-        train_and_save_model(X_train_ae, model_name=system_name)
+        # df_reference는 raw 센서 컬럼명이 살아있는 df_agg를 넘긴다.
+        # df_interpret_result는 파생 지표(pressure_flow_ratio 등) 전용이라
+        # motor_current_a 같은 타겟 raw 컬럼이 없어 기준선 계산이 전부 skip된다.
+        train_and_save_model(
+            X_train_ae,
+            model_name=system_name,
+            target_dict=target_dict,
+            df_reference=df_agg,
+        )
 
     total_end_time = time.time()
     t_min, t_sec = divmod(total_end_time - total_start_time, 60)

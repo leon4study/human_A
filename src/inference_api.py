@@ -15,7 +15,12 @@ from typing import Dict, Any, List
 from logger import get_logger
 
 # 분리해둔 추론 함수들 불러오기
-from inference_core import get_alarm_status, calculate_rca, build_feature_details
+from inference_core import (
+    actionable_feature_mask,
+    build_feature_details,
+    calculate_rca,
+    get_alarm_status,
+)
 
 
 app = FastAPI(title="SmartFarm Multi-Domain 예지보전 API")
@@ -104,14 +109,32 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
 
             scaled_array = scaler.transform(raw_df)
             pred_array = model.predict(scaled_array, verbose=0)
-            mse_score = float(np.mean(np.power(scaled_array - pred_array, 2)))
+
+            # 🌟 알람 근거 == 설명 일치:
+            # train.py가 threshold 계산에 쓴 것과 동일한 피처 셋으로 MSE를 낸다.
+            # config에 "scoring_features"가 있으면 그것을, 없으면(구버전 모델)
+            # DEFAULT_CONTEXT_FEATURES로 동적 계산해 폴백.
+            sq_err = np.power(scaled_array - pred_array, 2)[0]
+            scoring_features = config.get("scoring_features")
+            if scoring_features:
+                scoring_mask = np.array(
+                    [f in set(scoring_features) for f in features], dtype=bool
+                )
+            else:
+                scoring_mask = actionable_feature_mask(features)
+            if scoring_mask.sum() == 0:
+                scoring_mask = np.ones(len(features), dtype=bool)
+            mse_score = float(np.mean(sq_err[scoring_mask]))
 
             # 2. [함수 사용] 알람 레벨 판정
             alarm_level, label = get_alarm_status(mse_score, t_caut, t_warn, t_err)
 
+            # 2-1. 기동 직후 5분은 정상 스파이크 → 알람 억제(운영 모드 gating)
+            if int(realtime_data.get("is_startup_phase", 0)) == 1:
+                alarm_level, label = 0, "Normal (startup gated)"
+
             # 3. [함수 사용] RCA(원인 분석) 계산
-            feature_errors = np.power(scaled_array - pred_array, 2)[0]
-            rca = calculate_rca(feature_errors, features, top_n=3)
+            rca = calculate_rca(sq_err, features, top_n=3)
 
             # 4. [함수 사용] 프론트엔드 차트용 상세 데이터(시그마 밴드 등) 생성
             pred_raw_array = scaler.inverse_transform(pred_array)[
@@ -120,10 +143,16 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
             # train.py는 "feature_stds"(평탄 dict: name→std값)로 저장하므로
             # 기존 config와 호환되게 같은 키로 읽는다.
             feature_stds = config.get("feature_stds", {})
+            # 🔬 피처별 threshold가 있으면 feature_details에 포함
+            per_feature_thresholds = config.get("per_feature_thresholds", None)
             feature_details = build_feature_details(
-                input_values, pred_raw_array, features, feature_stds
+                input_values,
+                pred_raw_array,
+                features,
+                feature_stds,
+                scaled_errors=sq_err,
+                per_feature_thresholds=per_feature_thresholds,
             )
-
             # 5. 결과 조립
             final_results[sys_name] = {
                 "metrics": {
@@ -137,8 +166,12 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
                     "warning": round(t_warn, 6),
                     "critical": round(t_err, 6),
                 },
+                "per_feature_thresholds": config.get("per_feature_thresholds", {}),
                 "rca_top3": rca,
                 "feature_details": feature_details,
+                "target_reference_profiles": config.get(
+                    "target_reference_profiles", {}
+                ),
             }
 
             # 전체 알람 수위 갱신 (가장 심각한 쪽 기준)
@@ -154,6 +187,22 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
         }
 
         # 7. 최종 응답 페이로드
+        # raw_inputs: 프론트가 파생변수(pressure_flow_ratio, dp_per_flow,
+        # pressure_volatility 등) 만들 때 쓰도록 요청 원시값 passthrough
+        raw_input_keys = [
+            "discharge_pressure_kpa",
+            "suction_pressure_kpa",
+            "flow_rate_l_min",
+            "motor_power_kw",
+            "motor_temperature_c",
+            "pump_rpm",
+        ]
+        raw_inputs = {
+            k: float(realtime_data[k])
+            for k in raw_input_keys
+            if k in realtime_data
+        }
+
         response_payload = {
             "timestamp": realtime_data.get(
                 "timestamp", datetime.datetime.now().isoformat()
@@ -161,6 +210,7 @@ def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
             "overall_alarm_level": total_alarm_level,
             "overall_status": overall_status,
             "spike_info": spike_info,
+            "raw_inputs": raw_inputs,
             "domain_reports": final_results,
             "action_required": (
                 "System check recommended" if total_alarm_level >= 2 else "Optimal"

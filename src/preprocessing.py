@@ -86,16 +86,55 @@ def create_modeling_features(df, extra_cols=None):
         df_feat["discharge_pressure_kpa"] - df_feat["suction_pressure_kpa"]
     )
 
+    # ==========================================================================
+    # [순서 중요] 운전 상태(pump_on)를 유량 파생 피처 이전에 먼저 계산.
+    # flow_drop_rate 같은 공식이 기동 전환 구간에서 발산하지 않도록 게이트로 사용.
+    # 변동성(rpm_std) + 유량 + rpm 수준으로 pump_on을 동적 판정 → 기동 스파이크 학습용.
+    # ==========================================================================
+    rpm_std = df_feat["pump_rpm"].rolling(window=5, min_periods=1).std().fillna(0)
+    flow_on = df_feat["flow_rate_l_min"] > 0.1
+    std_threshold = rpm_std.quantile(0.8)
+    dynamic_on = rpm_std > std_threshold
+    rpm_high = df_feat["pump_rpm"] > df_feat["pump_rpm"].quantile(0.7)
+
+    df_feat["pump_on"] = (flow_on | dynamic_on | rpm_high).astype(int)
+    df_feat["pump_on"] = df_feat["pump_on"].rolling(3, min_periods=1).max().astype(int)
+
+    pump_on = df_feat["pump_on"].astype(int)
+
+    start_event = pump_on.eq(1) & pump_on.shift(1, fill_value=0).eq(0)
+    cycle_id = start_event.cumsum()
+    on_steps = pump_on.groupby(cycle_id).cumsum()
+
+    df_feat["minutes_since_startup"] = np.where(
+        pump_on.eq(1), on_steps - 1, 0
+    ).astype(int)
+
     # 유량 감소율 (Flow Drop Rate)
     # 정상적인 기준치 대비 현재 유량이 얼마나 줄었는지 백분율로 나타냅니다.
-    # [Rule] 유량이 급감(-)하면 공압, 실린더, 배관 막힘 등 물리적 저항이 발생했음을 의미합니다.
-    # baseline은 최근 1시간(60분) 이동평균으로 설정
+    # [Rule] 유량이 급감하면 공압, 실린더, 배관 막힘 등 물리적 저항이 발생했음을 의미합니다.
+    # baseline은 최근 1시간(60분) 이동평균으로 설정.
+    #
+    # ⚠️ Phase A 3차(2026-04-20) 버그 픽스:
+    # 기동 전환 시 baseline≈0 + flow_rate 급증으로 분모가 eps에 가까워 -3e7 같은 발산 발생.
+    # 학습 데이터의 0.5% 샘플이 수천만 단위 극단값 → MinMaxScaler 왜곡 → AE MSE 폭발,
+    # RCA 99.9%를 flow_drop_rate가 독점(실측). 세 단계 게이트로 해결:
+    #   (1) pump_on=0이면 0   — 정지 중엔 "드롭" 개념 자체가 없음
+    #   (2) baseline < 1 L/min이면 0 — 분모 발산 방지 (기동 직후 누적 부족 구간)
+    #   (3) [0, 1] 클리핑      — 음수 drop(=surge/상승)은 "유량 감소" 의미에 맞지 않아 0으로 수렴
+    # 결과: 0=정상, 1=완전 막힘의 직관적 드롭 신호만 남김.
     df_feat["flow_baseline_l_min"] = (
         df_feat["flow_rate_l_min"].rolling(window=60, min_periods=1).mean().shift(1)
     )
-    df_feat["flow_drop_rate"] = (
+    MIN_BASELINE_LMIN = 1.0  # L/min — 이보다 작으면 baseline 신뢰도 낮음
+    _raw_drop = (
         df_feat["flow_baseline_l_min"] - df_feat["flow_rate_l_min"]
     ) / (df_feat["flow_baseline_l_min"] + eps)
+    df_feat["flow_drop_rate"] = _raw_drop.where(
+        (df_feat["pump_on"] == 1)
+        & (df_feat["flow_baseline_l_min"] >= MIN_BASELINE_LMIN),
+        0.0,
+    ).clip(0.0, 1.0)
 
     # =====================================================================
     # [추가] 1-2. 펌프 수력학 및 시스템 효율 지표
@@ -116,26 +155,7 @@ def create_modeling_features(df, extra_cols=None):
         df_feat["motor_power_kw"] + eps
     )
 
-    # "펌프가 켜진 지 몇 분 지났는가?" (Time Since Startup)
-    # 변동성(rpm_std) + 유량 + rpm 수준으로 pump_on을 동적 판정 → 기동 스파이크를 정상으로 학습
-    rpm_std = df_feat["pump_rpm"].rolling(window=5, min_periods=1).std().fillna(0)
-    flow_on = df_feat["flow_rate_l_min"] > 0.1
-    std_threshold = rpm_std.quantile(0.8)
-    dynamic_on = rpm_std > std_threshold
-    rpm_high = df_feat["pump_rpm"] > df_feat["pump_rpm"].quantile(0.7)
-
-    df_feat["pump_on"] = (flow_on | dynamic_on | rpm_high).astype(int)
-    df_feat["pump_on"] = df_feat["pump_on"].rolling(3, min_periods=1).max().astype(int)
-
-    pump_on = df_feat["pump_on"].astype(int)
-
-    start_event = pump_on.eq(1) & pump_on.shift(1, fill_value=0).eq(0)
-    cycle_id = start_event.cumsum()
-    on_steps = pump_on.groupby(cycle_id).cumsum()
-
-    df_feat["minutes_since_startup"] = np.where(
-        pump_on.eq(1), on_steps - 1, 0
-    ).astype(int)
+    # pump_on / minutes_since_startup 은 flow_drop_rate 이전에 먼저 계산됨 (위 블록 참고).
 
     df_feat["pump_start_event"] = start_event.astype(int)
     df_feat["is_startup_phase"] = (
@@ -600,6 +620,7 @@ def step2_clean_and_drop_collinear(df_agg):
         "mix_flow_l_min",
         "filter_pressure_out_kpa",
         "hidden_tip_clog_level",
+        ""
     ]
 
     # 1. 어차피 지울 컬럼들은 가장 먼저 쳐냅니다! (교집합 탐색으로 속도 UP)

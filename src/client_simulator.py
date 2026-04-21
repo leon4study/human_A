@@ -15,10 +15,14 @@ API_URL = "http://127.0.0.1:9977/predict"
 # 4개 도메인(motor, hydraulic, nutrient, zone_drip) 전체 타겟 컬럼
 # step1_prepare_window_data의 extra_cols로 전달 → model_cols 필터에서 살아남음
 ALL_TARGET_COLS = [
-    "motor_current_a", "rpm_stability_index",           # motor
-    "zone1_resistance", "differential_pressure_kpa",    # hydraulic
-    "pid_error_ec", "salt_accumulation_delta",           # nutrient
-    "zone1_moisture_response_pct", "zone1_ec_accumulation",  # zone_drip
+    "motor_current_a",
+    "rpm_stability_index",  # motor
+    "zone1_resistance",
+    "differential_pressure_kpa",  # hydraulic
+    "pid_error_ec",
+    "salt_accumulation_delta",  # nutrient
+    "zone1_moisture_response_pct",
+    "zone1_ec_accumulation",  # zone_drip
 ]
 
 SPIKE_COLS = ["is_spike", "is_startup_spike", "is_anomaly_spike"]
@@ -48,7 +52,9 @@ def run_simulation():
         if col in df_interpret.columns:
             df_agg[col] = df_interpret[col]
 
-    logger.info(f"✅ 전처리 완료! 총 {len(df_agg)}개의 슬라이딩 윈도우 데이터 준비 완료.")
+    logger.info(
+        f"✅ 전처리 완료! 총 {len(df_agg)}개의 슬라이딩 윈도우 데이터 준비 완료."
+    )
     logger.info("🚀 API 서버로 실시간 추론 요청 시뮬레이션을 시작합니다!\n" + "=" * 60)
 
     for current_time, row in df_agg.iterrows():
@@ -75,7 +81,9 @@ def run_simulation():
                         f"[{current_time}] 🟢 통합 상태: Normal (4개 도메인 정상){spike_tag}"
                     )
                 else:
-                    print(f"\n🚨 [이상 진단 리포트] 발생 시점: {current_time}{spike_tag}")
+                    print(
+                        f"\n🚨 [이상 진단 리포트] 발생 시점: {current_time}{spike_tag}"
+                    )
 
                     # 4개 도메인 순회
                     for sys_name, report in result["domain_reports"].items():
@@ -116,8 +124,7 @@ def run_simulation():
                 "❌ API 서버에 연결할 수 없습니다. uvicorn 서버가 켜져 있는지 확인하세요!"
             )
             break
-
-        time.sleep(0.1)
+        time.sleep(0.03)
 
     logger.info("🎉 모든 데이터 시뮬레이션 전송이 완료되었습니다!")
 
