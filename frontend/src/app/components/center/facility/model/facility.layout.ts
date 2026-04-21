@@ -1,11 +1,24 @@
-// 양액 탱크의 위치와 표시 정보
-export const nutrientTanks = [
-  { id: "tankA", label: "양액 A", color: "#eab308", x: 70, level: 82 },
-  { id: "tankB", label: "양액 B", color: "#22c55e", x: 75.5, level: 76 },
-  { id: "tankPH", label: "pH 조절제", color: "#a855f7", x: 81, level: 68 },
-  { id: "tankD", label: "첨가제 D", color: "#94a3b8", x: 86.5, level: 45 },
-  { id: "tankE", label: "첨가제 E", color: "#64748b", x: 92, level: 55 },
-] as const;
+import type { TankLevelKey } from "./facility.types";
+
+// 양액 탱크 표시 정보
+//  - levelKey: SensorData 필드 키 (실시간 수위를 이 키로 조회)
+//  - fallbackLevel: 센서 매핑이 없는 첨가제 탱크용 정적 수위
+export interface NutrientTankLayout {
+  id: string;
+  label: string;
+  color: string;
+  x: number;
+  levelKey?: TankLevelKey;
+  fallbackLevel?: number;
+}
+
+export const nutrientTanks: NutrientTankLayout[] = [
+  { id: "tankA", label: "양액 A", color: "#eab308", x: 70, levelKey: "tankALevel" },
+  { id: "tankB", label: "양액 B", color: "#22c55e", x: 75.5, levelKey: "tankBLevel" },
+  { id: "tankPH", label: "pH 조절제", color: "#a855f7", x: 81, levelKey: "acidTankLevel" },
+  { id: "tankD", label: "첨가제 D", color: "#94a3b8", x: 86.5, fallbackLevel: 45 },
+  { id: "tankE", label: "첨가제 E", color: "#64748b", x: 92, fallbackLevel: 55 },
+];
 
 export const valvePositions = [21, 47, 73] as const;
 export const valveCardLeftPositions = ["19.45%", "45.45%", "71.45%"] as const;

@@ -13,4 +13,7 @@ export const initialSensorData: SensorData = {
   ec: 1.5,
   temperature: 22,
   pressure: 2.5,
+  tankALevel: 82,
+  tankBLevel: 76,
+  acidTankLevel: 68,
 };

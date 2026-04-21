@@ -96,27 +96,33 @@ export function FacilityEquipment({
       </motion.div>
 
       {/* 상단 양액/첨가제 탱크 묶음 */}
-      {nutrientTanks.map((tank) => (
-        <motion.div
-          key={tank.id}
-          className="facility-equipment-item facility-equipment-item--nutrient"
-          style={{ left: `${tank.x - 0.8}%`, top: "3%" }}
-          whileHover={{ scale: 1.05, y: -3 }}
-          transition={{ type: "spring", stiffness: 260, damping: 18 }}
-          onClick={() => onEquipmentClick(tank.id, tank.level, "%")}
-        >
-          <TankSVG
-            fillLevel={tank.level}
-            color={tank.color}
-            label={tank.id}
-            width={65}
-            height={80}
-          />
-          <div className="facility-label-wrap">
-            <div className="facility-label-small">{tank.label}</div>
-          </div>
-        </motion.div>
-      ))}
+      {nutrientTanks.map((tank) => {
+        const level = tank.levelKey
+          ? sensorData[tank.levelKey]
+          : (tank.fallbackLevel ?? 0);
+
+        return (
+          <motion.div
+            key={tank.id}
+            className="facility-equipment-item facility-equipment-item--nutrient"
+            style={{ left: `${tank.x - 0.8}%`, top: "3%" }}
+            whileHover={{ scale: 1.05, y: -3 }}
+            transition={{ type: "spring", stiffness: 260, damping: 18 }}
+            onClick={() => onEquipmentClick(tank.id, level, "%")}
+          >
+            <TankSVG
+              fillLevel={level}
+              color={tank.color}
+              label={tank.id}
+              width={65}
+              height={80}
+            />
+            <div className="facility-label-wrap">
+              <div className="facility-label-small">{tank.label}</div>
+            </div>
+          </motion.div>
+        );
+      })}
 
       {/* 하단 분기 밸브 */}
       {staticEquipmentStatus.valves.map((isOpen, i) => (

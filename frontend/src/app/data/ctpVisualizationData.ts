@@ -10,7 +10,7 @@ export const ctpVisualizationData: CtpVisualizationMetric[] = [
     caution: 105,
     warning: 95,
     critical: 85,
-    trend: [116, 112, 108, 101, 97, 92, 84, 89, 83, 87, 88],
+    trend: [120, 116, 112, 108, 101, 97, 92, 84, 89, 83, 87, 88],
   },
   {
     id: "pump-discharge-pressure",
@@ -21,7 +21,7 @@ export const ctpVisualizationData: CtpVisualizationMetric[] = [
     caution: 280,
     warning: 320,
     critical: 360,
-    trend: [268, 276, 289, 301, 315, 327, 341, 333, 348, 339, 334],
+    trend: [260, 268, 276, 289, 301, 315, 327, 341, 333, 348, 339, 334],
   },
   {
     id: "ph",
@@ -32,7 +32,7 @@ export const ctpVisualizationData: CtpVisualizationMetric[] = [
     caution: 6.0,
     warning: 6.3,
     critical: 6.6,
-    trend: [5.7, 5.8, 5.9, 6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.4, 6.4],
+    trend: [5.6, 5.7, 5.8, 5.9, 6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.4, 6.4],
   },
   {
     id: "motor-current",
@@ -43,6 +43,6 @@ export const ctpVisualizationData: CtpVisualizationMetric[] = [
     caution: 12.0,
     warning: 13.5,
     critical: 15.0,
-    trend: [10.4, 10.9, 11.3, 11.9, 12.4, 13.1, 12.7, 13.4, 12.8, 12.3, 12.6],
+    trend: [10.1, 10.4, 10.9, 11.3, 11.9, 12.4, 13.1, 12.7, 13.4, 12.8, 12.3, 12.6],
   },
 ];

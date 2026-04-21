@@ -23,6 +23,7 @@ function DashboardFrame() {
     kpiItems,
     alertItems,
     zoneItems,
+    sensorData,
   } = useDashboardSocket();
 
   const currentStatus = systemStatusMap[systemStatus];
@@ -120,7 +121,10 @@ function DashboardFrame() {
           {/* 중앙 묶음 영역 */}
           <div className="dashboard__center-wrap">
             {/* 여기로 중앙 구조도를 옮겨야 클릭이 됩니다 */}
-            <CenterPlaceholder onEquipmentSelect={setSelectedEquipment} />
+            <CenterPlaceholder
+              onEquipmentSelect={setSelectedEquipment}
+              sensorData={sensorData}
+            />
 
             <div className="dashboard__center-spacer"></div>
 

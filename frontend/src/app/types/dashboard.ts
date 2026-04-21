@@ -74,15 +74,76 @@ export interface DashboardSocketPayload {
   zoneItems?: ZoneItem[];
 }
 
-// 백엔드 원시 센서 메시지 타입
+// 백엔드에서 MQTT로 들어오는 원시 센서 페이로드
+export interface RawSensorPayload {
+  timestamp?: string;
+  light_ppfd_umol_m2_s?: number;
+  air_temp_c?: number;
+  relative_humidity_pct?: number;
+  co2_ppm?: number;
+  raw_tank_level_pct?: number;
+  raw_water_temp_c?: number;
+  pump_rpm?: number;
+  flow_rate_l_min?: number;
+  suction_pressure_kpa?: number;
+  discharge_pressure_kpa?: number;
+  motor_current_a?: number;
+  motor_power_kw?: number;
+  bearing_vibration_rms_mm_s?: number;
+  motor_temperature_c?: number;
+  bearing_temperature_c?: number;
+  filter_pressure_in_kpa?: number;
+  filter_pressure_out_kpa?: number;
+  turbidity_ntu?: number;
+  mix_target_ec_ds_m?: number;
+  mix_ec_ds_m?: number;
+  mix_target_ph?: number;
+  mix_ph?: number;
+  mix_temp_c?: number;
+  mix_flow_l_min?: number;
+  dosing_acid_ml_min?: number;
+  drain_ec_ds_m?: number;
+  tank_a_level_pct?: number;
+  tank_b_level_pct?: number;
+  acid_tank_level_pct?: number;
+  zone1_flow_l_min?: number;
+  zone1_pressure_kpa?: number;
+  zone1_substrate_moisture_pct?: number;
+  zone1_substrate_ec_ds_m?: number;
+  zone1_substrate_ph?: number;
+  zone2_flow_l_min?: number;
+  zone2_pressure_kpa?: number;
+  zone2_substrate_moisture_pct?: number;
+  zone2_substrate_ec_ds_m?: number;
+  zone2_substrate_ph?: number;
+  zone3_flow_l_min?: number;
+  zone3_pressure_kpa?: number;
+  zone3_substrate_moisture_pct?: number;
+  zone3_substrate_ec_ds_m?: number;
+  zone3_substrate_ph?: number;
+  [key: string]: unknown;
+}
+
+// 백엔드 INFERENCE 배치 페이로드
+export interface InferencePayload {
+  sensor_id?: string;
+  overall_alarm_level?: string;
+  overall_status?: string;
+  domain_reports?: unknown;
+  action_required?: boolean;
+  timestamp?: string;
+  [key: string]: unknown;
+}
+
+// 백엔드 → 프론트 웹소켓 메시지
 export interface BackendRawMessage {
-  type: "RAW" | "INFERENCE";
-  payload: {
-    sensor_data?: Record<string, unknown>;
-    is_anomaly?: boolean;
-    anomaly_score?: number;
-    [key: string]: unknown;
-  };
+  type: "RAW";
+  payload: RawSensorPayload;
+}
+
+export interface BackendInferenceMessage {
+  type: "INFERENCE";
+  payload: InferencePayload;
 }
 
 // 대시보드 소켓 메시지 타입
@@ -91,4 +152,7 @@ export interface DashboardSocketMessage {
   payload: DashboardSocketPayload;
 }
 
-export type AnySocketMessage = DashboardSocketMessage | BackendRawMessage;
+export type AnySocketMessage =
+  | DashboardSocketMessage
+  | BackendRawMessage
+  | BackendInferenceMessage;
