@@ -263,13 +263,13 @@ function useDashboardSocket(): DashboardSocketState {
         }
 
         if (message.type === "INFERENCE") {
-          // console.log("🔍 INFERENCE payload:", message.payload);
-          console.log(
-            "🔍 INFERENCE level:",
-            message.payload.overall_alarm_level,
-            "status:",
-            message.payload.overall_status,
-          );
+          console.log("🔍 INFERENCE payload:", message.payload);
+          // console.log(
+          //   "🔍 INFERENCE level:",
+          //   message.payload.overall_alarm_level,
+          //   "status:",
+          //   message.payload.overall_status,
+          // );
 
           // 10분 윈도우 집계 버퍼에 이벤트 누적 → systemStatus 재계산
           //  overall_alarm_level: 0=Normal, 1=Caution, 2=Warning, 3=Error

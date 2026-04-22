@@ -1,14 +1,17 @@
 import { memo } from "react";
-import { SprayAnimation } from "../../../equipment/SprayAnimation";
+import { SprayAnimation } from "../equipment/SprayAnimation";
 import {
   nutrientFeedSmallValveY,
-  nutrientMixerPortX,
   nutrientMixerPortYs,
-  nutrientTankPipeStartY,
   nutrientTanks,
   valvePositions,
   waterJointPositions,
 } from "../model/facility.layout";
+import {
+  facilityMainPipePaths,
+  getBranchPipePath,
+  getNutrientFeedPath,
+} from "../model/facility.paths";
 import { staticEquipmentStatus } from "../model/facility.status";
 import { PipeJoint, PipeRun, SmallValve } from "./FacilityPipes";
 
@@ -36,7 +39,12 @@ function FacilityPipeLayoutImpl() {
         <circle cx="41.3" cy="17.8" r="0.23" fill="url(#junctionGlow)" />
 
         {/* 원수 공급 라인 */}
-        <PipeRun d="M 18 17.8 H 54" tone="water" width={0.6} flowWidth={0.22} />
+        <PipeRun
+          d={facilityMainPipePaths.rawWaterMain}
+          tone="water"
+          width={0.6}
+          flowWidth={0.22}
+        />
 
         {/* 각 탱크 → 자동공급기 우측 포트 1:1 연결 */}
         {nutrientTanks.map((tank, i) => {
@@ -44,7 +52,7 @@ function FacilityPipeLayoutImpl() {
           return (
             <PipeRun
               key={`nutrient-feed-${tank.id}`}
-              d={`M ${tank.x} ${nutrientTankPipeStartY} V ${portY} H ${nutrientMixerPortX}`}
+              d={getNutrientFeedPath(tank.x, portY)}
               tone="nutrient"
               width={0.55}
               flowWidth={0.4}
@@ -67,11 +75,29 @@ function FacilityPipeLayoutImpl() {
         ))}
 
         {/* 자동공급기에서 하단 분기 전까지 내려오는 메인 라인 */}
-        <PipeRun d="M 50 20 V 55" tone="nutrient" width={0.7} flowWidth={0.26} duration="1.6s" />
+        <PipeRun
+          d={facilityMainPipePaths.supplyMainVertical}
+          tone="nutrient"
+          width={0.7}
+          flowWidth={0.26}
+          duration="1.6s"
+        />
 
         {/* 메인 라인이 좌우 재배 구역으로 갈라지는 수평 구간 */}
-        <PipeRun d="M 50.6 55 H 74.8" tone="nutrient" width={0.9} flowWidth={0.34} duration="1.9s" />
-        <PipeRun d="M 49.8 55 H 25.2" tone="nutrient" width={0.9} flowWidth={0.34} duration="1.9s" />
+        <PipeRun
+          d={facilityMainPipePaths.supplyMainRight}
+          tone="nutrient"
+          width={0.9}
+          flowWidth={0.34}
+          duration="1.9s"
+        />
+        <PipeRun
+          d={facilityMainPipePaths.supplyMainLeft}
+          tone="nutrient"
+          width={0.9}
+          flowWidth={0.34}
+          duration="1.9s"
+        />
 
         {/* 상단 원수 라인 연결 지점 */}
         {waterJointPositions.map((x) => (
@@ -84,7 +110,7 @@ function FacilityPipeLayoutImpl() {
           return (
             <g key={`nutrient-corner-${tank.id}`}>
               <PipeJoint x={tank.x} y={portY} tone="nutrient" size={0.18} />
-              <PipeJoint x={nutrientMixerPortX} y={portY} tone="nutrient" size={0.12} />
+              <PipeJoint x={54.9} y={portY} tone="nutrient" size={0.12} />
             </g>
           );
         })}
@@ -102,7 +128,7 @@ function FacilityPipeLayoutImpl() {
         {valvePositions.map((x, i) => (
           <PipeRun
             key={`branch-overlay-${x}`}
-            d={`M ${x} 55 V 57.8 Q ${x} 59 ${x - 0.4} 60.2 V 90`}
+            d={getBranchPipePath(x)}
             tone="nutrient"
             width={0.6}
             flowWidth={0.22}
@@ -122,7 +148,7 @@ function FacilityPipeLayoutImpl() {
         ))}
       </svg>
 
-      {/* 밸브 개방 여부에 따라 표시되는 분사 애니메이션 (밭 카드 위) */}
+      {/* 밸브 개방 여부에 따라 표시되는 분사 애니메이션 */}
       <svg
         className="facility-background-svg"
         viewBox="0 0 100 100"

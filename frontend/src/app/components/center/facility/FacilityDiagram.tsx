@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
-import { initialSensorData } from "./facility/model/facility.status";
-import type { FacilityDiagramProps } from "./facility/model/facility.types";
-import { FacilityEquipment } from "./facility/render/FacilityEquipment";
-import { FacilityPipeLayout } from "./facility/render/FacilityPipeLayout";
-import { FacilityZones } from "./facility/render/FacilityZones";
-import { createEquipment } from "./facility/utils/facilityEquipment";
+import { initialSensorData } from "./model/facility.status";
+import type { FacilityDiagramProps } from "./model/facility.types";
+import { FacilityEquipment } from "./render/FacilityEquipment";
+import { FacilityPipeLayout } from "./render/FacilityPipeLayout";
+import { FacilityZones } from "./render/FacilityZones";
+import { createEquipment } from "./utils/facilityEquipment";
 
-import "./facility/facility-diagram.css";
+import "./facility-diagram.css";
 
 // 중앙 시설 모델링 화면의 조립을 담당하는 메인 컴포넌트
 function FacilityDiagram({ onEquipmentSelect, sensorData }: FacilityDiagramProps) {

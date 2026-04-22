@@ -3,15 +3,18 @@ html,
 body,
 #root {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden; /* fit 컨테이너 바깥에 스크롤바가 뜨지 않도록 */
 }
 
 body {
   font-family: "Pretendard", "Noto Sans KR", sans-serif;
-  /* background: #258a60; */
   color: #e9fff4;
+  /* letterbox(남는 공간)를 대시보드와 같은 톤으로 채워서 '빈 공간'처럼
+     보이지 않게 한다. .dashboard__bg 의 linear-gradient 와 동일. */
+  background: linear-gradient(90deg, #7496bb 0%, #4c7197 50%, #7496bb 100%);
 }
 
 * {
@@ -22,12 +25,33 @@ button {
   font: inherit;
 }
 
-/* 대시보드 스타일 */
+/* 대시보드를 뷰포트 가운데로 모으고 바깥에 스크롤이 생기지 않게 감싸는 래퍼.
+   대시보드는 1920×1080 고정 디자인 + zoom 으로 축소/확대되며, 남는 공간은
+   body 배경 그라데이션으로 자연스럽게 메워진다. */
+.dashboard-fit {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* 대시보드 스타일 — 동적 설계 크기 + 균등 zoom
+   transform 대신 zoom 을 쓰는 이유: transform:scale 은 rasterized pixel 을 다시
+   스케일해서 텍스트가 흐릿해지지만, zoom 은 레이아웃 단계에서 재계산되어 텍스트가
+   선명하게 유지됨. 단, zoom 은 구 Firefox(<126) 미지원이므로 필요 시 폴리필 고려.
+
+   width/height 는 JS(useFitScale) 가 뷰포트 비율에 맞춰 동적 설정:
+   - 넓은 뷰포트: height=1080 고정, width 가 확장되어 letterbox 없음
+   - 좁은(세로) 뷰포트: width=1920 고정, height 가 확장 */
 .dashboard {
   position: relative;
-  width: 100%;
-  min-height: 100vh;
+  width: var(--app-width, 1920px);
+  height: var(--app-height, 1080px);
   overflow: hidden;
+  flex-shrink: 0;
+  zoom: var(--app-zoom, 1);
 }
 
 /* 배경 장식 레이어 */
@@ -45,7 +69,7 @@ button {
 .dashboard__overlay {
   position: relative;
   z-index: 5;
-  min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }

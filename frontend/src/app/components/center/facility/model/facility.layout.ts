@@ -27,14 +27,24 @@ export const valveCardLeftPositions = ["23.45%", "48.45%", "73.45%"] as const;
 export const nutrientTankPipeStartY = 11;
 export const nutrientManifoldY = 1.8;
 
-// 양액 자동공급기 우측 입력 포트 위치 (각 탱크 → 각 포트로 1:1 연결)
-//  - nutrientMixerPortX: 포트 x 좌표 (자동공급기 우측 옆)
-//  - nutrientMixerPortYs: 각 포트 y 좌표 (탱크 순서대로: A, B, PH, D, E)
+// 양액 자동공급기 우측 입력 포트 위치
 export const nutrientMixerPortX = 54.9;
 export const nutrientMixerPortYs = [18.1, 20.1, 22.1, 24.1, 26.1] as const;
 
 // 각 피드 파이프 수직 구간 상단(탱크 바로 아래)에 놓이는 작은 밸브의 y 좌표
 export const nutrientFeedSmallValveY = 13;
+
+// 장비 카드 위치값
+// 디자인/위치 변경 없이 기존 값을 그대로 모아둔 것
+export const facilityEquipmentPositions = {
+  rawWaterTank: { left: "13%", top: "-1.5%" },
+  filter: { left: "25%", top: "11.2%" },
+  rawWaterPump: { left: "35%", top: "12.5%" },
+  autoSupply: { left: "44.2%", top: "10.1%" },
+  nutrientTankTop: "0%",
+  valveTop: "52.5%",
+  valveZIndex: 33,
+} as const;
 
 // 하단 재배 구역 카드 배치 데이터
 export const growingZones = [

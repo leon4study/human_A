@@ -1,10 +1,14 @@
 import { motion } from "framer-motion";
-import { FilterSVG } from "../../../equipment/FilterSVG";
-import { NutrientSupplierSVG } from "../../../equipment/NutrientSupplierSVG";
-import { PumpSVG } from "../../../equipment/PumpSVG";
-import { TankSVG } from "../../../equipment/TankSVG";
-import { ValveSVG } from "../../../equipment/ValveSVG";
-import { nutrientTanks, valveCardLeftPositions } from "../model/facility.layout";
+import { FilterSVG } from "../equipment/FilterSVG";
+import { NutrientSupplierSVG } from "../equipment/NutrientSupplierSVG";
+import { PumpSVG } from "../equipment/PumpSVG";
+import { TankSVG } from "../equipment/TankSVG";
+import { ValveSVG } from "../equipment/ValveSVG";
+import {
+  facilityEquipmentPositions,
+  nutrientTanks,
+  valveCardLeftPositions,
+} from "../model/facility.layout";
 import { staticEquipmentStatus } from "../model/facility.status";
 import type { SensorData } from "../model/facility.types";
 
@@ -23,7 +27,7 @@ export function FacilityEquipment({
       {/* 원수 저장 탱크 */}
       <motion.div
         className="facility-equipment-item facility-equipment-item--tank"
-        style={{ left: "13%", top: "-1.5%" }}
+        style={facilityEquipmentPositions.rawWaterTank}
         whileHover={{ scale: 1.05, y: -3 }}
         transition={{ type: "spring", stiffness: 260, damping: 18 }}
         onClick={() => onEquipmentClick("rawWaterTank", sensorData.waterLevel, "%")}
@@ -43,7 +47,7 @@ export function FacilityEquipment({
       {/* 원수 여과 장치 */}
       <motion.div
         className="facility-equipment-item facility-equipment-item--filter"
-        style={{ left: "25%", top: "11.2%" }}
+        style={facilityEquipmentPositions.filter}
         whileHover={{ scale: 1.05, y: -3 }}
         transition={{ type: "spring", stiffness: 260, damping: 18 }}
         onClick={() => onEquipmentClick("filter")}
@@ -57,7 +61,7 @@ export function FacilityEquipment({
       {/* 원수 이송 펌프 */}
       <motion.div
         className="facility-equipment-item facility-equipment-item--pump"
-        style={{ left: "35%", top: "12.5%" }}
+        style={facilityEquipmentPositions.rawWaterPump}
         whileHover={{ scale: 1.05, y: -3 }}
         transition={{ type: "spring", stiffness: 260, damping: 18 }}
         onClick={() => onEquipmentClick("rawWaterPump")}
@@ -84,7 +88,7 @@ export function FacilityEquipment({
       {/* 양액 자동공급 제어 장치 */}
       <motion.div
         className="facility-equipment-item facility-equipment-item--controller"
-        style={{ left: "44.2%", top: "10.1%" }}
+        style={facilityEquipmentPositions.autoSupply}
         whileHover={{ scale: 1.05, y: -3 }}
         transition={{ type: "spring", stiffness: 260, damping: 18 }}
         onClick={() => onEquipmentClick("autoSupply")}
@@ -105,7 +109,7 @@ export function FacilityEquipment({
           <motion.div
             key={tank.id}
             className="facility-equipment-item facility-equipment-item--nutrient"
-            style={{ left: `${tank.x - 5}%`, top: "0%" }}
+            style={{ left: `${tank.x - 5}%`, top: facilityEquipmentPositions.nutrientTankTop }}
             whileHover={{ scale: 1.05, y: -3 }}
             transition={{ type: "spring", stiffness: 260, damping: 18 }}
             onClick={() => onEquipmentClick(tank.id, level, "%")}
@@ -129,7 +133,11 @@ export function FacilityEquipment({
         <motion.div
           key={`valve-${i}`}
           className="facility-equipment-item facility-equipment-item--valve"
-          style={{ left: valveCardLeftPositions[i], top: "52.5%", zIndex: 33 }}
+          style={{
+            left: valveCardLeftPositions[i],
+            top: facilityEquipmentPositions.valveTop,
+            zIndex: facilityEquipmentPositions.valveZIndex,
+          }}
           whileHover={{ scale: 1.15 }}
           transition={{ type: "spring", stiffness: 260, damping: 18 }}
           onClick={() => onEquipmentClick(`valve${i + 1}`)}

@@ -1,4 +1,4 @@
-import FacilityDiagram from "./FacilityDiagram";
+import FacilityDiagram from "./facility/FacilityDiagram";
 import type { Equipment, SensorData } from "./facility/model/facility.types";
 
 interface CenterPlaceholderProps {

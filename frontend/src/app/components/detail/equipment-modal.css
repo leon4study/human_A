@@ -14,9 +14,7 @@
 /* 팝업 박스 */
 .equipment-modal {
   width: 100%;
-  max-width: 520px;
-  max-height: 80vh;
-  overflow-y: auto;
+  max-width: 480px;
   border-radius: 20px;
   border: 1px solid rgba(120, 200, 255, 0.22);
   background: linear-gradient(
@@ -26,6 +24,8 @@
   );
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   color: #eaf7ff;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
 
 /* 상단 */
@@ -127,6 +127,190 @@
 
 .equipment-modal--wide {
   max-width: 640px;
+}
+
+.equipment-modal--xwide {
+  max-width: 1040px;
+}
+
+/* AI 분석 모달 2열 레이아웃 */
+.ai-modal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 18px;
+}
+
+.ai-modal-col {
+  min-width: 0;
+}
+
+.ai-modal-placeholder {
+  padding: 24px 16px;
+  font-size: 12px;
+  text-align: center;
+  color: rgba(225, 243, 255, 0.4);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.ai-perf-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.ai-perf-row:last-child {
+  margin-bottom: 0;
+}
+
+.ai-perf-label {
+  color: rgba(225, 243, 255, 0.7);
+}
+
+.ai-perf-value {
+  color: #9fe7ff;
+  font-weight: 600;
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+/* 원인진단: FIP + SHAP 2패널 */
+.ai-diag-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ai-diag-panel {
+  padding: 10px 12px;
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+
+.ai-diag-subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(159, 231, 255, 0.72);
+  letter-spacing: 0.03em;
+  margin-bottom: 8px;
+}
+
+.ai-diag-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.ai-diag-feature-row:last-child {
+  margin-bottom: 0;
+}
+
+.ai-diag-feature-label {
+  flex-shrink: 0;
+  width: 58px;
+  color: rgba(225, 243, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-diag-feature-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ai-diag-feature-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3eb8ff, #9fe7ff);
+  border-radius: 3px;
+}
+
+.ai-diag-feature-pct {
+  flex-shrink: 0;
+  width: 36px;
+  text-align: right;
+  color: #9fe7ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-diag-shap-sparkline {
+  flex: 1;
+  height: 16px;
+  display: block;
+}
+
+.ai-diag-shap-empty {
+  flex: 1;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+}
+
+/* Top-3 문제점 */
+.ai-top3-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-top3-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.ai-top3-item:last-child {
+  margin-bottom: 0;
+}
+
+.ai-top3-rank {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(62, 184, 255, 0.18);
+  color: #9fe7ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ai-top3-feature {
+  flex: 1;
+  color: rgba(225, 243, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-top3-pct {
+  flex-shrink: 0;
+  color: #9fe7ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .equipment-modal-subheader {

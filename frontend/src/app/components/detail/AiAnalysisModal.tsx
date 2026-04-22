@@ -62,25 +62,28 @@ const LEVEL_LABELS_KO: Record<number, string> = {
 
 const CW = 200; // chart width
 const CH = 75;  // chart height
-const PAD = 8;
-const IW = CW - PAD * 2;
-const IH = CH - PAD * 2;
+const PAD = 8; // 안쪽 여백
+const IW = CW - PAD * 2; // 실제 내부 너비 = 전체너비 - 양쪽 여백 합
+const IH = CH - PAD * 2; // 실제 내부 높이 = 전체높이 - 양쪽 여백 합
 
+// 정상 숫자만 걸러내는 전처리 함수
 function clampFinite(values: number[]): number[] {
   return values.filter((v) => Number.isFinite(v));
 }
 
+// 간단한 라인 차트 컴포넌트 — NaN 구간에서 선 끊김, 최신값 강조, 목표선 옵션, 경고선 옵션, 자동 포맷팅
 interface LineChartProps {
-  values: number[];
-  color?: string;
-  label: string;
-  unit: string;
+  values: number[]; // 차트 데이터 값 배열
+  color?: string; // 차트 색상
+  label: string; // 차트 이름
+  unit: string; // 값의 단위
   refValues?: number[];  // 목표선 (예: target_ec)
-  refColor?: string;
-  warningThreshold?: number;
-  formatValue?: (v: number) => string;
+  refColor?: string; // 기준선 색상
+  warningThreshold?: number; // 경고 임계값
+  formatValue?: (v: number) => string; // 값 포맷터 (기본: 자동 단위 변환)
 }
 
+// 숫자를 문자열로 반환 (자동 단위 변환 포함)
 function defaultFmt(v: number): string {
   const abs = Math.abs(v);
   if (abs === 0) return "0";
@@ -242,239 +245,6 @@ function MiniLineChart({
   );
 }
 
-interface ScatterChartProps {
-  xValues: number[];
-  yValues: number[];
-  xLabel: string;
-  yLabel: string;
-  xUnit: string;
-  yUnit: string;
-}
-
-function ScatterChart({
-  xValues,
-  yValues,
-  xLabel,
-  yLabel,
-  xUnit,
-  yUnit,
-}: ScatterChartProps) {
-  const pairs = xValues
-    .map((x, i) => [x, yValues[i]] as [number, number])
-    .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
-
-  const lastPair = pairs[pairs.length - 1];
-  const lastStr =
-    lastPair
-      ? `${lastPair[0].toFixed(1)} ${xUnit}, ${lastPair[1].toFixed(1)} ${yUnit}`
-      : "—";
-
-  if (pairs.length < 2) {
-    return (
-      <div style={{ width: CW }}>
-        <div className="ai-chart-label">{yLabel} vs {xLabel}</div>
-        <div className="ai-chart-empty">데이터 수집 중...</div>
-        <div className="ai-chart-value" style={{ color: "#3eb8ff" }}>{lastStr}</div>
-      </div>
-    );
-  }
-
-  const xs = pairs.map((p) => p[0]);
-  const ys = pairs.map((p) => p[1]);
-  const xMn = Math.min(...xs), xMx = Math.max(...xs);
-  const yMn = Math.min(...ys), yMx = Math.max(...ys);
-  const xRng = xMx - xMn || 1;
-  const yRng = yMx - yMn || 1;
-  const toX = (v: number) => PAD + ((v - xMn) / xRng) * IW;
-  const toY = (v: number) => PAD + IH - ((v - yMn) / yRng) * IH;
-
-  return (
-    <div style={{ width: CW }}>
-      <div className="ai-chart-label">{yLabel} vs {xLabel}</div>
-      <svg width={CW} height={CH} style={{ display: "block" }}>
-        <rect width={CW} height={CH} rx={6} fill="rgba(255,255,255,0.04)" />
-
-        {/* 이력 점 */}
-        {pairs.slice(0, -1).map(([x, y], i) => (
-          <circle
-            key={i}
-            cx={toX(x)}
-            cy={toY(y)}
-            r={2}
-            fill="rgba(62,184,255,0.4)"
-          />
-        ))}
-
-        {/* 최신 포인트 */}
-        {lastPair && (
-          <circle
-            cx={toX(lastPair[0])}
-            cy={toY(lastPair[1])}
-            r={3.5}
-            fill="#3eb8ff"
-          />
-        )}
-
-        {/* 축 라벨 */}
-        <text x={PAD} y={CH - 1} fontSize={8} fill="rgba(220,242,255,0.35)">{xLabel}</text>
-        <text x={PAD} y={PAD + 7} fontSize={8} fill="rgba(220,242,255,0.35)">{yLabel}</text>
-      </svg>
-      <div className="ai-chart-value" style={{ color: "#3eb8ff" }}>{lastStr}</div>
-    </div>
-  );
-}
-
-// ─── 도메인별 차트 정의 ───────────────────────────────────────────────────────
-
-interface ChartRow {
-  key: string;
-  element: React.ReactNode;
-  description: string; // 우측 설명 텍스트
-}
-
-function getDomainCharts(domain: string, buf: ChartBuffer): ChartRow[] {
-  switch (domain) {
-    case "motor":
-    case "hydraulic":
-      return [
-        {
-          key: "p_vs_f",
-          element: (
-            <ScatterChart
-              xValues={buf.flow}
-              yValues={buf.pressure}
-              xLabel="유량"
-              yLabel="압력"
-              xUnit="L/min"
-              yUnit="kPa"
-            />
-          ),
-          description: "펌프 운전 곡선\n압력-유량 관계 확인",
-        },
-        {
-          key: "f_vs_pw",
-          element: (
-            <ScatterChart
-              xValues={buf.motor_power}
-              yValues={buf.flow}
-              xLabel="전력"
-              yLabel="유량"
-              xUnit="kW"
-              yUnit="L/min"
-            />
-          ),
-          description: "에너지 효율\n전력 대비 유량 분포",
-        },
-        {
-          key: "current",
-          element: (
-            <MiniLineChart
-              values={buf.motor_current}
-              label="모터 전류"
-              unit="A"
-              color="#9fe7ff"
-            />
-          ),
-          description: "동특성 (모터 전류)\n급변 시 기동 이상 의심",
-        },
-        {
-          key: "vib",
-          element: (
-            <MiniLineChart
-              values={buf.bearing_vib}
-              label="베어링 진동"
-              unit="mm/s"
-              color="#f44336"
-            />
-          ),
-          description: "진동 추이\n상승 지속 시 베어링 마모",
-        },
-        {
-          key: "temp",
-          element: (
-            <MiniLineChart
-              values={buf.motor_temp}
-              label="모터 온도"
-              unit="°C"
-              color="#ff9800"
-              warningThreshold={80}
-            />
-          ),
-          description: "설비 이상 표준도표\n온도 80°C 이상 경고",
-        },
-      ];
-
-    case "zone_drip":
-      return [
-        {
-          key: "moisture",
-          element: (
-            <MiniLineChart
-              values={buf.zone1_moisture}
-              label="Zone1 배지 수분"
-              unit="%"
-              color="#4caf50"
-            />
-          ),
-          description: "수분 반응 추이\n급액 후 수분 변화율 확인",
-        },
-        {
-          key: "zone_flow",
-          element: (
-            <MiniLineChart
-              values={buf.zone1_flow}
-              label="Zone1 유량"
-              unit="L/min"
-              color="#3eb8ff"
-            />
-          ),
-          description: "구역 유량 추이\n감소 시 점적 막힘 의심",
-        },
-        {
-          key: "p_vs_f",
-          element: (
-            <ScatterChart
-              xValues={buf.zone1_flow}
-              yValues={buf.pressure}
-              xLabel="Zone1 유량"
-              yLabel="압력"
-              xUnit="L/min"
-              yUnit="kPa"
-            />
-          ),
-          description: "배관 저항 분포\n압력-유량 비율 이상 시 막힘",
-        },
-        {
-          key: "current",
-          element: (
-            <MiniLineChart
-              values={buf.motor_current}
-              label="모터 전류"
-              unit="A"
-              color="#9fe7ff"
-            />
-          ),
-          description: "동특성 (모터 전류)\n점적 저항 증가 시 전류 상승",
-        },
-        {
-          key: "vib",
-          element: (
-            <MiniLineChart
-              values={buf.bearing_vib}
-              label="베어링 진동"
-              unit="mm/s"
-              color="#f44336"
-            />
-          ),
-          description: "설비 이상 표준도표\n진동 상승 = 펌프 부하 이상",
-        },
-      ];
-
-    default:
-      return [];
-  }
-}
-
 // ─── 서브 컴포넌트 ────────────────────────────────────────────────────────────
 
 function SpikeBadges({ spike }: { spike: SpikeInfo }) {
@@ -496,144 +266,118 @@ function SpikeBadges({ spike }: { spike: SpikeInfo }) {
   );
 }
 
-function AlarmBadge({ level }: { level: number }) {
-  const color = LEVEL_COLORS[level] ?? "#4caf50";
-  const text = LEVEL_LABELS_KO[level] ?? "알 수 없음";
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "3px 10px",
-        borderRadius: "20px",
-        background: `${color}22`,
-        color,
-        border: `1px solid ${color}66`,
-        fontSize: "12px",
-        fontWeight: 700,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {text}
-    </span>
-  );
+// contribution(%) 을 CSS width 로 안전 변환: NaN/음수/>100 방어
+function safePct(v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(v, 100));
 }
 
-function RcaBar({
-  feature,
-  contribution,
+// 원인진단 섹션 — 스케치 레이아웃: 상단(FIP | SHAP) + 하단(Top-3 문제점)
+function CauseDiagnosisSection({
+  worstEntry,
 }: {
-  feature: string;
-  contribution: number;
+  worstEntry: [string, InferenceDomainReport] | null;
 }) {
-  const label = FEATURE_LABELS[feature] ?? feature;
-  return (
-    <div style={{ marginBottom: "8px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: "12px",
-          marginBottom: "4px",
-        }}
-      >
-        <span style={{ color: "rgba(225,243,255,0.75)" }}>{label}</span>
-        <span style={{ color: "#9fe7ff", fontWeight: 600 }}>
-          {contribution.toFixed(1)}%
-        </span>
-      </div>
-      <div
-        style={{
-          height: "5px",
-          background: "rgba(255,255,255,0.08)",
-          borderRadius: "3px",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${Math.min(contribution, 100)}%`,
-            background: "linear-gradient(90deg, #3eb8ff, #9fe7ff)",
-            borderRadius: "3px",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function DomainCard({
-  domain,
-  report,
-  compact = false,
-}: {
-  domain: string;
-  report: InferenceDomainReport;
-  compact?: boolean;
-}) {
-  const label = DOMAIN_LABELS[domain] ?? domain;
-  const level = report.alarm?.level ?? 0;
-  const borderColor = LEVEL_COLORS[level] ?? "#3eb8ff";
+  const level = worstEntry?.[1]?.alarm?.level ?? 0;
+  const rca = worstEntry?.[1]?.rca ?? [];
+  // 이상 레벨이 0이거나 RCA가 없으면 "원인"이 없는 것으로 본다
+  const hasRca = level > 0 && rca.length > 0;
+  const topFeatures = rca.slice(0, 4);
+  const top3 = rca.slice(0, 3);
+  const domainLabel = worstEntry
+    ? DOMAIN_LABELS[worstEntry[0]] ?? worstEntry[0]
+    : "";
 
   return (
-    <div
-      style={{
-        border: `1px solid ${borderColor}44`,
-        borderRadius: "14px",
-        padding: compact ? "10px 14px" : "14px 16px",
-        background: `${borderColor}0d`,
-        marginBottom: "10px",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom:
-            !compact && report.rca && report.rca.length > 0 ? "12px" : "0",
-        }}
-      >
-        <span
-          style={{
-            fontWeight: 700,
-            fontSize: compact ? "13px" : "15px",
-            color: "#f3fbff",
-          }}
-        >
-          {label}
-        </span>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          {report.score !== undefined && (
-            <span
-              style={{ fontSize: "11px", color: "rgba(220,242,255,0.5)" }}
-            >
-              MSE {report.score.toExponential(2)}
-            </span>
+    <div className="equipment-modal-section">
+      <div className="equipment-modal-section-title">
+        원인진단
+        {hasRca && domainLabel && (
+          <span
+            style={{
+              marginLeft: "8px",
+              fontSize: "11px",
+              fontWeight: 600,
+              color: "rgba(159,231,255,0.55)",
+            }}
+          >
+            — {domainLabel}
+          </span>
+        )}
+      </div>
+
+      {/* 상단: Feature Importance | SHAP 값 분포 */}
+      <div className="ai-diag-grid">
+        <div className="ai-diag-panel">
+          <div className="ai-diag-subtitle">Feature Importance (FIP)</div>
+          {hasRca ? (
+            topFeatures.map((item) => {
+              const label = FEATURE_LABELS[item.feature] ?? item.feature;
+              const pct = safePct(item.contribution);
+              return (
+                <div className="ai-diag-feature-row" key={item.feature}>
+                  <span className="ai-diag-feature-label" title={label}>
+                    {label}
+                  </span>
+                  <div className="ai-diag-feature-bar-wrap">
+                    <div
+                      className="ai-diag-feature-bar"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="ai-diag-feature-pct">{pct.toFixed(0)}%</span>
+                </div>
+              );
+            })
+          ) : (
+            <div className="ai-modal-placeholder">
+              {level === 0 ? "이상 징후 없음" : "데이터 수집 중"}
+            </div>
           )}
-          <AlarmBadge level={level} />
+        </div>
+
+        <div className="ai-diag-panel">
+          <div className="ai-diag-subtitle">SHAP 값 분포</div>
+          {hasRca ? (
+            topFeatures.map((item) => {
+              const label = FEATURE_LABELS[item.feature] ?? item.feature;
+              return (
+                <div className="ai-diag-feature-row" key={item.feature}>
+                  <span className="ai-diag-feature-label" title={label}>
+                    {label}
+                  </span>
+                  <div
+                    className="ai-diag-shap-empty"
+                    title="데이터 연동 예정"
+                  />
+                </div>
+              );
+            })
+          ) : (
+            <div className="ai-modal-placeholder">데이터 연동 예정</div>
+          )}
         </div>
       </div>
 
-      {!compact && report.rca && report.rca.length > 0 && (
-        <div>
-          <div
-            style={{
-              fontSize: "11px",
-              color: "rgba(159,231,255,0.6)",
-              marginBottom: "8px",
-              fontWeight: 600,
-            }}
-          >
-            이상 기여 피처 Top {report.rca.length}
-          </div>
-          {report.rca.map((item) => (
-            <RcaBar
-              key={item.feature}
-              feature={item.feature}
-              contribution={item.contribution}
-            />
-          ))}
+      {/* 하단: Top-3 문제점 */}
+      <div className="ai-diag-subtitle">Top-3 문제점</div>
+      {hasRca ? (
+        <ol className="ai-top3-list">
+          {top3.map((item, i) => {
+            const label = FEATURE_LABELS[item.feature] ?? item.feature;
+            const pct = safePct(item.contribution);
+            return (
+              <li className="ai-top3-item" key={item.feature}>
+                <span className="ai-top3-rank">{i + 1}</span>
+                <span className="ai-top3-feature">{label}</span>
+                <span className="ai-top3-pct">{pct.toFixed(1)}%</span>
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <div className="ai-modal-placeholder">
+          {level === 0 ? "이상 징후 없음" : "데이터 수집 중"}
         </div>
       )}
     </div>
@@ -834,7 +578,7 @@ function ComparativeSection({
   ];
 
   return (
-    <div className="equipment-modal-section" style={{ marginTop: "20px" }}>
+    <div className="equipment-modal-section">
       <div className="equipment-modal-section-title">비교분석</div>
       {charts.map((c) => (
         <ChartRow
@@ -881,12 +625,6 @@ function AiAnalysisModal({
       : best;
   }, null);
 
-  const worstDomain = worstEntry?.[0] ?? null;
-  const chartRows =
-    worstDomain && chartSnapshot
-      ? getDomainCharts(worstDomain, chartSnapshot)
-      : [];
-
   const tsDisplay = (() => {
     if (!inference?.timestamp) return null;
     try {
@@ -907,7 +645,7 @@ function AiAnalysisModal({
   return (
     <div className="equipment-modal-overlay" onClick={onClose}>
       <div
-        className="equipment-modal equipment-modal--wide"
+        className="equipment-modal equipment-modal--xwide"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
@@ -939,7 +677,7 @@ function AiAnalysisModal({
 
           {hasData && (
             <>
-              {/* 전체 상태 배너 */}
+              {/* 전체 상태 배너 (전체 폭) */}
               <div
                 style={{
                   borderRadius: "14px",
@@ -979,7 +717,7 @@ function AiAnalysisModal({
                       fontSize: "12px",
                       color: "rgba(220,242,255,0.65)",
                       textAlign: "right",
-                      maxWidth: "200px",
+                      maxWidth: "240px",
                       lineHeight: 1.5,
                     }}
                   >
@@ -988,104 +726,39 @@ function AiAnalysisModal({
                 )}
               </div>
 
-              {/* 스파이크 배지 */}
+              {/* 스파이크 배지 (전체 폭) */}
               {inference.spike_info && (
                 <SpikeBadges spike={inference.spike_info} />
               )}
 
-              {/* 도메인 요약 카드 (compact) */}
-              <div
-                className="equipment-modal-section"
-                style={{ marginTop: "18px" }}
-              >
-                <div className="equipment-modal-section-title">도메인별 알람</div>
-                {Object.entries(domainReports).map(([domain, report]) => (
-                  <DomainCard
-                    key={domain}
-                    domain={domain}
-                    report={report}
-                    compact={true}
+              {/* 2열 그리드: 좌=비교분석, 우=원인진단+AI모델성능 */}
+              <div className="ai-modal-grid">
+                {/* ── 좌측: 비교분석 ─────────────────── */}
+                <div className="ai-modal-col">
+                  <ComparativeSection
+                    chartSnapshot={chartSnapshot}
+                    comparative={comparativeMetrics}
                   />
-                ))}
-                {Object.keys(domainReports).length === 0 && (
-                  <div
-                    style={{
-                      fontSize: "13px",
-                      color: "rgba(225,243,255,0.4)",
-                      textAlign: "center",
-                      padding: "16px 0",
-                    }}
-                  >
-                    도메인 데이터 없음
-                  </div>
-                )}
-              </div>
-
-              {/* 비교분석 (§2-2) */}
-              <ComparativeSection
-                chartSnapshot={chartSnapshot}
-                comparative={comparativeMetrics}
-              />
-
-              {/* 최악 도메인 상세 분석 (RCA + 차트) */}
-              {worstEntry && (worstEntry[1].alarm?.level ?? 0) > 0 && (
-                <div
-                  className="equipment-modal-section"
-                  style={{ marginTop: "20px" }}
-                >
-                  <div className="equipment-modal-section-title">
-                    상세 분석 —{" "}
-                    {DOMAIN_LABELS[worstDomain!] ?? worstDomain}
-                  </div>
-
-                  {/* RCA 기여도 바 */}
-                  {worstEntry[1].rca && worstEntry[1].rca.length > 0 && (
-                    <div style={{ marginBottom: "16px" }}>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "rgba(159,231,255,0.6)",
-                          marginBottom: "8px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        이상 기여 피처 Top {worstEntry[1].rca.length}
-                      </div>
-                      {worstEntry[1].rca.map((item) => (
-                        <RcaBar
-                          key={item.feature}
-                          feature={item.feature}
-                          contribution={item.contribution}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 센서 차트 (도메인별) */}
-                  {chartRows.length > 0 ? (
-                    <div>
-                      {chartRows.map((row) => (
-                        <ChartRow
-                          key={row.key}
-                          chartEl={row.element}
-                          description={row.description}
-                        />
-                      ))}
-                    </div>
-                  ) : !chartSnapshot ? (
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        color: "rgba(225,243,255,0.4)",
-                        textAlign: "center",
-                        padding: "16px 0",
-                      }}
-                    >
-                      센서 데이터 수신 대기 중...
-                    </div>
-                  ) : null}
                 </div>
-              )}
+
+                {/* ── 우측: 원인진단 + AI 모델 성능 결과 ── */}
+                <div className="ai-modal-col">
+                  <CauseDiagnosisSection worstEntry={worstEntry} />
+
+                  {/* AI 모델 성능 결과 (placeholder — 데이터 연동 예정) */}
+                  <div
+                    className="equipment-modal-section"
+                    style={{ marginTop: "20px" }}
+                  >
+                    <div className="equipment-modal-section-title">
+                      AI 모델 성능 결과
+                    </div>
+                    <div className="ai-modal-placeholder">
+                      데이터 연동 예정
+                    </div>
+                  </div>
+                </div>
+              </div>
             </>
           )}
         </div>
