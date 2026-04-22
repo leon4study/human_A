@@ -22,6 +22,7 @@ COPY src/inference_api.py ./src/
 COPY src/inference_core.py ./src/
 COPY src/preprocessing.py ./src/
 COPY src/logger.py ./src/
+COPY src/ko_labels.py ./src/
 
 # 모델 파일 폴더 전체 복사
 COPY models/ ./models/

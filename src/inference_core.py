@@ -1,6 +1,8 @@
 # src/inference_core.py
 import numpy as np
 
+from ko_labels import ko_alarm, ko_feature
+
 
 def get_alarm_status(mse_score: float, t_caut: float, t_warn: float, t_crit: float):
     """MSE 점수를 바탕으로 4단계 알람 레벨과 라벨을 반환합니다."""
@@ -81,12 +83,16 @@ def calculate_rca(
 
     rca = sorted(
         [
-            {"feature": n, "contribution": round((e / sum_err) * 100, 1)}
+            {
+                "feature": n,
+                "한글명": ko_feature(n),
+                "contribution": round((e / sum_err) * 100, 1),
+            }
             for n, e in pairs
         ],
         key=lambda x: x["contribution"],
         reverse=True,
-    )[:top_n]
+    )[:]
     return rca
 
 
@@ -114,6 +120,7 @@ def build_feature_details(
 
         entry = {
             "name": f_name,
+            "한글명": ko_feature(f_name),
             "actual_value": round(act_val, 4),
             "expected_value": round(exp_val, 4),
             "bands": {
@@ -143,6 +150,7 @@ def build_feature_details(
                 entry["feature_alarm"] = {
                     "level": f_alarm_level,
                     "label": f_alarm_label,
+                    "한글": ko_alarm(f_alarm_label),
                 }
 
         details.append(entry)
@@ -208,9 +216,12 @@ def build_target_reference_profiles(df: "pd.DataFrame", target_dict: dict) -> di
             feature_series = normal_subset[feature_name].dropna()
             if feature_series.empty:
                 continue
-            related_profiles[feature_name] = build_sigma_reference_line(feature_series)
+            line = build_sigma_reference_line(feature_series)
+            line["한글명"] = ko_feature(feature_name)
+            related_profiles[feature_name] = line
 
         profiles[target_name] = {
+            "한글명": ko_feature(target_name),
             "target_threshold_basis": "target_caution_band_1sigma",
             "target_lines": target_lines,
             "normal_sample_count": int(len(normal_subset)),
