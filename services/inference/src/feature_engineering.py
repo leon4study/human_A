@@ -39,6 +39,55 @@ MODE_FEATURES: list[str] = [
 VIP_FEATURES: list[str] = ["time_sin", "time_cos"] + MODE_FEATURES
 
 
+# 도메인별 "반드시 모델 입력에 들어가야 하는" 센서·파생 피처.
+# SHAP robust selection이 빈 결과를 반환해도 이 리스트는 강제 주입되어,
+# AE가 시간·상태 피처만으로 학습되는 퇴행을 막는다.
+#
+# 규칙:
+# - 각 도메인 타깃 컬럼은 leakage 방지를 위해 입력 피처로 넣지 않음.
+# - zone 2·3은 preprocessing에서 drop되므로 zone1만 사용.
+# - 파생이 원본보다 신호 대 잡음비가 좋을 때는 파생을 우선 (예: rpm_slope > pump_rpm).
+SENSOR_MANDATORY: dict[str, list[str]] = {
+    "motor": [
+        "motor_power_kw",
+        "motor_temperature_c",
+        "bearing_vibration_rms_mm_s",
+        "bearing_temperature_c",
+        "wire_to_water_efficiency",
+        "pump_rpm",
+        "rpm_slope",
+        "temp_slope_c_per_s",
+    ],
+    "hydraulic": [
+        "flow_rate_l_min",
+        "discharge_pressure_kpa",
+        "suction_pressure_kpa",
+        "flow_drop_rate",
+        "pressure_flow_ratio",
+        "hydraulic_power_kw",
+        "filter_delta_p_kpa",
+        "pressure_trend_10",
+        "flow_trend_10",
+    ],
+    "nutrient": [
+        "mix_ph",
+        "mix_ec_ds_m",
+        "mix_target_ec_ds_m",
+        "drain_ec_ds_m",
+        "pid_error_ph",
+        "mix_temp_c",
+        "ph_trend_30",
+    ],
+    "zone_drip": [
+        "zone1_flow_l_min",
+        "zone1_pressure_kpa",
+        "zone1_substrate_moisture_pct",
+        "zone1_substrate_ec_ds_m",
+        "supply_balance_index",
+    ],
+}
+
+
 def inject_vip_features(
     X_train_ae: pd.DataFrame,
     df_interpret: pd.DataFrame,

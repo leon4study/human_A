@@ -16,7 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 # 우리가 만들어둔 '메인 셰프(파이프라인 매니저)' 모듈 불러오기
-from feature_engineering import VIP_FEATURES, inject_vip_features
+from feature_engineering import SENSOR_MANDATORY, VIP_FEATURES, inject_vip_features
 from feature_selection import run_feature_selection_experiment
 from inference_core import actionable_feature_mask, build_target_reference_profiles
 from logger import get_logger
@@ -275,7 +275,7 @@ if __name__ == "__main__":
 
         # 1. 도메인별 피처 셀렉션
         # df_agg: target_reference_profiles 계산용(raw 센서 이름 유지 윈도우 집계본)
-        robust_features, X_train_ae, df_interpret_result, _, df_agg = run_feature_selection_experiment(
+        robust_features, X_train_ae, df_interpret_result, _, df_agg, shap_vals_dict, X_bg_dict = run_feature_selection_experiment(
             df_raw=df_raw, window_method="sliding", target_dict=target_dict
         )
 
@@ -290,6 +290,25 @@ if __name__ == "__main__":
                 f"🔗 오토인코더 입력 데이터에 VIP 피처 강제 주입: {injected_vips}"
             )
 
+        # 도메인별 필수 센서 강제 주입 — SHAP robust selection이 0개/소수만 뽑아도
+        # 실제 센서 피처가 AE 입력에 반드시 포함되도록 보장.
+        # 소스는 df_agg (raw 센서 + 파생 포함한 윈도우 집계본).
+        mandatory_sensors = SENSOR_MANDATORY.get(system_name, [])
+        X_train_ae, injected_sensors = inject_vip_features(
+            X_train_ae, df_agg, mandatory_sensors
+        )
+        if injected_sensors:
+            logger.info(
+                f"🔗 [{system_name.upper()}] 필수 센서 강제 주입: {injected_sensors}"
+            )
+        missing_sensors = [
+            s for s in mandatory_sensors if s not in X_train_ae.columns
+        ]
+        if missing_sensors:
+            logger.warning(
+                f"⚠️  [{system_name.upper()}] SENSOR_MANDATORY에 있으나 df_agg에 없는 피처: {missing_sensors}"
+            )
+
         # 2. 도메인별 모델 학습 및 저장 (이름을 같이 넘겨줌)
         # df_reference는 raw 센서 컬럼명이 살아있는 df_agg를 넘긴다.
         # df_interpret_result는 파생 지표(pressure_flow_ratio 등) 전용이라
@@ -300,6 +319,37 @@ if __name__ == "__main__":
             target_dict=target_dict,
             df_reference=df_agg,
         )
+
+        # 3. SHAP 아티팩트 저장 (frontend beeswarm 렌더용)
+        # 입력이 바뀌어도 값은 변하지 않는 "정적 아티팩트"라 /predict 대신 별도 json으로 서빙.
+        shap_targets_payload = {}
+        n_features_per_target = {}
+        for target_name, sv in shap_vals_dict.items():
+            X_bg = X_bg_dict[target_name]
+            sv_arr = np.asarray(sv)
+            mean_abs = np.abs(sv_arr).mean(axis=0)
+            order_idx = np.argsort(mean_abs)[::-1]
+            features_list = list(X_bg.columns)
+            shap_targets_payload[target_name] = {
+                "features":       features_list,
+                "mean_abs_shap":  mean_abs.tolist(),
+                "feature_order":  [features_list[i] for i in order_idx],
+                "shap_values":    sv_arr.tolist(),
+                "feature_values": X_bg.values.tolist(),
+            }
+            n_features_per_target[target_name] = len(features_list)
+
+        n_samples = int(next(iter(shap_vals_dict.values())).shape[0]) if shap_vals_dict else 0
+        shap_payload = {
+            "targets":      shap_targets_payload,
+            "n_samples":    n_samples,
+            "n_features":   n_features_per_target,
+            "computed_at":  datetime.utcnow().isoformat() + "Z",
+        }
+        shap_path = os.path.join(project_root, "models", f"{system_name}_shap.json")
+        with open(shap_path, "w") as f:
+            json.dump(shap_payload, f)
+        logger.info(f"💾 [{system_name.upper()}] SHAP 아티팩트 저장: {shap_path}")
 
     total_end_time = time.time()
     t_min, t_sec = divmod(total_end_time - total_start_time, 60)

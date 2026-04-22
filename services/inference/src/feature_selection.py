@@ -341,4 +341,5 @@ def run_feature_selection_experiment(df_raw, window_method, target_dict):
     print(f"\n✅ [{window_method.upper()}] 실험 완료!")
     # df_agg: 원본 센서 컬럼명을 유지한 윈도우 집계본.
     # target_reference_profiles 계산 시 raw 기준선 소스로 필요.
-    return robust_features, X_train_ae, df_interpret, shap_results, df_agg
+    # shap_vals_dict / X_bg_dict: frontend beeswarm 렌더용 — {domain}_shap.json 아티팩트로 저장됨.
+    return robust_features, X_train_ae, df_interpret, shap_results, df_agg, shap_vals_dict, X_bg_dict
