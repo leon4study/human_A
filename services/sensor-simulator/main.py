@@ -62,7 +62,7 @@ def run_simulator():
         payload['timestamp'] = datetime.now().isoformat() # 현재 시각 주입
         
         client.publish("sensor/data", json.dumps(payload))
-        print(f"[RAW] Published | {json.dumps(payload, ensure_ascii=False)}")
+        print(f"Published to MQTT: {payload['timestamp']}")
         time.sleep(1)
 
 if __name__ == "__main__":

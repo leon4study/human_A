@@ -4,6 +4,7 @@ import type {
   AnySocketMessage,
   CtpVisualizationMetric,
   EnvironmentItem,
+  InferenceDomainReport,
   InferencePayload,
   KpiItem,
   RawSensorPayload,
@@ -116,6 +117,46 @@ const HISTORY_URL = "/inference/history?limit=200";
 const ALERT_MAX = 50;  // Alert 패널에 최대 50개까지만 보여주도록 (너무 많으면 렌더링 부담)
 const STATUS_RECOMPUTE_INTERVAL_MS = 60 * 1000; // 1분마다 10분 윈도우 재평가
 
+// 추론서버 직접 호출 (인프라의 inference 배치가 .env.prod 버킷명 불일치로 죽어있어
+// DB 폴링으로는 INFERENCE가 안 옴 → 프론트가 /predict로 직접 호출해 INFERENCE 흐름을 살린다)
+const PREDICT_URL = "/predict";              // vite.config.ts의 proxy로 inference-api(:8000)에 전달
+const PREDICT_INTERVAL_MS = 15 * 1000;       // 15초마다 추론 호출 (서버 배치 1분보다 4배 빠름)
+
+// /predict 응답을 InferencePayload(WS INFERENCE 동일 스키마)로 정규화.
+// /predict는 rca_top3로, DB INFERENCE는 rca로 응답하므로 둘 다 수용.
+function mapPredictResponseToInferencePayload(
+  resp: Record<string, unknown>,
+  fallbackTs: string,
+): InferencePayload {
+  const reports: Record<string, InferenceDomainReport> = {};
+  const src = (resp?.domain_reports ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [domain, raw] of Object.entries(src)) {
+    const r = raw ?? {};
+    const rcaTop3 = r.rca_top3;
+    const rcaPlain = r.rca;
+    reports[domain] = {
+      alarm: (r.alarm as InferenceDomainReport["alarm"]) ?? { level: 0, label: "Normal" },
+      rca: Array.isArray(rcaTop3)
+        ? (rcaTop3 as InferenceDomainReport["rca"])
+        : Array.isArray(rcaPlain)
+          ? (rcaPlain as InferenceDomainReport["rca"])
+          : [],
+      score: (r.metrics as { current_mse?: number } | undefined)?.current_mse,
+      metrics: r.metrics,
+      global_thresholds: r.global_thresholds,
+      feature_details: r.feature_details,
+    };
+  }
+  return {
+    timestamp: (resp?.timestamp as string) ?? fallbackTs,
+    overall_alarm_level: (resp?.overall_alarm_level as number) ?? 0,
+    overall_status: (resp?.overall_status as string) ?? null,
+    spike_info: resp?.spike_info as InferencePayload["spike_info"],
+    action_required: (resp?.action_required as string) ?? null,
+    domain_reports: reports,
+  };
+}
+
 function useDashboardSocket(): DashboardSocketState {
   const [systemStatus, setSystemStatus] = useState<SystemStatus>("normal");
   const [environment, setEnvironment] = useState<EnvironmentItem[]>(environmentData);
@@ -155,6 +196,9 @@ function useDashboardSocket(): DashboardSocketState {
   const latestRawRef = useRef<RawSensorPayload | null>(null);
   const rawDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // /predict 폴링용 — 가장 최근 RAW를 항상 보관 (latestRawRef는 debounce 이후 비워지므로 별도 ref)
+  const lastSeenRawRef = useRef<RawSensorPayload | null>(null);
+
   // 버퍼 기반으로 systemStatus 재계산
   const recomputeSystemStatus = () => {
     const now = Date.now();
@@ -162,7 +206,60 @@ function useDashboardSocket(): DashboardSocketState {
     setSystemStatus(computeSystemStatus(alarmEventsRef.current, now));
   };
 
+  // INFERENCE 페이로드 통합 처리 — WS INFERENCE / /predict 폴링 둘 다 사용
+  const processInferencePayload = (payload: InferencePayload, source: string) => {
+    console.log(`🔍 INFERENCE [${source}]:`, payload);
+
+    // 10분 윈도우 집계 버퍼에 이벤트 누적 → systemStatus 재계산
+    const ts = parseTimestampToMs(payload.timestamp);
+    alarmEventsRef.current = pruneAlarmEvents(
+      [...alarmEventsRef.current, { ts, level: payload.overall_alarm_level }],
+      Date.now(),
+    );
+    recomputeSystemStatus();
+
+    setLatestInference(payload);
+    setChartSnapshot(snapChartBuffer(chartBufRef.current));
+
+    // 비교분석 지표 계산 (12h 링버퍼 스냅샷)
+    const lb = longBufRef.current;
+    const samples = Math.min(lb.diffP.length, lb.flow.length);
+    let pVol: number | null = null;
+    let fCv: number | null = null;
+    if (lb.diffP.length >= MIN_SAMPLES_FOR_STATS) {
+      const s = computeStd(lb.diffP);
+      const iqrVal = computeIqr(lb.diffP);
+      if (Number.isFinite(s) && Number.isFinite(iqrVal) && iqrVal > 0) {
+        pVol = s / (iqrVal + EPS_LONG);
+      }
+    }
+    if (lb.flow.length >= MIN_SAMPLES_FOR_STATS) {
+      const s = computeStd(lb.flow);
+      const m = computeMean(lb.flow);
+      if (Number.isFinite(s) && Number.isFinite(m) && m > 0) {
+        fCv = s / (m + EPS_LONG);
+      }
+    }
+    setComparativeMetrics({
+      pressureVolatility: pVol,
+      flowCv: fCv,
+      samples,
+    });
+
+    const newAlerts = mapInferenceToAlerts(payload);
+    if (newAlerts.length > 0) {
+      setAlertItems((prev) => {
+        const existingIds = new Set(prev.map((item) => item.id));
+        const fresh = newAlerts.filter((a) => !existingIds.has(a.id));
+        if (fresh.length === 0) return prev;
+        return [...fresh, ...prev].slice(0, ALERT_MAX);
+      });
+    }
+  };
+
   const handleRawPayload = (raw: RawSensorPayload) => {
+    // console.log("📡 RAW payload:", raw);
+    lastSeenRawRef.current = raw;
     setRawSensorPayload(raw);
 
     // 차트 링버퍼 업데이트 (렌더 없음 — ref 직접 변이)
@@ -263,60 +360,7 @@ function useDashboardSocket(): DashboardSocketState {
         }
 
         if (message.type === "INFERENCE") {
-          console.log("🔍 INFERENCE payload:", message.payload);
-          // console.log(
-          //   "🔍 INFERENCE level:",
-          //   message.payload.overall_alarm_level,
-          //   "status:",
-          //   message.payload.overall_status,
-          // );
-
-          // 10분 윈도우 집계 버퍼에 이벤트 누적 → systemStatus 재계산
-          //  overall_alarm_level: 0=Normal, 1=Caution, 2=Warning, 3=Error
-          const ts = parseTimestampToMs(message.payload.timestamp);
-          alarmEventsRef.current = pruneAlarmEvents(
-            [...alarmEventsRef.current, { ts, level: message.payload.overall_alarm_level }],
-            Date.now(),
-          );
-          recomputeSystemStatus();
-
-          setLatestInference(message.payload);
-          setChartSnapshot(snapChartBuffer(chartBufRef.current));
-
-          // 비교분석 지표 계산 (12h 링버퍼 스냅샷)
-          const lb = longBufRef.current;
-          const samples = Math.min(lb.diffP.length, lb.flow.length);
-          let pVol: number | null = null;
-          let fCv: number | null = null;
-          if (lb.diffP.length >= MIN_SAMPLES_FOR_STATS) {
-            const s = computeStd(lb.diffP);
-            const iqrVal = computeIqr(lb.diffP);
-            if (Number.isFinite(s) && Number.isFinite(iqrVal) && iqrVal > 0) {
-              pVol = s / (iqrVal + EPS_LONG);
-            }
-          }
-          if (lb.flow.length >= MIN_SAMPLES_FOR_STATS) {
-            const s = computeStd(lb.flow);
-            const m = computeMean(lb.flow);
-            if (Number.isFinite(s) && Number.isFinite(m) && m > 0) {
-              fCv = s / (m + EPS_LONG);
-            }
-          }
-          setComparativeMetrics({
-            pressureVolatility: pVol,
-            flowCv: fCv,
-            samples,
-          });
-
-          const newAlerts = mapInferenceToAlerts(message.payload);
-          if (newAlerts.length > 0) {
-            setAlertItems((prev) => {
-              const existingIds = new Set(prev.map((item) => item.id));
-              const fresh = newAlerts.filter((a) => !existingIds.has(a.id));
-              if (fresh.length === 0) return prev;
-              return [...fresh, ...prev].slice(0, ALERT_MAX);
-            });
-          }
+          processInferencePayload(message.payload, "WS");
           return;
         }
 
@@ -351,6 +395,48 @@ function useDashboardSocket(): DashboardSocketState {
       socket.close();
       if (rawDebounceRef.current) clearTimeout(rawDebounceRef.current);
     };
+    // processInferencePayload는 매 렌더 새로 생성되지만 ref/setter만 사용하므로
+    // 첫 렌더의 클로저로 호출해도 stale 이슈 없음 — 의도적으로 deps 비움
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // /predict 폴링 — 인프라의 inference 배치가 죽어 있어 INFERENCE가 안 올 때 프론트가 직접 호출
+  useEffect(() => {
+    let cancelled = false;
+
+    const fireOnce = async () => {
+      const raw = lastSeenRawRef.current;
+      if (!raw) return; // RAW 한 건도 안 받았으면 스킵
+
+      try {
+        const res = await fetch(PREDICT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(raw),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+
+        const payload = mapPredictResponseToInferencePayload(
+          data,
+          raw.timestamp ?? new Date().toISOString(),
+        );
+        processInferencePayload(payload, "PREDICT");
+      } catch (error) {
+        console.error("❌ /predict 호출 실패:", error);
+      }
+    };
+
+    // 첫 호출은 RAW 도착할 시간 2초 준 뒤 — 사용자 체감 대기시간 줄임
+    const kickoff = setTimeout(fireOnce, 2000);
+    const timer = setInterval(fireOnce, PREDICT_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(kickoff);
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 새 INFERENCE가 없어도 시간이 흐르면 오래된 이벤트가 윈도우를 벗어나므로 주기 재평가

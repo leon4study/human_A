@@ -9,6 +9,7 @@ export default defineConfig({
     proxy: {
       '/inference': 'http://localhost:8080',
       '/ws': { target: 'ws://localhost:8080', ws: true },
+      '/predict': 'http://localhost:8000',
     },
   },
 })

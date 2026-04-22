@@ -5,13 +5,15 @@
 import time
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import shap
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
 # preprocessing.py 에서 만들어둔 전처리 함수 가져오기
-from preprocessing import step1_prepare_window_data, step2_clean_and_drop_collinear_dynamic
+from preprocessing import step1_prepare_window_data, step2_clean_and_drop_collinear
 
 
 # =====================================================================
@@ -19,6 +21,10 @@ from preprocessing import step1_prepare_window_data, step2_clean_and_drop_collin
 # =====================================================================
 def get_shap_importance(X, y, target_name, n_estimators=100, random_state=42):
     print(f"[{target_name}] 모델 학습 및 SHAP 계산 중... (전체 데이터: {len(X)}개)")
+
+    """
+    
+    """
 
     # 1. 모델 학습 (학습은 빠르므로 전체 데이터 43,199개 모두 사용)
     # 트리가 너무 깊어지는 것을 방지하기 위해 max_depth를 15 정도로 제한하면 훨씬 빠르고 과적합도 막아줍니다.
@@ -110,78 +116,6 @@ def get_shap_importance_kmeans(X, y, target_name, n_estimators=100, random_state
     return explainer, shap_values, X_background, importance_df
 
 
-# ==============================================================================
-# [Large-Scale 버전] 2단계 샘플링 SHAP — 수천만 행 대응
-# ==============================================================================
-def get_shap_importance_scalable(
-    X, y, target_name,
-    n_estimators=100,
-    random_state=42,
-    max_rf_sample=50_000,
-    n_clusters=200,
-):
-    """
-    2단계 샘플링으로 대규모 데이터(수천만 행)에서도 동작하는 SHAP 중요도 계산.
-
-    Stage 1 — RF 학습용 랜덤 서브샘플:
-        전체 데이터가 max_rf_sample 초과 시 랜덤 샘플링.
-        RF는 순서(Rank) 기반이므로 대표 샘플이면 충분.
-
-    Stage 2 — K-Means SHAP 배경 압축:
-        서브샘플에 StandardScaler → K-Means → 클러스터 중심점을
-        원래 스케일로 역변환하여 SHAP 배경(background)으로 사용.
-        n_clusters = min(n_clusters, max(20, len(sample) // 250))
-        → 클러스터당 최소 250개 행이 되도록 자동 조정.
-    """
-    n_total = len(X)
-    print(f"[{target_name}] 전체 {n_total:,}행 | RF샘플 상한={max_rf_sample:,} | 클러스터 상한={n_clusters}")
-
-    # ── Stage 1: RF 학습용 서브샘플
-    if n_total > max_rf_sample:
-        X_train = X.sample(n=max_rf_sample, random_state=random_state)
-        y_train = y.loc[X_train.index]
-        print(f"  -> RF 학습용 {max_rf_sample:,}행 랜덤 샘플링 완료 (원본 {n_total:,}행)")
-    else:
-        X_train = X
-        y_train = y
-
-    model = RandomForestRegressor(
-        n_estimators=n_estimators, max_depth=15,
-        random_state=random_state, n_jobs=-1
-    )
-    model.fit(X_train, y_train)
-
-    # ── Stage 2: K-Means SHAP 배경 압축
-    print(f"  -> K-Means 배경 압축 중...")
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_train)
-
-    # 클러스터당 최소 250행이 되도록 자동 조정
-    actual_clusters = min(n_clusters, max(20, len(X_train) // 250))
-    if actual_clusters != n_clusters:
-        print(f"  -> 데이터 크기에 맞게 클러스터 수 조정: {n_clusters} → {actual_clusters}")
-
-    kmeans = KMeans(n_clusters=actual_clusters, random_state=random_state, n_init="auto")
-    kmeans.fit(X_scaled)
-
-    centers = scaler.inverse_transform(kmeans.cluster_centers_)
-    X_background = pd.DataFrame(centers, columns=X.columns)
-
-    print(f"  -> 대표 패턴 {actual_clusters}개 추출 완료. SHAP 계산 시작...")
-
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_background, approximate=True)
-
-    shap_sum = np.abs(shap_values).mean(axis=0)
-    importance_df = (
-        pd.DataFrame({"Feature": X.columns, "SHAP_Importance": shap_sum})
-        .sort_values("SHAP_Importance", ascending=False)
-        .reset_index(drop=True)
-    )
-
-    return explainer, shap_values, X_background, importance_df
-
-
 # =====================================================================
 # 2. Multi-Target SHAP Ensemble 메인 함수
 # =====================================================================
@@ -194,6 +128,8 @@ def run_shap_ensemble(df, target_dict, top_ratio=0.2):
     :param top_ratio: 각 타겟별로 상위 몇 %의 피처를 선정할 것인지 (기본 20%)
     :return: 최종 선정된 피처 리스트, 각 타겟별 중요도 DF 딕셔너리
     """
+    all_features = df.columns.tolist()
+
     importance_results = {}
     shap_values_dict = {}
     x_background_dict = {}
@@ -212,12 +148,8 @@ def run_shap_ensemble(df, target_dict, top_ratio=0.2):
         X = X.fillna(X.mean(numeric_only=True))
         y = y.fillna(y.mean())
 
-        # SHAP 중요도 계산 (2단계 샘플링 scalable 버전 사용)
-        _, shap_vals, x_bg, imp_df = get_shap_importance_scalable(
-            X, y, target,
-            max_rf_sample=50_000,
-            n_clusters=200,
-        )
+        # SHAP 중요도 계산
+        _, shap_vals, x_bg, imp_df = get_shap_importance_kmeans(X, y, target)
 
         # 딕셔너리에 저장
         importance_results[target] = imp_df
@@ -299,11 +231,7 @@ def step3_4_select_features_and_finalize(
     print("-" * 60)
 
     # 3. 최종 학습용 데이터셋(X_train_ae) 구축
-    # robust가 비어있으면(두 타겟 간 상위 피처 미겹침) union으로 폴백
-    selected = ensemble_lists["robust"] if ensemble_lists["robust"] else ensemble_lists["union"]
-    if not selected:
-        raise ValueError("SHAP 앙상블 결과 선택 피처가 0개입니다. top_ratio를 높이거나 타겟 설정을 확인하세요.")
-    X_train_ae = df_clean[selected].copy()
+    X_train_ae = df_clean[ensemble_lists["robust"]].copy()  
 
     print(f"\n✅ 최종 데이터 준비 완료!")
     print(f"  - 오토인코더 학습용 데이터 (X_train_ae) 형태: {X_train_ae.shape}")
@@ -321,15 +249,12 @@ def run_feature_selection_experiment(df_raw, window_method, target_dict):
     print(f"🚀 [EXPERIMENT] 시작: {window_method.upper()} WINDOW 방식")
     print("=" * 60)
 
-    target_cols = list(target_dict.keys())
+    start_time = time.time()
+
     df_agg, df_interpret = step1_prepare_window_data(
-        df_raw, window_method=window_method, target_cols=target_cols
+        df_raw, window_method=window_method
     )
-    df_clean = step2_clean_and_drop_collinear_dynamic(
-        df_agg,
-        corr_threshold=0.85,
-        protected_cols=list(target_dict.keys())
-    )
+    df_clean = step2_clean_and_drop_collinear(df_agg)
     X_train_ae, ensemble_lists, shap_results, shap_vals_dict, X_bg_dict = (
         step3_4_select_features_and_finalize(
             df_clean, df_interpret, target_dict, top_ratio=0.25
@@ -337,8 +262,7 @@ def run_feature_selection_experiment(df_raw, window_method, target_dict):
     )
 
     robust_features = ensemble_lists["robust"]
+    end_time = time.time()
 
     print(f"\n✅ [{window_method.upper()}] 실험 완료!")
-    # df_agg: 원본 센서 컬럼명을 유지한 윈도우 집계본.
-    # target_reference_profiles 계산 시 raw 기준선 소스로 필요.
-    return robust_features, X_train_ae, df_interpret, shap_results, df_agg
+    return robust_features, X_train_ae, df_interpret, shap_results

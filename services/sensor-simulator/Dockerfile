@@ -1,8 +1,6 @@
 # 1. 파이썬 경량 버전 사용 (빌드 속도와 이미지 용량 최적화)
 FROM python:3.11-slim
 
-ENV PYTHONUNBUFFERED=1
-
 # 2. 컨테이너 내 작업 디렉토리 생성 및 이동
 WORKDIR /app
 
