@@ -1,1 +1,0 @@
-{"threshold_caution": 0.002976992901215826, "threshold_warning": 0.004749635936604403, "threshold_error": 0.038289657533023186, "features": ["suction_pressure_kpa", "zone1_pressure_kpa", "bearing_temperature_c", "zone1_resistance", "filter_pressure_in_kpa", "bearing_vibration_rms_mm_s", "supply_balance_index"]}
