@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 # preprocessing.py 에서 만들어둔 전처리 함수 가져오기
 from preprocessing import step1_prepare_window_data, step2_clean_and_drop_collinear_dynamic
+from inference_core import DEFAULT_CONTEXT_FEATURES
 
 
 # =====================================================================
@@ -202,8 +203,10 @@ def run_shap_ensemble(df, target_dict, top_ratio=0.2):
 
     # 각 타겟별로 순회하며 SHAP 추출
     for target, leak_cols in target_dict.items():
-        # X, y 분리 (타겟 본인과, 타겟을 계산하는 데 쓰인 부모 컬럼들 제외)
-        cols_to_drop = [target] + leak_cols
+        # X, y 분리 (타겟 본인 + 누수 컬럼 + 컨텍스트 피처 제외)
+        # 컨텍스트(time_sin/cos, pump_on 등)는 AE 입력엔 VIP 강제 주입으로 들어가지만,
+        # SHAP 기여도 리포트(beeswarm)에선 제외한다. MSE 스코어/RCA 제외 정책과 단일화.
+        cols_to_drop = [target] + leak_cols + list(DEFAULT_CONTEXT_FEATURES)
         valid_cols_to_drop = list(set(cols_to_drop).intersection(df.columns))
         X = df.drop(columns=valid_cols_to_drop)
         y = df[target]
