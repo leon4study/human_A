@@ -78,6 +78,16 @@ interface LineChartProps {
   refValues?: number[];  // 목표선 (예: target_ec)
   refColor?: string;
   warningThreshold?: number;
+  formatValue?: (v: number) => string;
+}
+
+function defaultFmt(v: number): string {
+  const abs = Math.abs(v);
+  if (abs === 0) return "0";
+  if (abs < 0.01) return v.toExponential(2);
+  if (abs < 1) return v.toFixed(3);
+  if (abs < 100) return v.toFixed(2);
+  return v.toFixed(1);
 }
 
 function MiniLineChart({
@@ -88,14 +98,18 @@ function MiniLineChart({
   refValues,
   refColor = "rgba(255,200,0,0.7)",
   warningThreshold,
+  formatValue,
 }: LineChartProps) {
   const valid = clampFinite(values);
   const refValid = refValues ? clampFinite(refValues) : [];
   const allValid = [...valid, ...refValid];
 
+  const fmt = formatValue ?? defaultFmt;
   const lastVal = valid[valid.length - 1];
   const lastValStr =
-    lastVal !== undefined ? `${lastVal.toFixed(1)} ${unit}` : "—";
+    lastVal !== undefined
+      ? `${fmt(lastVal)}${unit ? ` ${unit}` : ""}`
+      : "—";
 
   if (valid.length < 2) {
     return (
@@ -110,22 +124,49 @@ function MiniLineChart({
   const mn = Math.min(...allValid);
   const mx = Math.max(...allValid);
   const rng = mx - mn || 1;
-  const toX = (i: number, len: number) => PAD + (i / (len - 1)) * IW;
+  const toX = (i: number, len: number) =>
+    PAD + (len > 1 ? (i / (len - 1)) * IW : IW / 2);
   const toY = (v: number) => PAD + IH - ((v - mn) / rng) * IH;
 
-  const mainPts = values
-    .map((v, i) => `${toX(i, values.length)},${Number.isFinite(v) ? toY(v) : toY(mn)}`)
-    .join(" ");
+  // NaN 구간에서 선을 끊는다 (연속된 유한값 구간만 폴리라인으로 묶음)
+  const segments: Array<Array<{ x: number; y: number }>> = [];
+  let cur: Array<{ x: number; y: number }> = [];
+  values.forEach((v, i) => {
+    if (Number.isFinite(v)) {
+      cur.push({ x: toX(i, values.length), y: toY(v) });
+    } else if (cur.length > 0) {
+      segments.push(cur);
+      cur = [];
+    }
+  });
+  if (cur.length > 0) segments.push(cur);
 
-  const areaClose = `${toX(values.length - 1, values.length)},${CH - PAD} ${PAD},${CH - PAD}`;
+  // 마지막 유한값의 실제 인덱스 (끝이 NaN일 때 원 위치 보정)
+  let lastFiniteIdx = -1;
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (Number.isFinite(values[i])) {
+      lastFiniteIdx = i;
+      break;
+    }
+  }
 
   const refPts =
     refValues && refValues.length >= 2
-      ? refValues.map((v, i) => `${toX(i, refValues.length)},${toY(v)}`).join(" ")
+      ? refValues
+          .map((v, i) =>
+            Number.isFinite(v)
+              ? `${toX(i, refValues.length)},${toY(v)}`
+              : null,
+          )
+          .filter((s): s is string => s !== null)
+          .join(" ")
       : null;
 
   const warnY =
     warningThreshold !== undefined ? toY(warningThreshold) : null;
+
+  const pointsStr = (seg: Array<{ x: number; y: number }>) =>
+    seg.map((p) => `${p.x},${p.y}`).join(" ");
 
   return (
     <div style={{ width: CW }}>
@@ -141,21 +182,39 @@ function MiniLineChart({
           />
         )}
 
-        {/* 영역 채우기 */}
-        <polyline
-          points={`${PAD},${CH - PAD} ${mainPts} ${areaClose}`}
-          fill={`${color}18`}
-          stroke="none"
-        />
+        {/* 영역 채우기 — 구간별 */}
+        {segments.map((seg, idx) =>
+          seg.length >= 2 ? (
+            <polyline
+              key={`area-${idx}`}
+              points={`${seg[0].x},${CH - PAD} ${pointsStr(seg)} ${seg[seg.length - 1].x},${CH - PAD}`}
+              fill={`${color}18`}
+              stroke="none"
+            />
+          ) : null,
+        )}
 
-        {/* 메인 라인 */}
-        <polyline
-          points={mainPts}
-          fill="none"
-          stroke={color}
-          strokeWidth={1.5}
-          strokeLinejoin="round"
-        />
+        {/* 메인 라인 — 구간별 (고립된 1점 구간은 작은 점으로) */}
+        {segments.map((seg, idx) =>
+          seg.length >= 2 ? (
+            <polyline
+              key={`line-${idx}`}
+              points={pointsStr(seg)}
+              fill="none"
+              stroke={color}
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+            />
+          ) : (
+            <circle
+              key={`dot-${idx}`}
+              cx={seg[0].x}
+              cy={seg[0].y}
+              r={1.5}
+              fill={color}
+            />
+          ),
+        )}
 
         {/* 목표선 */}
         {refPts && (
@@ -168,11 +227,11 @@ function MiniLineChart({
           />
         )}
 
-        {/* 마지막 포인트 */}
-        {Number.isFinite(lastVal) && (
+        {/* 마지막 유한 포인트 */}
+        {lastFiniteIdx >= 0 && (
           <circle
-            cx={toX(values.length - 1, values.length)}
-            cy={toY(lastVal)}
+            cx={toX(lastFiniteIdx, values.length)}
+            cy={toY(values[lastFiniteIdx])}
             r={3}
             fill={color}
           />
@@ -342,78 +401,6 @@ function getDomainCharts(domain: string, buf: ChartBuffer): ChartRow[] {
             />
           ),
           description: "설비 이상 표준도표\n온도 80°C 이상 경고",
-        },
-      ];
-
-    case "nutrient":
-      return [
-        {
-          key: "ec",
-          element: (
-            <MiniLineChart
-              values={buf.mix_ec}
-              label="혼합액 EC"
-              unit="dS/m"
-              color="#4caf50"
-              refValues={buf.target_ec}
-              refColor="rgba(255,200,0,0.8)"
-            />
-          ),
-          description: "EC 추이\n점선=목표, 실선=실측",
-        },
-        {
-          key: "ph",
-          element: (
-            <MiniLineChart
-              values={buf.mix_ph}
-              label="혼합액 pH"
-              unit="pH"
-              color="#3eb8ff"
-              refValues={buf.target_ph}
-              refColor="rgba(255,200,0,0.8)"
-              warningThreshold={6.5}
-            />
-          ),
-          description: "pH 추이\n점선=목표, 6.5 이상 침전 주의",
-        },
-        {
-          key: "ec_vs_f",
-          element: (
-            <ScatterChart
-              xValues={buf.flow}
-              yValues={buf.mix_ec}
-              xLabel="유량"
-              yLabel="EC"
-              xUnit="L/min"
-              yUnit="dS/m"
-            />
-          ),
-          description: "유량-EC 관계\n유량 변화에 따른 EC 반응",
-        },
-        {
-          key: "motor_temp",
-          element: (
-            <MiniLineChart
-              values={buf.motor_temp}
-              label="모터 온도"
-              unit="°C"
-              color="#ff9800"
-              warningThreshold={80}
-            />
-          ),
-          description: "동특성 (모터 온도)\n급등 시 공급 과부하",
-        },
-        {
-          key: "pressure",
-          element: (
-            <MiniLineChart
-              values={buf.pressure}
-              label="토출 압력"
-              unit="kPa"
-              color="#9fe7ff"
-            />
-          ),
-          description: "설비 이상 표준도표\n배관 저항 변화 모니터링",
         },
       ];
 
@@ -685,15 +672,22 @@ function ChartRow({
 
 // ─── 비교분석 섹션 (§2-2) ────────────────────────────────────────────────────
 
-const CMP_EPS = 1e-6;
-const CMP_MIN_SAMPLES = 30;
+const CMP_MIN_DENOM_FLOW = 1;      // L/min — 이보다 작으면 비율 무의미 (펌프 정지 구간 제외)
+const CMP_MIN_DENOM_POWER = 0.05;  // kW — 저전력 구간 비율 불안정
+const CMP_WIN = 5;                 // 최근 변동성 윈도우 (포인트 수)
+const CMP_MIN_SAMPLES = 30;        // 12h 통계 유효 샘플 수
 
-function lastFinite(arr?: number[]): number | undefined {
-  if (!Array.isArray(arr)) return undefined;
-  for (let i = arr.length - 1; i >= 0; i--) {
-    if (Number.isFinite(arr[i])) return arr[i];
-  }
-  return undefined;
+function stdOf(arr: number[]): number {
+  if (arr.length < 2) return NaN;
+  const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+  return Math.sqrt(
+    arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length,
+  );
+}
+
+function meanOf(arr: number[]): number {
+  if (arr.length === 0) return NaN;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
 function ComparativeSection({
@@ -703,110 +697,158 @@ function ComparativeSection({
   chartSnapshot?: ChartBuffer | null;
   comparative?: ComparativeMetrics | null;
 }) {
-  // 순간 지표 — chartSnapshot 최신 포인트 사용
-  const dp = chartSnapshot ? lastFinite(chartSnapshot.pressure) : undefined;
-  const sp = chartSnapshot ? lastFinite(chartSnapshot.suction) : undefined;
-  const fl = chartSnapshot ? lastFinite(chartSnapshot.flow) : undefined;
-  const pw = chartSnapshot ? lastFinite(chartSnapshot.motor_power) : undefined;
+  const n = chartSnapshot?.ts?.length ?? 0;
 
-  const pressureFlowRatio =
-    dp !== undefined && fl !== undefined ? dp / (fl + CMP_EPS) : undefined;
-  const dpPerFlow =
-    dp !== undefined && sp !== undefined && fl !== undefined
-      ? (dp - sp) / (fl + CMP_EPS)
-      : undefined;
-  const flowPerPower =
-    fl !== undefined && pw !== undefined ? fl / (pw + CMP_EPS) : undefined;
+  // 포인트별 파생 시계열 생성
+  const pressureFlowRatio: number[] = [];
+  const dpPerFlow: number[] = [];
+  const flowPerPower: number[] = [];
+  const pVolSeries: number[] = []; // 최근 압력 std
+  const fCvSeries: number[] = [];  // 최근 유량 CV
+  const tempSlope: number[] = [];  // °C/s
 
-  // 온도 변화율 — 마지막 2포인트 diff
-  let tempSlope: number | undefined;
-  if (
-    chartSnapshot &&
-    Array.isArray(chartSnapshot.motor_temp) &&
-    Array.isArray(chartSnapshot.ts) &&
-    chartSnapshot.motor_temp.length >= 2 &&
-    chartSnapshot.ts.length >= 2
-  ) {
-    const n = Math.min(chartSnapshot.motor_temp.length, chartSnapshot.ts.length);
-    const dT = chartSnapshot.motor_temp[n - 1] - chartSnapshot.motor_temp[n - 2];
-    const dt = (chartSnapshot.ts[n - 1] - chartSnapshot.ts[n - 2]) / 1000;
-    if (Number.isFinite(dT) && Number.isFinite(dt) && dt > 0) {
-      tempSlope = dT / dt;
+  if (chartSnapshot && n > 0) {
+    const { pressure, suction, flow, motor_power, motor_temp, ts } = chartSnapshot;
+
+    for (let i = 0; i < n; i++) {
+      const dp = pressure[i];
+      const sp = suction[i];
+      const fl = flow[i];
+      const pw = motor_power[i];
+
+      pressureFlowRatio.push(
+        Number.isFinite(dp) && Number.isFinite(fl) && fl >= CMP_MIN_DENOM_FLOW
+          ? dp / fl
+          : NaN,
+      );
+      dpPerFlow.push(
+        Number.isFinite(dp) &&
+          Number.isFinite(sp) &&
+          Number.isFinite(fl) &&
+          fl >= CMP_MIN_DENOM_FLOW
+          ? (dp - sp) / fl
+          : NaN,
+      );
+      flowPerPower.push(
+        Number.isFinite(fl) && Number.isFinite(pw) && pw >= CMP_MIN_DENOM_POWER
+          ? fl / pw
+          : NaN,
+      );
+
+      // 롤링 윈도우 변동성 (최근 CMP_WIN 포인트 중 유한값만 사용)
+      const winStart = Math.max(0, i - CMP_WIN + 1);
+      const winP: number[] = [];
+      const winF: number[] = [];
+      for (let j = winStart; j <= i; j++) {
+        if (Number.isFinite(pressure[j])) winP.push(pressure[j]);
+        if (Number.isFinite(flow[j])) winF.push(flow[j]);
+      }
+      pVolSeries.push(winP.length >= 2 ? stdOf(winP) : NaN);
+      const mF = meanOf(winF);
+      fCvSeries.push(
+        winF.length >= 2 && Number.isFinite(mF) && mF > 0
+          ? stdOf(winF) / mF
+          : NaN,
+      );
+
+      // 온도 변화율 (i=0은 이전 포인트 없음)
+      if (i === 0) {
+        tempSlope.push(NaN);
+      } else {
+        const dT = motor_temp[i] - motor_temp[i - 1];
+        const dt = (ts[i] - ts[i - 1]) / 1000;
+        tempSlope.push(
+          Number.isFinite(dT) && Number.isFinite(dt) && dt > 0
+            ? dT / dt
+            : NaN,
+        );
+      }
     }
   }
 
   const samples = comparative?.samples ?? 0;
-  const collecting = samples < CMP_MIN_SAMPLES;
-  const pVol = comparative?.pressureVolatility;
-  const fCv = comparative?.flowCv;
+  const pVol12h = comparative?.pressureVolatility;
+  const fCv12h = comparative?.flowCv;
+  const aggReady = samples >= CMP_MIN_SAMPLES;
+  const fmtAgg = (v: number | null | undefined) =>
+    v == null || !Number.isFinite(v) ? "—" : v.toFixed(3);
 
-  const rows: { label: string; value: string; desc: string }[] = [
+  interface CmpChart {
+    key: string;
+    label: string;
+    unit: string;
+    series: number[];
+    color: string;
+    description: string;
+  }
+
+  const charts: CmpChart[] = [
     {
+      key: "p_over_f",
       label: "유량 대비 압력 비율",
-      value:
-        pressureFlowRatio !== undefined
-          ? `${pressureFlowRatio.toFixed(2)} kPa·min/L`
-          : "—",
-      desc: "discharge / flow — 배관 저항 지표",
+      unit: "kPa·min/L",
+      series: pressureFlowRatio,
+      color: "#9fe7ff",
+      description: "discharge / flow\n배관 저항 지표",
     },
     {
+      key: "dp_over_f",
       label: "차압 대비 유량",
-      value: dpPerFlow !== undefined ? `${dpPerFlow.toFixed(2)} kPa·min/L` : "—",
-      desc: "(discharge − suction) / flow — 막힘·누수 조기감지",
+      unit: "kPa·min/L",
+      series: dpPerFlow,
+      color: "#3eb8ff",
+      description: "(discharge − suction) / flow\n막힘·누수 조기감지",
     },
     {
+      key: "f_over_p",
       label: "유량 대비 전력 효율",
-      value: flowPerPower !== undefined ? `${flowPerPower.toFixed(1)} L/min/kW` : "—",
-      desc: "flow / motor_power — 펌프 효율",
+      unit: "L/min/kW",
+      series: flowPerPower,
+      color: "#4caf50",
+      description: "flow / motor_power\n펌프 효율 추이",
     },
     {
-      label: "압력 변동성 (12h)",
-      value: collecting
-        ? `수집 중 (${samples}/${CMP_MIN_SAMPLES})`
-        : pVol !== null && pVol !== undefined
-          ? pVol.toFixed(3)
-          : "—",
-      desc: "std(ΔP) / IQR(ΔP) — 부하 불안정/간헐 막힘",
+      key: "p_vol",
+      label: "압력 변동성 (최근)",
+      unit: "kPa",
+      series: pVolSeries,
+      color: "#ff9800",
+      description: `rolling std, win=${CMP_WIN}\n12h 값: ${aggReady ? fmtAgg(pVol12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
     },
     {
-      label: "유량 변동성 (12h)",
-      value: collecting
-        ? `수집 중 (${samples}/${CMP_MIN_SAMPLES})`
-        : fCv !== null && fCv !== undefined
-          ? fCv.toFixed(3)
-          : "—",
-      desc: "CV = std(flow) / mean(flow)",
+      key: "f_cv",
+      label: "유량 변동성 (최근)",
+      unit: "",
+      series: fCvSeries,
+      color: "#ffc107",
+      description: `rolling CV, win=${CMP_WIN}\n12h 값: ${aggReady ? fmtAgg(fCv12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
     },
     {
+      key: "temp_slope",
       label: "온도 변화율",
-      value: tempSlope !== undefined ? `${tempSlope.toFixed(4)} °C/s` : "—",
-      desc: "diff(motor_temp) / dt — 발열 추이",
+      unit: "°C/s",
+      series: tempSlope,
+      color: "#f44336",
+      description: "diff(motor_temp) / dt\n발열 추이",
     },
   ];
 
   return (
-    <div
-      className="equipment-modal-section"
-      style={{ marginTop: "20px" }}
-    >
+    <div className="equipment-modal-section" style={{ marginTop: "20px" }}>
       <div className="equipment-modal-section-title">비교분석</div>
-      {rows.map((r) => (
-        <div className="equipment-modal-row" key={r.label}>
-          <span className="equipment-modal-label">
-            <div>{r.label}</div>
-            <div
-              style={{
-                fontSize: "10px",
-                color: "rgba(225,243,255,0.42)",
-                marginTop: "3px",
-                fontWeight: 400,
-              }}
-            >
-              {r.desc}
-            </div>
-          </span>
-          <span className="equipment-modal-value">{r.value}</span>
-        </div>
+      {charts.map((c) => (
+        <ChartRow
+          key={c.key}
+          chartEl={
+            <MiniLineChart
+              values={c.series}
+              label={c.label}
+              unit={c.unit}
+              color={c.color}
+            />
+          }
+          description={c.description}
+        />
       ))}
     </div>
   );
@@ -1019,7 +1061,7 @@ function AiAnalysisModal({
                     </div>
                   )}
 
-                  {/* 센서 차트 5종 */}
+                  {/* 센서 차트 (도메인별) */}
                   {chartRows.length > 0 ? (
                     <div>
                       {chartRows.map((row) => (
@@ -1030,7 +1072,7 @@ function AiAnalysisModal({
                         />
                       ))}
                     </div>
-                  ) : (
+                  ) : !chartSnapshot ? (
                     <div
                       style={{
                         fontSize: "13px",
@@ -1041,7 +1083,7 @@ function AiAnalysisModal({
                     >
                       센서 데이터 수신 대기 중...
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )}
             </>

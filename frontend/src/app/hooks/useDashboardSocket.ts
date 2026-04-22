@@ -42,10 +42,6 @@ export interface ChartBuffer {
   motor_temp: number[];    // motor_temperature_c
   pump_rpm: number[];      // pump_rpm
   bearing_vib: number[];   // bearing_vibration_rms_mm_s
-  mix_ph: number[];        // mix_ph
-  mix_ec: number[];        // mix_ec_ds_m
-  target_ph: number[];     // mix_target_ph
-  target_ec: number[];     // mix_target_ec_ds_m
   zone1_moisture: number[]; // zone1_substrate_moisture_pct
   zone1_flow: number[];    // zone1_flow_l_min
 }
@@ -86,8 +82,8 @@ function computeMean(arr: number[]): number {
 function makeEmptyChartBuffer(): ChartBuffer {
   return {
     ts: [], pressure: [], suction: [], flow: [], motor_power: [],
-    motor_current: [], motor_temp: [], pump_rpm: [], bearing_vib: [], mix_ph: [],
-    mix_ec: [], target_ph: [], target_ec: [], zone1_moisture: [], zone1_flow: [],
+    motor_current: [], motor_temp: [], pump_rpm: [], bearing_vib: [],
+    zone1_moisture: [], zone1_flow: [],
   };
 }
 
@@ -96,8 +92,7 @@ function snapChartBuffer(b: ChartBuffer): ChartBuffer {
     ts: [...b.ts], pressure: [...b.pressure], suction: [...b.suction],
     flow: [...b.flow], motor_power: [...b.motor_power], motor_current: [...b.motor_current],
     motor_temp: [...b.motor_temp], pump_rpm: [...b.pump_rpm], bearing_vib: [...b.bearing_vib],
-    mix_ph: [...b.mix_ph], mix_ec: [...b.mix_ec], target_ph: [...b.target_ph],
-    target_ec: [...b.target_ec], zone1_moisture: [...b.zone1_moisture], zone1_flow: [...b.zone1_flow],
+    zone1_moisture: [...b.zone1_moisture], zone1_flow: [...b.zone1_flow],
   };
 }
 
@@ -187,10 +182,6 @@ function useDashboardSocket(): DashboardSocketState {
     pushN(b.motor_temp, raw.motor_temperature_c);
     pushN(b.pump_rpm, raw.pump_rpm);
     pushN(b.bearing_vib, raw.bearing_vibration_rms_mm_s);
-    pushN(b.mix_ph, raw.mix_ph);
-    pushN(b.mix_ec, raw.mix_ec_ds_m);
-    pushN(b.target_ph, raw.mix_target_ph);
-    pushN(b.target_ec, raw.mix_target_ec_ds_m);
     pushN(b.zone1_moisture, raw.zone1_substrate_moisture_pct);
     pushN(b.zone1_flow, raw.zone1_flow_l_min);
     // 최대 CHART_MAX 포인트 유지
