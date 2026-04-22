@@ -16,7 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 # 우리가 만들어둔 '메인 셰프(파이프라인 매니저)' 모듈 불러오기
-from feature_engineering import VIP_FEATURES, inject_vip_features
+from feature_engineering import SENSOR_MANDATORY, VIP_FEATURES, inject_vip_features
 from feature_selection import run_feature_selection_experiment
 from inference_core import actionable_feature_mask, build_target_reference_profiles
 from logger import get_logger
@@ -288,6 +288,25 @@ if __name__ == "__main__":
         if injected_vips:
             logger.info(
                 f"🔗 오토인코더 입력 데이터에 VIP 피처 강제 주입: {injected_vips}"
+            )
+
+        # 도메인별 필수 센서 강제 주입 — SHAP robust selection이 0개/소수만 뽑아도
+        # 실제 센서 피처가 AE 입력에 반드시 포함되도록 보장.
+        # 소스는 df_agg (raw 센서 + 파생 포함한 윈도우 집계본).
+        mandatory_sensors = SENSOR_MANDATORY.get(system_name, [])
+        X_train_ae, injected_sensors = inject_vip_features(
+            X_train_ae, df_agg, mandatory_sensors
+        )
+        if injected_sensors:
+            logger.info(
+                f"🔗 [{system_name.upper()}] 필수 센서 강제 주입: {injected_sensors}"
+            )
+        missing_sensors = [
+            s for s in mandatory_sensors if s not in X_train_ae.columns
+        ]
+        if missing_sensors:
+            logger.warning(
+                f"⚠️  [{system_name.upper()}] SENSOR_MANDATORY에 있으나 df_agg에 없는 피처: {missing_sensors}"
             )
 
         # 2. 도메인별 모델 학습 및 저장 (이름을 같이 넘겨줌)
