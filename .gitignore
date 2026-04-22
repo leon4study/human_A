@@ -299,4 +299,6 @@ processor*
 # .zip 파일 무시
 *.zip
 
-
+/models_backup_*
+/ppt
+ppt/
