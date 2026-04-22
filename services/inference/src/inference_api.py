@@ -17,8 +17,22 @@ from fastapi import FastAPI, Body, HTTPException
 from typing import Dict, Any, List
 from logger import get_logger
 from dotenv import load_dotenv
-from contextlib import asynccontextmanager
 from apscheduler.schedulers.background import BackgroundScheduler
+
+# 분리해둔 추론 함수들 불러오기
+from inference_core import (
+    actionable_feature_mask,
+    build_feature_details,
+    calculate_rca,
+    get_alarm_status
+)
+from ko_labels import ko_alarm, ko_domain, ko_feature
+from preprocessing import step1_prepare_window_data
+
+
+app = FastAPI(title="SmartFarm Multi-Domain 예지보전 API")
+logger = get_logger("API")
+
 
 # =====================================================================
 # 환경 변수 로드 (.env.local 또는 배포 환경 변수)
@@ -41,23 +55,51 @@ if ENV == "local":
 else:
     logger.info(f"Using deployed environment: {ENV}")
 
-# DB 설정
-DB_URL = os.getenv("AI_DATABASE_URL", "postgresql://farmer:plant_rich@localhost:5432/smartfarm")
-engine = sa.create_engine(DB_URL)
-
-# S3 설정
+DB_URL = os.getenv(
+    "AI_DATABASE_URL",
+    "postgresql://farmer:plant_rich@localhost:5432/smartfarm",
+)
+DEFAULT_SENSOR_ID = os.getenv("AI_SENSOR_ID", "SF-ZONE-01-MAIN")
+engine = None
+DB_STATUS = {
+    "available": False,
+    "last_checked_at": None,
+    "last_error": None,
+    "url": None,
+}
 S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://localhost:9000")
 S3_ACCESS_KEY = os.getenv("MINIO_ROOT_USER", "admin")
 S3_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD", "password123")
-BUCKET_NAME = "raw-data"
-s3 = boto3.client('s3',
-                  endpoint_url=S3_ENDPOINT,
-                  aws_access_key_id=S3_ACCESS_KEY,
-                  aws_secret_access_key=S3_SECRET_KEY,
-                  region_name='us-east-1')
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "raw-data")
+S3_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+s3 = boto3.client(
+    "s3",
+    endpoint_url=S3_ENDPOINT,
+    aws_access_key_id=S3_ACCESS_KEY,
+    aws_secret_access_key=S3_SECRET_KEY,
+    region_name=S3_REGION,
+)
+scheduler = None
+BATCH_STATUS = {
+    "enabled": True,
+    "interval_minutes": 1,
+    "last_run_at": None,
+    "last_success_at": None,
+    "last_error": None,
+    "last_source_key": None,
+    "last_processed_etag": None,
+    "last_rows_read": 0,
+}
 
-# 모델 관리 변수
-MODELS_DATA = {}
+
+# =====================================================================
+# DB 연결/상태 관리
+# =====================================================================
+def _mask_db_url(db_url: str) -> str:
+    try:
+        return str(sa.engine.make_url(db_url).render_as_string(hide_password=True))
+    except Exception:
+        return "<invalid-db-url>"
 
 
 def _set_db_status(available: bool, error: Exception | None = None) -> None:
@@ -66,72 +108,234 @@ def _set_db_status(available: bool, error: Exception | None = None) -> None:
     DB_STATUS["last_error"] = None if error is None else str(error)
     DB_STATUS["url"] = _mask_db_url(DB_URL)
 
-# =====================================================================
-# 2. 핵심 비즈니스 로직 (추론 및 결과 전파)
-# =====================================================================
-def process_inference_and_save(data: Dict[str, Any]):
-    """실시간 혹은 백엔드로부터 전달받은 배치 데이터를 모델별 추론 후 DB 저장 및 백엔드 전송"""
-    print(f"[RAW] 추론 입력 수신 | {json.dumps(data, ensure_ascii=False, default=str)}")
-    if not MODELS_DATA:
-        print("⚠️ 로드된 모델이 없어 추론을 건너뜁니다.")
-        return {"error": "no models loaded"}
 
 def initialize_db_engine() -> None:
     global engine
 
     try:
-        for sys_name, assets in MODELS_DATA.items():
-            conf = assets["config"]
-            feats = conf["features"]
-            
-            # 1) 데이터 전처리 (누락 시 0.0 보간)
-            input_vals = [float(data.get(f, 0.0)) for f in feats]
-            scaled = assets["scaler"].transform(pd.DataFrame([input_vals], columns=feats))
-            
-            # 2) 모델 추론 (MSE 계산)
-            pred = assets["model"].predict(scaled, verbose=0)
-            mse = float(np.mean(np.power(scaled - pred, 2)))
-
-            # 3) 알람 레벨 판별
-            lvl, lbl = 0, "Normal"
-            if mse >= conf["threshold_error"]: lvl, lbl = 3, "Error 🔴"
-            elif mse >= conf["threshold_warning"]: lvl, lbl = 2, "Warning 🟠"
-            elif mse >= conf["threshold_caution"]: lvl, lbl = 1, "Caution 🔸"
-
-            # 4) 원인 분석 (RCA)
-            feat_errors = np.power(scaled - pred, 2)[0]
-            err_sum = np.sum(feat_errors) if np.sum(feat_errors) > 0 else 1e-10
-            rca = sorted([
-                {"feature": n, "contribution": round((float(e)/err_sum)*100, 1)}
-                for n, e in zip(feats, feat_errors)
-            ], key=lambda x: x["contribution"], reverse=True)[:3]
-
-            domain_reports[sys_name] = {
-                "score": round(mse, 6),
-                "alarm": {"level": lvl, "label": lbl},
-                "rca": rca
-            }
-            print(f"[INFERENCE] {sys_name.upper()} | score={round(mse,6)} | alarm={lbl} | rca={rca}")
+        candidate = sa.create_engine(DB_URL, pool_pre_ping=True)
+        with candidate.connect() as conn:
+            conn.execute(sa.text("SELECT 1"))
+        engine = candidate
+        _set_db_status(True)
+        logger.info("Inference DB engine initialized and connection verified")
+    except Exception as e:
+        engine = None
+        _set_db_status(False, e)
+        logger.error(f"Failed to initialize inference DB engine: {e}", exc_info=True)
 
 
-        print(f"[INFERENCE] 최종 결과 | overall_level={max_level} | status={final_status} | {json.dumps(domain_reports, ensure_ascii=False)}")
+initialize_db_engine()
 
-        # 6) DB 저장
-        with engine.connect() as conn:
-            query = sa.text("""
+
+def save_inference_history(sensor_id: str, payload: Dict[str, Any]) -> None:
+    """Persist one inference response into inference_history when DB is available."""
+    if engine is None:
+        logger.warning(
+            "DB engine is unavailable before insert; attempting reconnect once"
+        )
+        initialize_db_engine()
+        if engine is None:
+            logger.error(
+                "Skip inference_history insert because DB engine is unavailable"
+            )
+            return
+
+    try:
+        with engine.begin() as conn:
+            query = sa.text(
+                """
                 INSERT INTO inference_history (
                     sensor_id, overall_level, overall_status,
                     inference_result, action_required, data_timestamp
                 ) VALUES (:sid, :lvl, :status, :res, :act, :ts)
-            """)
-            conn.execute(query, {
-                "sid": payload["sensor_id"], "lvl": payload["overall_alarm_level"],
-                "status": payload["overall_status"], "res": json.dumps(payload["domain_reports"]),
-                "act": payload["action_required"], "ts": payload["timestamp"]
-            })
-            conn.commit()
+                """
+            )
+            conn.execute(
+                query,
+                {
+                    "sid": sensor_id,
+                    "lvl": payload["overall_alarm_level"],
+                    "status": payload["overall_status"],
+                    "res": json.dumps(
+                        payload["domain_reports"],
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                    "act": payload["action_required"],
+                    "ts": payload["timestamp"],
+                },
+            )
+        _set_db_status(True)
+        logger.info(
+            "Saved inference_history row sensor_id=%s overall_level=%s timestamp=%s",
+            sensor_id,
+            payload["overall_alarm_level"],
+            payload["timestamp"],
+        )
+    except Exception as e:
+        _set_db_status(False, e)
+        logger.error(
+            "Failed to save inference_history sensor_id=%s timestamp=%s: %s",
+            sensor_id,
+            payload.get("timestamp"),
+            e,
+            exc_info=True,
+        )
 
-        return payload
+
+# =====================================================================
+# S3 배치 폴링
+# =====================================================================
+def _update_batch_status(success: bool, error: Exception | None = None) -> None:
+    BATCH_STATUS["last_run_at"] = datetime.datetime.now().isoformat()
+    if success:
+        BATCH_STATUS["last_success_at"] = BATCH_STATUS["last_run_at"]
+        BATCH_STATUS["last_error"] = None
+    elif error is not None:
+        BATCH_STATUS["last_error"] = str(error)
+
+
+def _build_batch_payload_from_dataframe(
+    df_raw: pd.DataFrame,
+    source_key: str,
+    source_timestamp: str,
+) -> Dict[str, Any] | None:
+    logger.info(
+        "🧱 [BATCH] payload 빌드 시작 key=%s shape=%s columns=%s",
+        source_key,
+        df_raw.shape,
+        list(df_raw.columns)[:10] + (["..."] if len(df_raw.columns) > 10 else []),
+    )
+    if df_raw.empty:
+        logger.warning("🧱 [BATCH] 빈 데이터프레임 — payload=None")
+        return None
+
+    if "timestamp" in df_raw.columns:
+        try:
+            prepared_raw = df_raw.copy()
+            prepared_raw["timestamp"] = pd.to_datetime(prepared_raw["timestamp"])
+            prepared_raw = prepared_raw.sort_values("timestamp").set_index("timestamp")
+            logger.info(
+                "🧱 [BATCH] timestamp 정렬 완료 range=%s ~ %s rows=%d",
+                prepared_raw.index.min(),
+                prepared_raw.index.max(),
+                len(prepared_raw),
+            )
+            df_window, _ = step1_prepare_window_data(
+                prepared_raw, window_method="tumbling"
+            )
+            logger.info(
+                "🧱 [BATCH] tumbling 집계 완료 window_shape=%s", df_window.shape
+            )
+            if not df_window.empty:
+                payload = df_window.iloc[-1].to_dict()
+                payload["timestamp"] = source_timestamp
+                logger.info(
+                    "🧱 [BATCH] 마지막 window 선택 payload_keys=%d sample_keys=%s",
+                    len(payload),
+                    list(payload.keys())[:8],
+                )
+                return payload
+        except Exception as e:
+            logger.warning(
+                "🧱 [BATCH] Batch preprocessing failed for key=%s; falling back to numeric mean: %s",
+                source_key,
+                e,
+            )
+
+    numeric_payload = df_raw.mean(numeric_only=True).to_dict()
+    if not numeric_payload:
+        logger.warning("🧱 [BATCH] numeric fallback도 비어있음 — payload=None")
+        return None
+    numeric_payload["timestamp"] = source_timestamp
+    logger.info(
+        "🧱 [BATCH] numeric mean fallback 사용 keys=%d", len(numeric_payload)
+    )
+    return numeric_payload
+
+
+def run_inference_batch() -> None:
+    BATCH_STATUS["last_run_at"] = datetime.datetime.now().isoformat()
+    logger.info("========================================================")
+    logger.info("🚀 [BATCH] 시작 at=%s", BATCH_STATUS["last_run_at"])
+
+    try:
+        logger.info(
+            "🔍 [BATCH] S3 polling bucket=%s endpoint=%s",
+            S3_BUCKET_NAME,
+            S3_ENDPOINT,
+        )
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME)
+        contents = response.get("Contents", [])
+        csv_files = [item for item in contents if item["Key"].endswith(".csv")]
+        logger.info(
+            "🔍 [BATCH] 총 객체=%d, CSV=%d", len(contents), len(csv_files)
+        )
+
+        if not csv_files:
+            _update_batch_status(True)
+            logger.info("⚪ [BATCH] CSV 없음 — 종료")
+            return
+
+        latest_file = max(csv_files, key=lambda item: item["LastModified"])
+        latest_etag = latest_file.get("ETag")
+        logger.info(
+            "📄 [BATCH] latest key=%s last_modified=%s size=%s etag=%s",
+            latest_file["Key"],
+            latest_file["LastModified"],
+            latest_file.get("Size"),
+            latest_etag,
+        )
+
+        if (
+            latest_file["Key"] == BATCH_STATUS["last_source_key"]
+            and latest_etag == BATCH_STATUS["last_processed_etag"]
+        ):
+            _update_batch_status(True)
+            logger.info(
+                "⏭️  [BATCH] 이미 처리한 파일 — skip key=%s", latest_file["Key"]
+            )
+            return
+
+        logger.info("⬇️  [BATCH] S3 get_object 다운로드 시작 key=%s", latest_file["Key"])
+        obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=latest_file["Key"])
+        df_raw = pd.read_csv(BytesIO(obj["Body"].read()))
+        BATCH_STATUS["last_rows_read"] = int(len(df_raw))
+        logger.info(
+            "⬇️  [BATCH] CSV 로드 완료 rows=%d cols=%d", len(df_raw), df_raw.shape[1]
+        )
+
+        source_timestamp = latest_file["LastModified"].isoformat()
+        payload = _build_batch_payload_from_dataframe(
+            df_raw=df_raw,
+            source_key=latest_file["Key"],
+            source_timestamp=source_timestamp,
+        )
+        if payload is None:
+            _update_batch_status(True)
+            logger.warning(
+                "⚠️  [BATCH] payload 생성 실패 — skip key=%s", latest_file["Key"]
+            )
+            return
+
+        logger.info(
+            "🤖 [BATCH] 추론 파이프라인 호출 key=%s rows=%s payload_timestamp=%s",
+            latest_file["Key"],
+            len(df_raw),
+            payload.get("timestamp"),
+        )
+        result = run_inference_pipeline(payload, trigger_source="scheduled-batch")
+        logger.info(
+            "✅ [BATCH] 추론 완료 overall_level=%s status=%s action=%s",
+            result.get("overall_alarm_level"),
+            result.get("overall_status"),
+            result.get("action_required"),
+        )
+        BATCH_STATUS["last_source_key"] = latest_file["Key"]
+        BATCH_STATUS["last_processed_etag"] = latest_etag
+        _update_batch_status(True)
+        logger.info("🏁 [BATCH] 종료 (성공) key=%s", latest_file["Key"])
 
     except Exception as e:
         _update_batch_status(False, e)
@@ -139,34 +343,7 @@ def initialize_db_engine() -> None:
 
 
 # =====================================================================
-# 3. 추론 배치 (1분마다 S3 최신 데이터 → 추론 → DB 저장)
-# =====================================================================
-def run_inference_batch():
-    try:
-        print(f"🔬 [추론 배치] S3 최신 파일 탐색 중...")
-        response = s3.list_objects_v2(Bucket=BUCKET_NAME)
-        if 'Contents' not in response:
-            print("⚠️ [추론 배치] S3 버킷이 비어있음, 스킵")
-            return
-
-        csv_files = [f for f in response['Contents'] if f['Key'].endswith('.csv')]
-        if not csv_files:
-            return
-
-        latest_file = sorted(csv_files, key=lambda x: x['LastModified'], reverse=True)[0]
-        obj = s3.get_object(Bucket=BUCKET_NAME, Key=latest_file['Key'])
-        df = pd.read_csv(BytesIO(obj['Body'].read()))
-
-        if not df.empty:
-            avg_record = df.mean(numeric_only=True).to_dict()
-            avg_record["timestamp"] = latest_file['LastModified'].isoformat()
-            print(f"🚀 [추론 배치] 추론 시작 | 파일={latest_file['Key']}")
-            process_inference_and_save(avg_record)
-    except Exception as e:
-        print(f"❌ [추론 배치 Error] {e}")
-
-# =====================================================================
-# 4. FastAPI Lifespan 및 서버 설정
+# 1. 멀티 모델 및 설정 로드 (서버 기동 시)
 # =====================================================================
 MODELS_DATA = {}
 
@@ -214,6 +391,21 @@ try:
 
 except Exception as e:
     logger.error(f"❌ 초기화 중 치명적 에러 발생: {e}")
+
+
+# SHAP 아티팩트 로드 (frontend beeswarm용 — 학습 시점 정적 값)
+SHAP_CACHE: Dict[str, Any] = {}
+for sys_name in SYSTEMS:
+    shap_path = os.path.join(save_dir, f"{sys_name}_shap.json")
+    if os.path.exists(shap_path):
+        try:
+            with open(shap_path, "r") as f:
+                SHAP_CACHE[sys_name] = json.load(f)
+            logger.info(f"📊 [{sys_name.upper()}] SHAP 아티팩트 로드 완료")
+        except Exception as e:
+            logger.error(f"❌ [{sys_name.upper()}] SHAP 아티팩트 로드 실패: {e}")
+    else:
+        logger.warning(f"⚠️ [{sys_name.upper()}] SHAP 아티팩트 없음 (train.py 재실행 필요): {shap_path}")
 
 
 # =====================================================================
@@ -324,13 +516,34 @@ def run_inference_pipeline(
                 per_feature_thresholds=per_feature_thresholds,
             )
             # 5. 결과 조립
+            # target_reference_profiles는 train.py에서 저장된 config를 그대로 쓰지만,
+            # 구버전 config에는 한글명이 없어 런타임에 얇게 주입 (재학습 불필요).
+            target_profiles_raw = config.get("target_reference_profiles", {}) or {}
+            target_profiles = {}
+            for tname, tprof in target_profiles_raw.items():
+                tprof_out = dict(tprof)
+                tprof_out.setdefault("한글명", ko_feature(tname))
+                rel_raw = tprof_out.get("related_feature_lines", {}) or {}
+                rel_out = {}
+                for fname, line in rel_raw.items():
+                    line_out = dict(line)
+                    line_out.setdefault("한글명", ko_feature(fname))
+                    rel_out[fname] = line_out
+                tprof_out["related_feature_lines"] = rel_out
+                target_profiles[tname] = tprof_out
+
             final_results[sys_name] = {
+                "도메인명": ko_domain(sys_name),
                 "metrics": {
                     "current_mse": round(mse_score, 6),
-                    "train_loss": config.get("train_loss", "N/A"),
-                    "val_loss": config.get("val_loss", "N/A"),
+                    "train_loss": config.get("metrics", {}).get("train_loss", []),
+                    "val_loss": config.get("metrics", {}).get("val_loss", []),
                 },
-                "alarm": {"level": alarm_level, "label": label},
+                "alarm": {
+                    "level": alarm_level,
+                    "label": label,
+                    "한글": ko_alarm(label),
+                },
                 "global_thresholds": {
                     "caution": round(t_caut, 6),
                     "warning": round(t_warn, 6),
@@ -339,9 +552,7 @@ def run_inference_pipeline(
                 "per_feature_thresholds": config.get("per_feature_thresholds", {}),
                 "rca_top3": rca,
                 "feature_details": feature_details,
-                "target_reference_profiles": config.get(
-                    "target_reference_profiles", {}
-                ),
+                "target_reference_profiles": target_profiles,
             }
 
             # 전체 알람 수위 갱신 (가장 심각한 쪽 기준)
@@ -349,18 +560,120 @@ def run_inference_pipeline(
                 total_alarm_level = alarm_level
                 overall_status = label
 
-    print(f"⏰ 총 {len(MODELS_DATA)}개 모델 로드됨. 배치 스케줄러 가동 중...")
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(run_inference_batch, 'interval', minutes=1)
-    scheduler.start()
-    yield
-    scheduler.shutdown()
-    print("🛑 시스템 종료")
+        # 6. 스파이크 정보 추출 (시뮬레이터가 전처리 후 넘겨준 값 passthrough)
+        spike_info = {
+            "is_spike": bool(realtime_data.get("is_spike", False)),
+            "is_startup_spike": bool(realtime_data.get("is_startup_spike", False)),
+            "is_anomaly_spike": bool(realtime_data.get("is_anomaly_spike", False)),
+        }
+
+        # 7. 최종 응답 페이로드
+        # raw_inputs: 프론트가 파생변수(pressure_flow_ratio, dp_per_flow,
+        # pressure_volatility, filter_delta_p 등) 만들 때 쓰도록 요청 원시값 passthrough.
+        # filter 2개는 AE 모델엔 안 쓰지만 룰 기반 필터 페이지용으로 전달.
+        raw_input_keys = [
+            "discharge_pressure_kpa",
+            "suction_pressure_kpa",
+            "flow_rate_l_min",
+            "motor_power_kw",
+            "motor_temperature_c",
+            "pump_rpm",
+            "filter_pressure_in_kpa",
+            "filter_pressure_out_kpa",
+        ]
+        raw_inputs = {
+            k: float(realtime_data[k]) for k in raw_input_keys if k in realtime_data
+        }
+
+        # response_payload = {
+        #     "timestamp": realtime_data.get(
+        #         "timestamp", datetime.datetime.now().isoformat()
+        #     ),
+        #     "overall_alarm_level": total_alarm_level,
+        #     "overall_status": overall_status,
+        #     "spike_info": spike_info,
+        #     "raw_inputs": raw_inputs,
+        #     "domain_reports": final_results,
+        #     "action_required": (
+        #         "System check recommended" if total_alarm_level >= 2 else "Optimal"
+        #     ),
+        # }
+
+        # 키 이중 표기: 영어(프로그램/DB용) + 한국어(프론트 표시용).
+        # 영어 키가 정본이며 DB 저장·로그·SHAP 등 내부 consumer는 영어 키만 읽는다.
+        response_payload = {
+            "timestamp": realtime_data.get(
+                "timestamp", datetime.datetime.now().isoformat()
+            ),
+            "overall_alarm_level": total_alarm_level,
+            "알람": total_alarm_level,
+            "overall_status": overall_status,
+            "spike_info": spike_info,
+            "raw_inputs": raw_inputs,
+            "센서 로우데이터": raw_inputs,
+            "domain_reports": final_results,
+            "action_required": (
+                "System check recommended" if total_alarm_level >= 2 else "Optimal"
+            ),
+        }
+
+        if total_alarm_level > 0:
+            spike_tag = ""
+            if spike_info["is_anomaly_spike"]:
+                spike_tag = " ⚡[이상 스파이크]"
+            elif spike_info["is_startup_spike"]:
+                spike_tag = " 🔄[기동 스파이크]"
+            logger.warning(
+                f"🚨 [이상 감지] Level {total_alarm_level} ({overall_status}){spike_tag} - 타임스탬프: {response_payload['timestamp']}"
+            )
+
+        logger.info(
+            "📦 [PIPELINE] 응답 조립 완료 overall_level=%s status=%s action=%s domains=%s",
+            total_alarm_level,
+            overall_status,
+            response_payload["action_required"],
+            list(final_results.keys()),
+        )
+
+        # 💾 DB persistence (inference_api2.py 에서 이식한 저장 로직)
+        logger.info(
+            "💾 [PIPELINE] DB 저장 시도 sensor_id=%s db_available=%s",
+            sensor_id,
+            DB_STATUS["available"],
+        )
+        save_inference_history(sensor_id, response_payload)
+        if not DB_STATUS["available"]:
+            logger.warning(
+                "⚠️  [PIPELINE] DB 저장 미확정 상태로 응답 반환 source=%s sensor_id=%s timestamp=%s",
+                trigger_source,
+                sensor_id,
+                response_payload["timestamp"],
+            )
+
+        return response_payload
+
+    except Exception as e:
+        # API 내부에서 파이썬 에러가 터졌을 때
+        # exc_info=True 를 주면 에러가 난 몇 번째 줄인지 추적(Traceback) 정보까지 파일에 싹 다 저장됩니다.
+        logger.error(f"❌ API 추론 중 내부 에러 발생: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/predict")
 def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
     return run_inference_pipeline(realtime_data, trigger_source="external-request")
+
+
+@app.get("/shap-summary")
+def shap_summary():
+    # SHAP은 학습 시점 정적 값이라 매 /predict에 싣지 않고 별도 엔드포인트로 제공.
+    # 스펙: docs/SHAP_BEESWARM_FRONTEND.md
+    if not SHAP_CACHE:
+        raise HTTPException(
+            status_code=503,
+            detail="SHAP 아티팩트가 로드되지 않았습니다. train.py 재실행 후 서버 재시작 필요.",
+        )
+    return SHAP_CACHE
 
 
 @app.on_event("startup")
@@ -414,5 +727,3 @@ if __name__ == "__main__":
 
     logger.info("🌐 Uvicorn 웹 서버를 시작합니다... (http://127.0.0.1:8000/docs)")
     uvicorn.run("inference_api:app", host="0.0.0.0", port=8000, reload=True)
-
-# 압력 대비 전력 효율 : pressure_per_power = discharge_pressure / (motor_power + ε)

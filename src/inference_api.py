@@ -26,6 +26,7 @@ from inference_core import (
     calculate_rca,
     get_alarm_status
 )
+from ko_labels import ko_alarm, ko_domain, ko_feature
 from preprocessing import step1_prepare_window_data
 
 
@@ -392,6 +393,21 @@ except Exception as e:
     logger.error(f"❌ 초기화 중 치명적 에러 발생: {e}")
 
 
+# SHAP 아티팩트 로드 (frontend beeswarm용 — 학습 시점 정적 값)
+SHAP_CACHE: Dict[str, Any] = {}
+for sys_name in SYSTEMS:
+    shap_path = os.path.join(save_dir, f"{sys_name}_shap.json")
+    if os.path.exists(shap_path):
+        try:
+            with open(shap_path, "r") as f:
+                SHAP_CACHE[sys_name] = json.load(f)
+            logger.info(f"📊 [{sys_name.upper()}] SHAP 아티팩트 로드 완료")
+        except Exception as e:
+            logger.error(f"❌ [{sys_name.upper()}] SHAP 아티팩트 로드 실패: {e}")
+    else:
+        logger.warning(f"⚠️ [{sys_name.upper()}] SHAP 아티팩트 없음 (train.py 재실행 필요): {shap_path}")
+
+
 # =====================================================================
 # 2. 실시간 다중 도메인 추론 파이프라인 (/predict + 배치 공용)
 # =====================================================================
@@ -500,13 +516,34 @@ def run_inference_pipeline(
                 per_feature_thresholds=per_feature_thresholds,
             )
             # 5. 결과 조립
+            # target_reference_profiles는 train.py에서 저장된 config를 그대로 쓰지만,
+            # 구버전 config에는 한글명이 없어 런타임에 얇게 주입 (재학습 불필요).
+            target_profiles_raw = config.get("target_reference_profiles", {}) or {}
+            target_profiles = {}
+            for tname, tprof in target_profiles_raw.items():
+                tprof_out = dict(tprof)
+                tprof_out.setdefault("한글명", ko_feature(tname))
+                rel_raw = tprof_out.get("related_feature_lines", {}) or {}
+                rel_out = {}
+                for fname, line in rel_raw.items():
+                    line_out = dict(line)
+                    line_out.setdefault("한글명", ko_feature(fname))
+                    rel_out[fname] = line_out
+                tprof_out["related_feature_lines"] = rel_out
+                target_profiles[tname] = tprof_out
+
             final_results[sys_name] = {
+                "도메인명": ko_domain(sys_name),
                 "metrics": {
                     "current_mse": round(mse_score, 6),
-                    "train_loss": config.get("train_loss", "N/A"),
-                    "val_loss": config.get("val_loss", "N/A"),
+                    "train_loss": config.get("metrics", {}).get("train_loss", []),
+                    "val_loss": config.get("metrics", {}).get("val_loss", []),
                 },
-                "alarm": {"level": alarm_level, "label": label},
+                "alarm": {
+                    "level": alarm_level,
+                    "label": label,
+                    "한글": ko_alarm(label),
+                },
                 "global_thresholds": {
                     "caution": round(t_caut, 6),
                     "warning": round(t_warn, 6),
@@ -515,9 +552,7 @@ def run_inference_pipeline(
                 "per_feature_thresholds": config.get("per_feature_thresholds", {}),
                 "rca_top3": rca,
                 "feature_details": feature_details,
-                "target_reference_profiles": config.get(
-                    "target_reference_profiles", {}
-                ),
+                "target_reference_profiles": target_profiles,
             }
 
             # 전체 알람 수위 갱신 (가장 심각한 쪽 기준)
@@ -550,14 +585,32 @@ def run_inference_pipeline(
             k: float(realtime_data[k]) for k in raw_input_keys if k in realtime_data
         }
 
+        # response_payload = {
+        #     "timestamp": realtime_data.get(
+        #         "timestamp", datetime.datetime.now().isoformat()
+        #     ),
+        #     "overall_alarm_level": total_alarm_level,
+        #     "overall_status": overall_status,
+        #     "spike_info": spike_info,
+        #     "raw_inputs": raw_inputs,
+        #     "domain_reports": final_results,
+        #     "action_required": (
+        #         "System check recommended" if total_alarm_level >= 2 else "Optimal"
+        #     ),
+        # }
+
+        # 키 이중 표기: 영어(프로그램/DB용) + 한국어(프론트 표시용).
+        # 영어 키가 정본이며 DB 저장·로그·SHAP 등 내부 consumer는 영어 키만 읽는다.
         response_payload = {
             "timestamp": realtime_data.get(
                 "timestamp", datetime.datetime.now().isoformat()
             ),
             "overall_alarm_level": total_alarm_level,
+            "알람": total_alarm_level,
             "overall_status": overall_status,
             "spike_info": spike_info,
             "raw_inputs": raw_inputs,
+            "센서 로우데이터": raw_inputs,
             "domain_reports": final_results,
             "action_required": (
                 "System check recommended" if total_alarm_level >= 2 else "Optimal"
@@ -609,6 +662,18 @@ def run_inference_pipeline(
 @app.post("/predict")
 def predict_multi_domain(realtime_data: Dict[str, Any] = Body(...)):
     return run_inference_pipeline(realtime_data, trigger_source="external-request")
+
+
+@app.get("/shap-summary")
+def shap_summary():
+    # SHAP은 학습 시점 정적 값이라 매 /predict에 싣지 않고 별도 엔드포인트로 제공.
+    # 스펙: docs/SHAP_BEESWARM_FRONTEND.md
+    if not SHAP_CACHE:
+        raise HTTPException(
+            status_code=503,
+            detail="SHAP 아티팩트가 로드되지 않았습니다. train.py 재실행 후 서버 재시작 필요.",
+        )
+    return SHAP_CACHE
 
 
 @app.on_event("startup")
