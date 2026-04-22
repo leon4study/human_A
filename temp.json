@@ -1,0 +1,963 @@
+{
+  "motor": {
+    "alarm": { "label": "Critical 🔴", "level": 3, "한글": "위험 🔴" },
+    "metrics": {
+      "val_loss": [
+        0.00016692189092282206, 0.00007722008012933657, 0.00008919846004573628,
+        0.00012638310727197677, 0.00010691450734157115, 0.0001243831793544814,
+        0.00017592137737665325, 0.00019571588200051337, 0.00011289618851151317,
+        0.00010862636554520577, 0.00016841012984514236, 0.00023924406559672207
+      ],
+      "train_loss": [
+        0.010723150335252285, 0.0006531016551889479, 0.00040549569530412555,
+        0.0002846021088771522, 0.00020761918858624995, 0.00017683583428151906,
+        0.00015505110786762089, 0.00014176619879435748, 0.00012973026605322957,
+        0.00012113582488382235, 0.00011792829900514334, 0.00010719234705902636
+      ],
+      "current_mse": 0.047516
+    },
+    "rca_top3": [
+      { "feature": "time_cos", "한글명": "시간 cos", "contribution": 50.9 },
+      {
+        "feature": "minutes_since_startup",
+        "한글명": "기동 후 경과(분)",
+        "contribution": 35.8
+      },
+      {
+        "feature": "pump_on",
+        "한글명": "펌프 가동 여부",
+        "contribution": 11.3
+      },
+      { "feature": "time_sin", "한글명": "시간 sin", "contribution": 2.0 }
+    ],
+    "도메인명": "모터",
+    "feature_details": [
+      {
+        "name": "time_sin",
+        "bands": {
+          "caution_lower": -0.0635,
+          "caution_upper": 1.3507,
+          "warning_lower": -0.7706,
+          "warning_upper": 2.0578,
+          "critical_lower": -1.4777,
+          "critical_upper": 2.7649
+        },
+        "한글명": "시간 sin",
+        "actual_value": 0.766,
+        "scaled_error": 0.00374752,
+        "feature_alarm": {
+          "label": "Critical 🔴",
+          "level": 3,
+          "한글": "위험 🔴"
+        },
+        "expected_value": 0.6436,
+        "feature_thresholds": {
+          "std": 0.00011496,
+          "mean": 0.0000916,
+          "caution": 0.00032152,
+          "warning": 0.00043649,
+          "critical": 0.00078138
+        }
+      },
+      {
+        "name": "minutes_since_startup",
+        "bands": {
+          "caution_lower": -178.7219,
+          "caution_upper": 290.2955,
+          "warning_lower": -413.2307,
+          "warning_upper": 524.8042,
+          "critical_lower": -647.7394,
+          "critical_upper": 759.313
+        },
+        "한글명": "기동 후 경과(분)",
+        "actual_value": 245.0,
+        "scaled_error": 0.06811252,
+        "feature_alarm": {
+          "label": "Critical 🔴",
+          "level": 3,
+          "한글": "위험 🔴"
+        },
+        "expected_value": 55.7868,
+        "feature_thresholds": {
+          "std": 0.00032587,
+          "mean": 0.00009624,
+          "caution": 0.00074799,
+          "warning": 0.00107387,
+          "critical": 0.00205149
+        }
+      },
+      {
+        "name": "time_cos",
+        "bands": {
+          "caution_lower": -0.6863,
+          "caution_upper": 0.7279,
+          "warning_lower": -1.3934,
+          "warning_upper": 1.435,
+          "critical_lower": -2.1005,
+          "critical_upper": 2.1421
+        },
+        "한글명": "시간 cos",
+        "actual_value": 0.6428,
+        "scaled_error": 0.09671611,
+        "feature_alarm": {
+          "label": "Critical 🔴",
+          "level": 3,
+          "한글": "위험 🔴"
+        },
+        "expected_value": 0.0208,
+        "feature_thresholds": {
+          "std": 0.00017223,
+          "mean": 0.00011833,
+          "caution": 0.00046279,
+          "warning": 0.00063501,
+          "critical": 0.0011517
+        }
+      },
+      {
+        "name": "pump_on",
+        "bands": {
+          "caution_lower": 0.3534,
+          "caution_upper": 1.3534,
+          "warning_lower": -0.1466,
+          "warning_upper": 1.8534,
+          "critical_lower": -0.6465,
+          "critical_upper": 2.3534
+        },
+        "한글명": "펌프 가동 여부",
+        "actual_value": 1.0,
+        "scaled_error": 0.02148971,
+        "feature_alarm": {
+          "label": "Critical 🔴",
+          "level": 3,
+          "한글": "위험 🔴"
+        },
+        "expected_value": 0.8534,
+        "feature_thresholds": {
+          "std": 0.0000138,
+          "mean": 0.00000271,
+          "caution": 0.0000303,
+          "warning": 0.0000441,
+          "critical": 0.00008548
+        }
+      }
+    ],
+    "global_thresholds": {
+      "caution": 0.000282,
+      "warning": 0.000384,
+      "critical": 0.000691
+    },
+    "per_feature_thresholds": {
+      "pump_on": {
+        "std": 0.0000138,
+        "mean": 0.00000271,
+        "caution": 0.0000303,
+        "warning": 0.0000441,
+        "critical": 0.00008548
+      },
+      "time_cos": {
+        "std": 0.00017223,
+        "mean": 0.00011833,
+        "caution": 0.00046279,
+        "warning": 0.00063501,
+        "critical": 0.0011517
+      },
+      "time_sin": {
+        "std": 0.00011496,
+        "mean": 0.0000916,
+        "caution": 0.00032152,
+        "warning": 0.00043649,
+        "critical": 0.00078138
+      },
+      "minutes_since_startup": {
+        "std": 0.00032587,
+        "mean": 0.00009624,
+        "caution": 0.00074799,
+        "warning": 0.00107387,
+        "critical": 0.00205149
+      }
+    },
+    "target_reference_profiles": {
+      "motor_current_a": {
+        "한글명": "모터 전류",
+        "target_lines": {
+          "std": 3.3238,
+          "normal": 3.324,
+          "caution": { "lower": 0.0002, "upper": 6.6478 },
+          "warning": { "lower": -3.3237, "upper": 9.9716 },
+          "critical": { "lower": -6.6475, "upper": 13.2954 },
+          "training_max": 7.8466,
+          "training_min": 0.0
+        },
+        "normal_sample_count": 43028,
+        "related_feature_lines": {
+          "motor_power_kw": {
+            "std": 0.1413,
+            "normal": 2.0766,
+            "caution": { "lower": 1.9353, "upper": 2.2179 },
+            "warning": { "lower": 1.7941, "upper": 2.3592 },
+            "critical": { "lower": 1.6528, "upper": 2.5004 },
+            "한글명": "모터 전력",
+            "training_max": 2.2114,
+            "training_min": 0.4132
+          },
+          "motor_temperature_c": {
+            "std": 0.3807,
+            "normal": 34.77,
+            "caution": { "lower": 34.3893, "upper": 35.1506 },
+            "warning": { "lower": 34.0087, "upper": 35.5313 },
+            "critical": { "lower": 33.628, "upper": 35.9119 },
+            "한글명": "모터 온도",
+            "training_max": 37.4544,
+            "training_min": 33.7616
+          },
+          "wire_to_water_efficiency": {
+            "std": 0.0089,
+            "normal": 0.1142,
+            "caution": { "lower": 0.1053, "upper": 0.123 },
+            "warning": { "lower": 0.0965, "upper": 0.1319 },
+            "critical": { "lower": 0.0876, "upper": 0.1408 },
+            "한글명": "전기→수력 효율",
+            "training_max": 0.1216,
+            "training_min": 0.0191
+          }
+        },
+        "target_threshold_basis": "target_caution_band_1sigma"
+      },
+      "rpm_stability_index": {
+        "한글명": "RPM 안정도 지수",
+        "target_lines": {
+          "std": 0.1975,
+          "normal": 0.021,
+          "caution": { "lower": -0.1765, "upper": 0.2185 },
+          "warning": { "lower": -0.374, "upper": 0.416 },
+          "critical": { "lower": -0.5715, "upper": 0.6135 },
+          "training_max": 3.5689,
+          "training_min": 0.0
+        },
+        "normal_sample_count": 127709,
+        "related_feature_lines": {
+          "pump_rpm": {
+            "std": 870.7682,
+            "normal": 872.4297,
+            "caution": { "lower": 1.6615, "upper": 1743.198 },
+            "warning": { "lower": -869.1068, "upper": 2613.9662 },
+            "critical": { "lower": -1739.875, "upper": 3484.7344 },
+            "한글명": "펌프 RPM",
+            "training_max": 1805.1858,
+            "training_min": 0.0
+          }
+        },
+        "target_threshold_basis": "target_caution_band_1sigma"
+      }
+    }
+  },
+  "nutrient": {
+    "alarm": { "label": "Critical 🔴", "level": 3, "한글": "위험 🔴" },
+    "metrics": {
+      "val_loss": [
+        0.01957617700099945, 0.004042845219373703, 0.0023786958772689104,
+        0.0022508036345243454, 0.002734419424086809, 0.0017142436699941754,
+        0.0016440637409687042, 0.0014810450375080109, 0.0020350744016468525,
+        0.0017213382525369525, 0.0013608337612822652, 0.0018653906881809235,
+        0.0010060810018330812, 0.0015270825242623687, 0.0011341325007379055,
+        0.0011973062064498663, 0.0010054787853732705, 0.001446699956431985,
+        0.0016674586804583669, 0.001334879081696272, 0.0012520457385107875,
+        0.00120883050840348, 0.0013148713624104857, 0.0012383036082610488,
+        0.0012954312842339277, 0.0014002618845552206, 0.0010670021874830127
+      ],
+      "train_loss": [
+        0.011944590136408806, 0.0015092035755515099, 0.0009620354394428432,
+        0.0007490489515475929, 0.0006763165583834052, 0.0006023959722369909,
+        0.000552648096345365, 0.0005111355567350984, 0.0004651930939871818,
+        0.0004519654903560877, 0.000423689023591578, 0.0004019726475235075,
+        0.00037341221468523145, 0.00035883000236935914, 0.00034859307925216854,
+        0.00032667990308254957, 0.0003242654202040285, 0.0003098038723692298,
+        0.0002924569125752896, 0.00028968797414563596, 0.0002637399884406477,
+        0.0002651919494383037, 0.0002536323154345155, 0.00025162126985378563,
+        0.00023295101709663868, 0.00023880452499724925, 0.00023807772959116846
+      ],
+      "current_mse": 0.316031
+    },
+    "rca_top3": [
+      {
+        "feature": "motor_temperature_c",
+        "한글명": "모터 온도",
+        "contribution": 100.0
+      },
+      { "feature": "pump_rpm", "한글명": "펌프 RPM", "contribution": 0.0 }
+    ],
+    "도메인명": "양액",
+    "feature_details": [
+      {
+        "name": "time_sin",
+        "bands": {
+          "caution_lower": 0.2683,
+          "caution_upper": 1.6826,
+          "warning_lower": -0.4388,
+          "warning_upper": 2.3897,
+          "critical_lower": -1.1459,
+          "critical_upper": 3.0968
+        },
+        "한글명": "시간 sin",
+        "actual_value": 0.766,
+        "expected_value": 0.9754
+      },
+      {
+        "name": "pump_rpm",
+        "bands": {
+          "caution_lower": 934.5352,
+          "caution_upper": 2672.9506,
+          "warning_lower": 65.3275,
+          "warning_upper": 3542.1584,
+          "critical_lower": -803.8802,
+          "critical_upper": 4411.3661
+        },
+        "한글명": "펌프 RPM",
+        "actual_value": 1791.7834,
+        "scaled_error": 0.00004389,
+        "feature_alarm": { "label": "Normal", "level": 0, "한글": "정상" },
+        "expected_value": 1803.7429,
+        "feature_thresholds": {
+          "std": 0.00366929,
+          "mean": 0.00028624,
+          "caution": 0.00762481,
+          "warning": 0.0112941,
+          "critical": 0.02230195
+        }
+      },
+      {
+        "name": "motor_temperature_c",
+        "bands": {
+          "caution_lower": 37.2162,
+          "caution_upper": 39.3644,
+          "warning_lower": 36.1421,
+          "warning_upper": 40.4385,
+          "critical_lower": 35.0679,
+          "critical_upper": 41.5127
+        },
+        "한글명": "모터 온도",
+        "actual_value": 42.1632,
+        "scaled_error": 0.63201717,
+        "feature_alarm": {
+          "label": "Critical 🔴",
+          "level": 3,
+          "한글": "위험 🔴"
+        },
+        "expected_value": 38.2903,
+        "feature_thresholds": {
+          "std": 0.00107803,
+          "mean": 0.00027119,
+          "caution": 0.00242725,
+          "warning": 0.00350529,
+          "critical": 0.00673939
+        }
+      },
+      {
+        "name": "time_cos",
+        "bands": {
+          "caution_lower": -0.5352,
+          "caution_upper": 0.879,
+          "warning_lower": -1.2424,
+          "warning_upper": 1.5861,
+          "critical_lower": -1.9495,
+          "critical_upper": 2.2932
+        },
+        "한글명": "시간 cos",
+        "actual_value": 0.6428,
+        "expected_value": 0.1719
+      },
+      {
+        "name": "pump_on",
+        "bands": {
+          "caution_lower": 0.5,
+          "caution_upper": 1.5,
+          "warning_lower": 0.0,
+          "warning_upper": 2.0,
+          "critical_lower": -0.5,
+          "critical_upper": 2.5
+        },
+        "한글명": "펌프 가동 여부",
+        "actual_value": 1.0,
+        "expected_value": 1.0
+      },
+      {
+        "name": "minutes_since_startup",
+        "bands": {
+          "caution_lower": -220.7955,
+          "caution_upper": 248.222,
+          "warning_lower": -455.3042,
+          "warning_upper": 482.7307,
+          "critical_lower": -689.8129,
+          "critical_upper": 717.2394
+        },
+        "한글명": "기동 후 경과(분)",
+        "actual_value": 245.0,
+        "expected_value": 13.7133
+      }
+    ],
+    "global_thresholds": {
+      "caution": 0.004155,
+      "warning": 0.006092,
+      "critical": 0.011906
+    },
+    "per_feature_thresholds": {
+      "pump_rpm": {
+        "std": 0.00366929,
+        "mean": 0.00028624,
+        "caution": 0.00762481,
+        "warning": 0.0112941,
+        "critical": 0.02230195
+      },
+      "motor_temperature_c": {
+        "std": 0.00107803,
+        "mean": 0.00027119,
+        "caution": 0.00242725,
+        "warning": 0.00350529,
+        "critical": 0.00673939
+      }
+    },
+    "target_reference_profiles": {
+      "pid_error_ec": {
+        "한글명": "EC PID 오차",
+        "target_lines": {
+          "std": 0.0227,
+          "normal": 0.0122,
+          "caution": { "lower": -0.0105, "upper": 0.0349 },
+          "warning": { "lower": -0.0333, "upper": 0.0576 },
+          "critical": { "lower": -0.056, "upper": 0.0803 },
+          "training_max": 0.0702,
+          "training_min": -0.036
+        },
+        "normal_sample_count": 83963,
+        "related_feature_lines": {
+          "mix_ec_ds_m": {
+            "std": 0.012,
+            "normal": 1.8103,
+            "caution": { "lower": 1.7983, "upper": 1.8223 },
+            "warning": { "lower": 1.7862, "upper": 1.8343 },
+            "critical": { "lower": 1.7742, "upper": 1.8463 },
+            "한글명": "조제 현재 EC",
+            "training_max": 1.8348,
+            "training_min": 1.7896
+          },
+          "mix_target_ec_ds_m": {
+            "std": 0.0,
+            "normal": 1.8,
+            "caution": { "lower": 1.8, "upper": 1.8 },
+            "warning": { "lower": 1.8, "upper": 1.8 },
+            "critical": { "lower": 1.8, "upper": 1.8 },
+            "한글명": "조제 목표 EC",
+            "training_max": 1.8,
+            "training_min": 1.8
+          }
+        },
+        "target_threshold_basis": "target_caution_band_1sigma"
+      },
+      "salt_accumulation_delta": {
+        "한글명": "염류 축적 델타",
+        "target_lines": {
+          "std": 0.0419,
+          "normal": 0.2601,
+          "caution": { "lower": 0.2182, "upper": 0.3021 },
+          "warning": { "lower": 0.1763, "upper": 0.344 },
+          "critical": { "lower": 0.1343, "upper": 0.386 },
+          "training_max": 0.3708,
+          "training_min": 0.1462
+        },
+        "normal_sample_count": 77354,
+        "related_feature_lines": {
+          "mix_ec_ds_m": {
+            "std": 0.0255,
+            "normal": 1.8114,
+            "caution": { "lower": 1.7859, "upper": 1.8369 },
+            "warning": { "lower": 1.7604, "upper": 1.8624 },
+            "critical": { "lower": 1.7349, "upper": 1.8879 },
+            "한글명": "조제 현재 EC",
+            "training_max": 1.8702,
+            "training_min": 1.764
+          },
+          "drain_ec_ds_m": {
+            "std": 0.0359,
+            "normal": 2.0665,
+            "caution": { "lower": 2.0306, "upper": 2.1024 },
+            "warning": { "lower": 1.9948, "upper": 2.1382 },
+            "critical": { "lower": 1.9589, "upper": 2.1741 },
+            "한글명": "배액 EC",
+            "training_max": 2.1664,
+            "training_min": 1.9904
+          }
+        },
+        "target_threshold_basis": "target_caution_band_1sigma"
+      }
+    }
+  },
+  "hydraulic": {
+    "alarm": { "label": "Critical 🔴", "level": 3, "한글": "위험 🔴" },
+    "metrics": {
+      "val_loss": [
+        0.025882311165332794, 0.014562554657459259, 0.009941626340150833,
+        0.007046760059893131, 0.005767785012722015, 0.00505605386570096,
+        0.0045191277749836445, 0.004018545150756836, 0.0043161120265722275,
+        0.004360420163720846, 0.004055520053952932, 0.004480981267988682,
+        0.004257414489984512, 0.004731643944978714, 0.004700132180005312,
+        0.004790253471583128, 0.004378533456474543, 0.004860794171690941
+      ],
+      "train_loss": [
+        0.010553577914834023, 0.0017517791129648685, 0.001034166431054473,
+        0.0007337331771850586, 0.0005837158532813191, 0.0005101910792291164,
+        0.00044226227328181267, 0.00041039896314032376, 0.00037213845644146204,
+        0.0003484447952359915, 0.000320484017720446, 0.00031573479645885527,
+        0.0003039194270968437, 0.0002821561065502465, 0.00028184117400087416,
+        0.00026677269488573074, 0.0002653452393133193, 0.000252547295531258
+      ],
+      "current_mse": 0.303019
+    },
+    "rca_top3": [
+      {
+        "feature": "motor_temperature_c",
+        "한글명": "모터 온도",
+        "contribution": 81.6
+      },
+      {
+        "feature": "flow_rate_l_min",
+        "한글명": "메인 유량",
+        "contribution": 17.8
+      },
+      {
+        "feature": "motor_power_kw",
+        "한글명": "모터 전력",
+        "contribution": 0.5
+      },
+      { "feature": "pump_rpm", "한글명": "펌프 RPM", "contribution": 0.1 }
+    ],
+    "도메인명": "유압/유량",
+    "feature_details": [
+      {
+        "name": "flow_rate_l_min",
+        "bands": {
+          "caution_lower": 34.7856,
+          "caution_upper": 111.802,
+          "warning_lower": -3.7226,
+          "warning_upper": 150.3102,
+          "critical_lower": -42.2307,
+          "critical_upper": 188.8184
+        },
+        "한글명": "메인 유량",
+        "actual_value": 35.7342,
+        "scaled_error": 0.21582704,
+        "feature_alarm": {
+          "label": "Critical 🔴",
+          "level": 3,
+          "한글": "위험 🔴"
+        },
+        "expected_value": 73.2938,
+        "feature_thresholds": {
+          "std": 0.00140092,
+          "mean": 0.00025917,
+          "caution": 0.00306101,
+          "warning": 0.00446193,
+          "critical": 0.00866469
+        }
+      },
+      {
+        "name": "motor_power_kw",
+        "bands": {
+          "caution_lower": 1.1139,
+          "caution_upper": 3.2827,
+          "warning_lower": 0.0295,
+          "warning_upper": 4.367,
+          "critical_lower": -1.0549,
+          "critical_upper": 5.4514
+        },
+        "한글명": "모터 전력",
+        "actual_value": 1.9953,
+        "scaled_error": 0.00634194,
+        "feature_alarm": {
+          "label": "Warning 🟠",
+          "level": 2,
+          "한글": "경고 🟠"
+        },
+        "expected_value": 2.1983,
+        "feature_thresholds": {
+          "std": 0.00166792,
+          "mean": 0.00035398,
+          "caution": 0.00368983,
+          "warning": 0.00535775,
+          "critical": 0.01036152
+        }
+      },
+      {
+        "name": "pump_rpm",
+        "bands": {
+          "caution_lower": 862.1065,
+          "caution_upper": 2600.5219,
+          "warning_lower": -7.1012,
+          "warning_upper": 3469.7296,
+          "critical_lower": -876.3089,
+          "critical_upper": 4338.9374
+        },
+        "한글명": "펌프 RPM",
+        "actual_value": 1791.7834,
+        "scaled_error": 0.00112208,
+        "feature_alarm": { "label": "Normal", "level": 0, "한글": "정상" },
+        "expected_value": 1731.3142,
+        "feature_thresholds": {
+          "std": 0.00180897,
+          "mean": 0.00024286,
+          "caution": 0.00386081,
+          "warning": 0.00566978,
+          "critical": 0.0110967
+        }
+      },
+      {
+        "name": "motor_temperature_c",
+        "bands": {
+          "caution_lower": 36.2449,
+          "caution_upper": 38.3931,
+          "warning_lower": 35.1708,
+          "warning_upper": 39.4672,
+          "critical_lower": 34.0966,
+          "critical_upper": 40.5414
+        },
+        "한글명": "모터 온도",
+        "actual_value": 42.1632,
+        "scaled_error": 0.98878424,
+        "feature_alarm": {
+          "label": "Critical 🔴",
+          "level": 3,
+          "한글": "위험 🔴"
+        },
+        "expected_value": 37.319,
+        "feature_thresholds": {
+          "std": 0.01500838,
+          "mean": 0.00501518,
+          "caution": 0.03503194,
+          "warning": 0.05004032,
+          "critical": 0.09506547
+        }
+      },
+      {
+        "name": "time_sin",
+        "bands": {
+          "caution_lower": -0.4328,
+          "caution_upper": 0.9815,
+          "warning_lower": -1.1399,
+          "warning_upper": 1.6886,
+          "critical_lower": -1.847,
+          "critical_upper": 2.3957
+        },
+        "한글명": "시간 sin",
+        "actual_value": 0.766,
+        "expected_value": 0.2744
+      },
+      {
+        "name": "time_cos",
+        "bands": {
+          "caution_lower": -1.6008,
+          "caution_upper": -0.1865,
+          "warning_lower": -2.3079,
+          "warning_upper": 0.5206,
+          "critical_lower": -3.015,
+          "critical_upper": 1.2277
+        },
+        "한글명": "시간 cos",
+        "actual_value": 0.6428,
+        "expected_value": -0.8936
+      },
+      {
+        "name": "pump_on",
+        "bands": {
+          "caution_lower": 0.4982,
+          "caution_upper": 1.4981,
+          "warning_lower": -0.0018,
+          "warning_upper": 1.9981,
+          "critical_lower": -0.5018,
+          "critical_upper": 2.4981
+        },
+        "한글명": "펌프 가동 여부",
+        "actual_value": 1.0,
+        "expected_value": 0.9982
+      },
+      {
+        "name": "minutes_since_startup",
+        "bands": {
+          "caution_lower": -128.9373,
+          "caution_upper": 340.0801,
+          "warning_lower": -363.446,
+          "warning_upper": 574.5889,
+          "critical_lower": -597.9548,
+          "critical_upper": 809.0976
+        },
+        "한글명": "기동 후 경과(분)",
+        "actual_value": 245.0,
+        "expected_value": 105.5714
+      }
+    ],
+    "global_thresholds": {
+      "caution": 0.009646,
+      "warning": 0.013736,
+      "critical": 0.026004
+    },
+    "per_feature_thresholds": {
+      "pump_rpm": {
+        "std": 0.00180897,
+        "mean": 0.00024286,
+        "caution": 0.00386081,
+        "warning": 0.00566978,
+        "critical": 0.0110967
+      },
+      "motor_power_kw": {
+        "std": 0.00166792,
+        "mean": 0.00035398,
+        "caution": 0.00368983,
+        "warning": 0.00535775,
+        "critical": 0.01036152
+      },
+      "flow_rate_l_min": {
+        "std": 0.00140092,
+        "mean": 0.00025917,
+        "caution": 0.00306101,
+        "warning": 0.00446193,
+        "critical": 0.00866469
+      },
+      "motor_temperature_c": {
+        "std": 0.01500838,
+        "mean": 0.00501518,
+        "caution": 0.03503194,
+        "warning": 0.05004032,
+        "critical": 0.09506547
+      }
+    },
+    "target_reference_profiles": {
+      "zone1_resistance": {
+        "한글명": "구역1 배관 저항",
+        "target_lines": {
+          "std": 44526722.2738,
+          "normal": 44514374.5432,
+          "caution": { "lower": -12347.7306, "upper": 89041096.817 },
+          "warning": { "lower": -44539070.0043, "upper": 133567819.0907 },
+          "critical": { "lower": -89065792.2781, "upper": 178094541.3645 },
+          "training_max": 101173600.0,
+          "training_min": 3.0953
+        },
+        "normal_sample_count": 111529,
+        "related_feature_lines": {},
+        "target_threshold_basis": "target_caution_band_1sigma"
+      },
+      "differential_pressure_kpa": {
+        "한글명": "차압(토출−흡입)",
+        "target_lines": {
+          "std": 72.7064,
+          "normal": 117.6805,
+          "caution": { "lower": 44.9741, "upper": 190.3869 },
+          "warning": { "lower": -27.7324, "upper": 263.0933 },
+          "critical": { "lower": -100.4388, "upper": 335.7997 },
+          "training_max": 214.7586,
+          "training_min": 45.0
+        },
+        "normal_sample_count": 107885,
+        "related_feature_lines": {
+          "suction_pressure_kpa": {
+            "std": 5.1654,
+            "normal": -4.2247,
+            "caution": { "lower": -9.3901, "upper": 0.9408 },
+            "warning": { "lower": -14.5555, "upper": 6.1062 },
+            "critical": { "lower": -19.7209, "upper": 11.2716 },
+            "한글명": "흡입 압력",
+            "training_max": 0.0,
+            "training_min": -11.1516
+          },
+          "discharge_pressure_kpa": {
+            "std": 63.3976,
+            "normal": 96.8566,
+            "caution": { "lower": 33.459, "upper": 160.2542 },
+            "warning": { "lower": -29.9387, "upper": 223.6519 },
+            "critical": { "lower": -93.3363, "upper": 287.0495 },
+            "한글명": "토출 압력",
+            "training_max": 179.7728,
+            "training_min": 45.0
+          }
+        },
+        "target_threshold_basis": "target_caution_band_1sigma"
+      }
+    }
+  },
+  "zone_drip": {
+    "alarm": { "label": "Critical 🔴", "level": 3, "한글": "위험 🔴" },
+    "metrics": {
+      "val_loss": [
+        0.005766105838119984, 0.0012032905360683799, 0.0009472748497501016,
+        0.0008329178090207279, 0.0006901266169734299, 0.0008201211458072066,
+        0.0007952619343996048, 0.0009185487288050354, 0.0006467865314334631,
+        0.0010465428931638598, 0.0006843128940090537, 0.000665267463773489,
+        0.0006342014530673623, 0.0005314628942869604, 0.0004785388591699302,
+        0.000637748627923429, 0.0005625151679851115, 0.0007560551748611033,
+        0.0006271688034757972, 0.0008023969130590558, 0.0006991640548221767,
+        0.0007650243933312595, 0.0007948715938255191, 0.0007391863618977368,
+        0.0007703599985688925
+      ],
+      "train_loss": [
+        0.012041592039167881, 0.001020706375129521, 0.0006945905624888837,
+        0.0005441948887892067, 0.0004414219583850354, 0.00039324804674834013,
+        0.00033753979369066656, 0.00031643506372347474, 0.00029670773074030876,
+        0.00027801631949841976, 0.00026706274366006255, 0.0002567852206993848,
+        0.0002443780249450356, 0.00022638787049800158, 0.00022597260249312967,
+        0.0002057221718132496, 0.00020175361714791507, 0.00019979325588792562,
+        0.00019849718955811113, 0.00020398148626554757, 0.0001808285160223022,
+        0.000173739084857516, 0.00017051739268936217, 0.00016936837346293032,
+        0.00016420320025645196
+      ],
+      "current_mse": 0.634101
+    },
+    "rca_top3": [
+      {
+        "feature": "motor_temperature_c",
+        "한글명": "모터 온도",
+        "contribution": 100.0
+      }
+    ],
+    "도메인명": "구역 점적",
+    "feature_details": [
+      {
+        "name": "time_sin",
+        "bands": {
+          "caution_lower": 0.0711,
+          "caution_upper": 1.4853,
+          "warning_lower": -0.636,
+          "warning_upper": 2.1925,
+          "critical_lower": -1.3431,
+          "critical_upper": 2.8996
+        },
+        "한글명": "시간 sin",
+        "actual_value": 0.766,
+        "expected_value": 0.7782
+      },
+      {
+        "name": "motor_temperature_c",
+        "bands": {
+          "caution_lower": 37.2098,
+          "caution_upper": 39.358,
+          "warning_lower": 36.1357,
+          "warning_upper": 40.4322,
+          "critical_lower": 35.0616,
+          "critical_upper": 41.5063
+        },
+        "한글명": "모터 온도",
+        "actual_value": 42.1632,
+        "scaled_error": 0.63410119,
+        "feature_alarm": {
+          "label": "Critical 🔴",
+          "level": 3,
+          "한글": "위험 🔴"
+        },
+        "expected_value": 38.2839,
+        "feature_thresholds": {
+          "std": 0.00076159,
+          "mean": 0.00027639,
+          "caution": 0.00179956,
+          "warning": 0.00256115,
+          "critical": 0.0048459
+        }
+      },
+      {
+        "name": "time_cos",
+        "bands": {
+          "caution_lower": -0.7906,
+          "caution_upper": 0.6236,
+          "warning_lower": -1.4978,
+          "warning_upper": 1.3307,
+          "critical_lower": -2.2049,
+          "critical_upper": 2.0378
+        },
+        "한글명": "시간 cos",
+        "actual_value": 0.6428,
+        "expected_value": -0.0835
+      },
+      {
+        "name": "pump_on",
+        "bands": {
+          "caution_lower": 0.4908,
+          "caution_upper": 1.4907,
+          "warning_lower": -0.0092,
+          "warning_upper": 1.9907,
+          "critical_lower": -0.5092,
+          "critical_upper": 2.4907
+        },
+        "한글명": "펌프 가동 여부",
+        "actual_value": 1.0,
+        "expected_value": 0.9907
+      },
+      {
+        "name": "minutes_since_startup",
+        "bands": {
+          "caution_lower": -230.4706,
+          "caution_upper": 238.5469,
+          "warning_lower": -464.9793,
+          "warning_upper": 473.0556,
+          "critical_lower": -699.488,
+          "critical_upper": 707.5643
+        },
+        "한글명": "기동 후 경과(분)",
+        "actual_value": 245.0,
+        "expected_value": 4.0382
+      }
+    ],
+    "global_thresholds": {
+      "caution": 0.0018,
+      "warning": 0.002561,
+      "critical": 0.004846
+    },
+    "per_feature_thresholds": {
+      "motor_temperature_c": {
+        "std": 0.00076159,
+        "mean": 0.00027639,
+        "caution": 0.00179956,
+        "warning": 0.00256115,
+        "critical": 0.0048459
+      }
+    },
+    "target_reference_profiles": {
+      "zone1_ec_accumulation": {
+        "한글명": "구역1 EC 축적",
+        "target_lines": {
+          "std": 0.026,
+          "normal": 0.3015,
+          "caution": { "lower": 0.2755, "upper": 0.3275 },
+          "warning": { "lower": 0.2496, "upper": 0.3535 },
+          "critical": { "lower": 0.2236, "upper": 0.3795 },
+          "training_max": 0.3778,
+          "training_min": 0.2132
+        },
+        "normal_sample_count": 82888,
+        "related_feature_lines": {
+          "mix_ec_ds_m": {
+            "std": 0.0247,
+            "normal": 1.8108,
+            "caution": { "lower": 1.7861, "upper": 1.8355 },
+            "warning": { "lower": 1.7614, "upper": 1.8603 },
+            "critical": { "lower": 1.7367, "upper": 1.885 },
+            "한글명": "조제 현재 EC",
+            "training_max": 1.8702,
+            "training_min": 1.7656
+          }
+        },
+        "target_threshold_basis": "target_caution_band_1sigma"
+      },
+      "zone1_moisture_response_pct": {
+        "한글명": "구역1 수분 반응",
+        "target_lines": {
+          "std": 0.1849,
+          "normal": 0.0,
+          "caution": { "lower": -0.1849, "upper": 0.1849 },
+          "warning": { "lower": -0.3698, "upper": 0.3698 },
+          "critical": { "lower": -0.5547, "upper": 0.5546 },
+          "training_max": 1.421,
+          "training_min": -1.254
+        },
+        "normal_sample_count": 104091,
+        "related_feature_lines": {},
+        "target_threshold_basis": "target_caution_band_1sigma"
+      }
+    }
+  }
+}

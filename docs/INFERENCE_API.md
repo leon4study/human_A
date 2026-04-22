@@ -165,27 +165,32 @@ Content-Type: application/json
 
 ### 4-1. 최상위 구조
 
+> **영어/한국어 키 이중 표기 정책** (2026-04-22 적용):
+> 일부 필드는 영어 키와 한국어 키를 **둘 다** 담아 보낸다. **영어 키가 정본**이며, DB 저장·로그·SHAP 로직 등 서버 내부 consumer는 영어 키만 읽는다. 한국어 키는 프론트 UI 라벨/디버깅 편의를 위한 **동일 값 별칭**이다. 프론트도 가급적 영어 키를 읽기를 권장 — 한국어 키는 UI 표시 직전 치환용으로만 사용.
+
 ```json
 {
   "timestamp": "2026-04-21T10:30:00",
   "overall_alarm_level": 2,
+  "알람": 2,
   "overall_status": "Warning 🟠",
   "spike_info": { ... },
   "raw_inputs": { ... },
+  "센서 로우데이터": { ... },
   "domain_reports": { ... },
   "action_required": "System check recommended"
 }
 ```
 
-| 필드 | 타입 | 한글 이름 | 설명 |
+| 영어 키 (정본) | 한국어 별칭 | 타입 | 설명 |
 |---|---|---|---|
-| `timestamp` | string | 타임스탬프 | 요청의 timestamp 그대로 echo (없으면 서버시각) |
-| `overall_alarm_level` | 0~3 | 전체 알람 레벨 | 4개 도메인 중 가장 심각한 레벨 |
-| `overall_status` | string | 전체 상태 라벨 | 아래 §5 알람 레벨 표 참조 |
-| `spike_info` | object | 스파이크 정보 | 요청의 `is_spike*` 값 passthrough |
-| `raw_inputs` | object | 원시값 passthrough | 요청 body의 주요 센서값을 그대로 echo (§4-3 참고) |
-| `domain_reports` | object | 도메인별 리포트 | key = 도메인 코드 (`motor`, `hydraulic`, `nutrient`, `zone_drip`) |
-| `action_required` | string | 권장 조치 | `"Optimal"` 또는 `"System check recommended"` (level ≥ 2) |
+| `timestamp` | — | string | 타임스탬프 — 요청의 timestamp 그대로 echo (없으면 서버시각) |
+| `overall_alarm_level` | `알람` | 0~3 | 전체 알람 레벨 — 4개 도메인 중 가장 심각한 레벨. **두 키는 항상 같은 값**. |
+| `overall_status` | — | string | 전체 상태 라벨 — §5 참조 |
+| `spike_info` | — | object | 스파이크 정보 — 요청의 `is_spike*` passthrough |
+| `raw_inputs` | `센서 로우데이터` | object | 원시값 passthrough — §4-3 참조. **두 키는 동일 object 참조**. |
+| `domain_reports` | — | object | 도메인별 리포트 — key = 도메인 코드 (`motor`, `hydraulic`, `nutrient`, `zone_drip`) |
+| `action_required` | — | string | 권장 조치 — `"Optimal"` 또는 `"System check recommended"` (level ≥ 2) |
 
 ### 4-2. `spike_info`
 
@@ -235,6 +240,7 @@ Content-Type: application/json
 
 ```json
 "motor": {
+  "도메인명": "모터",
   "metrics": {
     "current_mse": 0.000345,
     "train_loss": "N/A",
@@ -242,7 +248,8 @@ Content-Type: application/json
   },
   "alarm": {
     "level": 1,
-    "label": "Caution 🔸"
+    "label": "Caution 🔸",
+    "한글": "주의 🔸"
   },
   "global_thresholds": {
     "caution":  0.003418,
@@ -253,13 +260,14 @@ Content-Type: application/json
     "pressure_trend_10": { "caution": 0.00012, "warning": 0.00031, "critical": 0.00075 }
   },
   "rca_top3": [
-    { "feature": "pressure_trend_10", "contribution": 78.3 },
-    { "feature": "motor_temperature_c", "contribution": 12.4 },
-    { "feature": "flow_rate_l_min", "contribution":  9.3 }
+    { "feature": "pressure_trend_10", "한글명": "차압 10분 트렌드", "contribution": 78.3 },
+    { "feature": "motor_temperature_c", "한글명": "모터 온도", "contribution": 12.4 },
+    { "feature": "flow_rate_l_min", "한글명": "메인 유량", "contribution":  9.3 }
   ],
   "feature_details": [
     {
       "name": "pressure_trend_10",
+      "한글명": "차압 10분 트렌드",
       "actual_value": 0.0234,
       "expected_value": 0.0210,
       "bands": {
@@ -269,14 +277,23 @@ Content-Type: application/json
       },
       "scaled_error": 0.00001234,
       "feature_thresholds": { "caution": 0.00012, "warning": 0.00031, "critical": 0.00075 },
-      "feature_alarm": { "level": 1, "label": "Caution 🔸" }
+      "feature_alarm": { "level": 1, "label": "Caution 🔸", "한글": "주의 🔸" }
     }
   ],
   "target_reference_profiles": {
-    "motor_current_a": { ... }
+    "motor_current_a": {
+      "한글명": "모터 전류",
+      "target_lines": { ... },
+      "related_feature_lines": {
+        "motor_power_kw": { "한글명": "모터 전력", ... }
+      },
+      ...
+    }
   }
 }
 ```
+
+> **한국어 별칭 정책 (도메인 내부)**: `도메인명`, `한글명`(피처/타깃), `한글`(알람 라벨)은 모두 **프론트 UI 표시 전용 별칭**이다. 영문 키(`name`, `feature`, `label`)가 여전히 정본이며 프로그램 로직은 영문 키만 사용해야 한다. 매핑 소스: [src/ko_labels.py](../src/ko_labels.py) · 매핑 없는 피처는 영문 그대로 반환 (fallback).
 
 #### 4-4-1. `metrics`
 

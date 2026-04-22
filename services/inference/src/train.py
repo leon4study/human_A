@@ -275,7 +275,7 @@ if __name__ == "__main__":
 
         # 1. 도메인별 피처 셀렉션
         # df_agg: target_reference_profiles 계산용(raw 센서 이름 유지 윈도우 집계본)
-        robust_features, X_train_ae, df_interpret_result, _, df_agg = run_feature_selection_experiment(
+        robust_features, X_train_ae, df_interpret_result, _, df_agg, shap_vals_dict, X_bg_dict = run_feature_selection_experiment(
             df_raw=df_raw, window_method="sliding", target_dict=target_dict
         )
 
@@ -300,6 +300,37 @@ if __name__ == "__main__":
             target_dict=target_dict,
             df_reference=df_agg,
         )
+
+        # 3. SHAP 아티팩트 저장 (frontend beeswarm 렌더용)
+        # 입력이 바뀌어도 값은 변하지 않는 "정적 아티팩트"라 /predict 대신 별도 json으로 서빙.
+        shap_targets_payload = {}
+        n_features_per_target = {}
+        for target_name, sv in shap_vals_dict.items():
+            X_bg = X_bg_dict[target_name]
+            sv_arr = np.asarray(sv)
+            mean_abs = np.abs(sv_arr).mean(axis=0)
+            order_idx = np.argsort(mean_abs)[::-1]
+            features_list = list(X_bg.columns)
+            shap_targets_payload[target_name] = {
+                "features":       features_list,
+                "mean_abs_shap":  mean_abs.tolist(),
+                "feature_order":  [features_list[i] for i in order_idx],
+                "shap_values":    sv_arr.tolist(),
+                "feature_values": X_bg.values.tolist(),
+            }
+            n_features_per_target[target_name] = len(features_list)
+
+        n_samples = int(next(iter(shap_vals_dict.values())).shape[0]) if shap_vals_dict else 0
+        shap_payload = {
+            "targets":      shap_targets_payload,
+            "n_samples":    n_samples,
+            "n_features":   n_features_per_target,
+            "computed_at":  datetime.utcnow().isoformat() + "Z",
+        }
+        shap_path = os.path.join(project_root, "models", f"{system_name}_shap.json")
+        with open(shap_path, "w") as f:
+            json.dump(shap_payload, f)
+        logger.info(f"💾 [{system_name.upper()}] SHAP 아티팩트 저장: {shap_path}")
 
     total_end_time = time.time()
     t_min, t_sec = divmod(total_end_time - total_start_time, 60)

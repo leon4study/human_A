@@ -5,8 +5,8 @@ apscheduler==3.10.4        # inference_api.py 배치 스케줄러
 
 # 2. AI 및 데이터 처리 관련
 tensorflow-cpu==2.21.0
-pandas==3.0.2
 numpy==2.4.4
+pandas==3.0.2
 joblib==1.5.3
 scikit-learn==1.8.0
 shap==0.46.0               # feature_selection.py SHAP 중요도
