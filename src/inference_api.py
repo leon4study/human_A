@@ -503,8 +503,8 @@ def run_inference_pipeline(
             final_results[sys_name] = {
                 "metrics": {
                     "current_mse": round(mse_score, 6),
-                    "train_loss": config.get("train_loss", "N/A"),
-                    "val_loss": config.get("val_loss", "N/A"),
+                    "train_loss": config.get("metrics", {}).get("train_loss", []),
+                    "val_loss": config.get("metrics", {}).get("val_loss", []),
                 },
                 "alarm": {"level": alarm_level, "label": label},
                 "global_thresholds": {
