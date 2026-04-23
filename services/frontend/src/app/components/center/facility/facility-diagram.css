@@ -24,7 +24,7 @@
   /* 1920x1080 기준에서 너무 꽉 차지 않게 살짝 여유. 뷰포트 맞춤은 상위
      .dashboard 의 zoom 이 전담하므로 고정 px 로 단순화 (기존 min(,88vw)
      은 zoom 과 중복 축소를 일으켜 제거). */
-  width: 1100px;
+  width: 1250px;
   aspect-ratio: 16 / 9;
 
   /* 높이는 aspect-ratio로 자동 계산 */

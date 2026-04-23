@@ -236,7 +236,7 @@ button {
   top: 0;
   bottom: 0;
   display: flex;
-  min-width: 400px;
+  min-width: 500px;
   pointer-events: none;
   z-index: 3;
 }
@@ -308,7 +308,7 @@ button {
   flex-direction: column;
   justify-content: space-between;
   gap: 26px;
-  width: 260px;
+  width: 450px;
   flex-shrink: 0;
   min-height: 0;
   z-index: 6;

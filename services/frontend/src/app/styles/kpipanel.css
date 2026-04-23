@@ -33,8 +33,8 @@
   background: #050608; 
 }
 
-.kpi-gauge--small { width: 90px; height: 90px; }
-.kpi-gauge--large { width: 110px; height: 110px; }
+.kpi-gauge--small { width: 110px; height: 110px; }
+.kpi-gauge--large { width: 130px; height: 130px; }
 
 .kpi-gauge::before {
   content: "";
