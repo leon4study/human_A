@@ -14,8 +14,8 @@
 /* 팝업 박스 */
 .equipment-modal {
   width: 100%;
-  max-width: 480px;
-  max-height: 90vh;
+  max-width: 550px;
+  max-height: 80vh;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -30,16 +30,6 @@
   color: #eaf7ff;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
-}
-
-.equipment-modal__body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
-  align-content: start;
 }
 
 /* 상단 */

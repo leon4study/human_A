@@ -62,12 +62,6 @@ const LEVEL_COLORS: Record<number, string> = {
   3: "#f44336",
 };
 
-const LEVEL_LABELS_KO: Record<number, string> = {
-  0: "정상",
-  1: "주의",
-  2: "경고",
-  3: "위험",
-};
 
 const CW = 200;
 const CH = 75;
@@ -555,11 +549,7 @@ function ChartRow({
       <div className="ai-chart-desc">
         {description.split("\n").map((line, i) => (
           <div key={i} style={{ lineHeight: 1.5 }}>
-            {i === 0 ? (
-              <span style={{ fontWeight: 600, color: "rgba(220,242,255,0.8)" }}>{line}</span>
-            ) : (
-              <span style={{ fontSize: "11px", color: "rgba(220,242,255,0.5)" }}>{line}</span>
-            )}
+            <span style={{ fontWeight: i === 0 ? 600 : 400, fontSize: i === 0 ? "inherit" : "11px", color: i === 0 ? "rgba(220,242,255,0.8)" : "rgba(220,242,255,0.5)" }}>{line}</span>
           </div>
         ))}
       </div>
@@ -569,8 +559,10 @@ function ChartRow({
 
 const CMP_MIN_DENOM_FLOW = 1;
 const CMP_MIN_DENOM_POWER = 0.05;
-const CMP_WIN = 5;
+const CMP_WIN_SHORT = 5;
+const SHORT_SERIES_POINTS = 60;
 const CMP_MIN_SAMPLES = 30;
+const LONG_SERIES_POINTS = 72;
 
 function stdOf(arr: number[]): number {
   if (arr.length < 2) return NaN;
@@ -602,7 +594,10 @@ function ComparativeSection({
   if (chartSnapshot && n > 0) {
     const { pressure, suction, flow, motor_power, motor_temp, ts } = chartSnapshot;
 
-    for (let i = 0; i < n; i += 1) {
+    const shortStart = Math.max(0, n - SHORT_SERIES_POINTS);
+    const longStart = Math.max(0, n - LONG_SERIES_POINTS);
+
+    for (let i = shortStart; i < n; i += 1) {
       const dp = pressure[i];
       const sp = suction[i];
       const fl = flow[i];
@@ -620,25 +615,43 @@ function ComparativeSection({
         Number.isFinite(fl) && Number.isFinite(pw) && pw >= CMP_MIN_DENOM_POWER ? fl / pw : NaN,
       );
 
-      const winStart = Math.max(0, i - CMP_WIN + 1);
-      const winP: number[] = [];
-      const winF: number[] = [];
-      for (let j = winStart; j <= i; j += 1) {
-        if (Number.isFinite(pressure[j])) winP.push(pressure[j]);
-        if (Number.isFinite(flow[j])) winF.push(flow[j]);
-      }
-
-      pVolSeries.push(winP.length >= 2 ? stdOf(winP) : NaN);
-      const mF = meanOf(winF);
-      fCvSeries.push(winF.length >= 2 && Number.isFinite(mF) && mF > 0 ? stdOf(winF) / mF : NaN);
-
-      if (i === 0) {
+      if (i === shortStart) {
         tempSlope.push(NaN);
       } else {
         const dT = motor_temp[i] - motor_temp[i - 1];
         const dt = (ts[i] - ts[i - 1]) / 1000;
         tempSlope.push(Number.isFinite(dT) && Number.isFinite(dt) && dt > 0 ? dT / dt : NaN);
       }
+    }
+
+    for (let i = longStart; i < n; i += 1) {
+      const winStart = Math.max(longStart, i - CMP_WIN_SHORT + 1);
+      const winP: number[] = [];
+      const winF: number[] = [];
+
+      for (let j = winStart; j <= i; j += 1) {
+        if (Number.isFinite(pressure[j])) winP.push(pressure[j]);
+        if (Number.isFinite(flow[j])) winF.push(flow[j]);
+      }
+
+      const flowMean = meanOf(winF);
+      const flowStd = stdOf(winF);
+      const pressureStd = stdOf(winP);
+      const pressureIqr = winP.length >= 4
+        ? [...winP].sort((a, b) => a - b)[Math.floor(winP.length * 0.75)] - [...winP].sort((a, b) => a - b)[Math.floor(winP.length * 0.25)]
+        : NaN;
+
+      pVolSeries.push(
+        Number.isFinite(pressureStd) && Number.isFinite(pressureIqr) && pressureIqr > 0
+          ? pressureStd / pressureIqr
+          : NaN,
+      );
+
+      fCvSeries.push(
+        Number.isFinite(flowStd) && Number.isFinite(flowMean) && flowMean > 0
+          ? flowStd / flowMean
+          : NaN,
+      );
     }
   }
 
@@ -664,7 +677,7 @@ function ComparativeSection({
       unit: "kPa·min/L",
       series: dpPerFlow,
       color: "#3eb8ff",
-      description: "(discharge − suction) / flow\n막힘·누수 조기감지",
+      description: "(discharge − suction) / flow\n에너지 대비 유량",
     },
     {
       key: "f_over_p",
@@ -672,31 +685,31 @@ function ComparativeSection({
       unit: "L/min/kW",
       series: flowPerPower,
       color: "#4caf50",
-      description: "flow / motor_power\n펌프 효율 추이",
+      description: "flow / motor_power\n펌프 효율",
     },
     {
       key: "p_vol",
-      label: "압력 변동성 (최근)",
+      label: "압력 변동성",
       unit: "kPa",
       series: pVolSeries,
       color: "#ff9800",
-      description: `rolling std, win=${CMP_WIN}\n12h 값: ${aggReady ? fmtAgg(pVol12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
+      description: `std / IQR\n현재 12시간 값 ${aggReady ? fmtAgg(pVol12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
     },
     {
       key: "f_cv",
-      label: "유량 변동성 (최근)",
+      label: "유량 변동성",
       unit: "",
       series: fCvSeries,
       color: "#ffc107",
-      description: `rolling CV, win=${CMP_WIN}\n12h 값: ${aggReady ? fmtAgg(fCv12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
+      description: `std / mean(flow)\n현재 12시간 값 ${aggReady ? fmtAgg(fCv12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
     },
     {
       key: "temp_slope",
-      label: "온도 변화율",
+      label: "초당 시간 대비 온도 변화율",
       unit: "°C/s",
       series: tempSlope,
       color: "#f44336",
-      description: "diff(motor_temp) / dt\n발열 추이",
+      description: "diff(motor_temp) / dt",
     },
   ];
 
@@ -790,9 +803,6 @@ function AiAnalysisModal({
 
   if (!open) return null;
 
-  const overallLevel = inference?.overall_alarm_level ?? 0;
-  const overallColor = LEVEL_COLORS[overallLevel] ?? "#4caf50";
-  const overallText = LEVEL_LABELS_KO[overallLevel] ?? "정상";
   const hasData = inference != null;
   const selectedReport = selectedDomain ? (inference?.domain_reports?.[selectedDomain] ?? null) : null;
 

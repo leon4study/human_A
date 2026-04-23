@@ -15,7 +15,13 @@ export default defineConfig({
       // 프론트에서 /predict로 요청하면
       // Vite가 inference-api(8000)로 전달
       "/predict": {
+        // /predict는 inference-api로 프록시
         target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/inference": {
+        // Alert 이력 조회는 backend-hub로 프록시
+        target: "http://127.0.0.1:8080",
         changeOrigin: true,
       },
     },

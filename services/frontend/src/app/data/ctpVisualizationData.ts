@@ -55,7 +55,7 @@ export const ctpVisualizationData: CtpVisualizationMetric[] = [
   },
   {
     id: "mix-ec",
-    label: "조제 현재 EC",
+    label: "혼합EC",
     value: Number.NaN,
     unit: "dS/m",
     direction: "high",

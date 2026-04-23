@@ -4,7 +4,8 @@ interface ValveSVGProps {
 }
 
 export function ValveSVG({ isOpen, size = 30 }: ValveSVGProps) {
-  const color = isOpen ? '#3b82f6' : '#6b7280';
+  // 밸브 잠김 상태는 빨강으로 통일
+  const color = isOpen ? '#3b82f6' : '#ef4444';
 
   return (
     <svg width={size} height={size} viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -42,7 +43,7 @@ export function ValveSVG({ isOpen, size = 30 }: ValveSVGProps) {
         </g>
       ) : (
         <g>
-          <rect x="12" y="10" width="6" height="10" rx="1" fill={color} opacity="0.8" stroke="#475569" strokeWidth="0.5" />
+          <rect x="12" y="10" width="6" height="10" rx="1" fill={color} opacity="0.9" stroke="#7f1d1d" strokeWidth="0.7" />
           <rect x="13" y="11" width="4" height="8" fill="#1e293b" />
           <path d="M 12 12 L 18 18 M 18 12 L 12 18" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
         </g>

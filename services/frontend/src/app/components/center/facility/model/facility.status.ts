@@ -4,6 +4,7 @@ import type { SensorData } from "./facility.types";
 export const staticEquipmentStatus = {
   rawWaterPump: true,
   valves: [true, false, true],
+  nutrientFeedValves: [true, true, true, true, false],
 } as const;
 
 // 센서 시뮬레이션의 초기값

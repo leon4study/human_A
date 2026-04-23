@@ -188,14 +188,14 @@ function mapPredictResponseToInferencePayload(
       target_reference_profiles: r.target_reference_profiles,
     };
   }
-  return {
+  return normalizeInferenceRecord({
     timestamp: (resp?.timestamp as string) ?? fallbackTs,
     overall_alarm_level: (resp?.overall_alarm_level as number) ?? 0,
     overall_status: (resp?.overall_status as string) ?? null,
     spike_info: resp?.spike_info as InferencePayload["spike_info"],
     action_required: (resp?.action_required as string) ?? null,
     domain_reports: reports,
-  };
+  });
 }
 
 
@@ -220,7 +220,38 @@ function normalizeInferencePayload(payload: unknown): InferencePayload | null {
     return maybeWrapped.sensor_data;
   }
 
-  return payload as InferencePayload;
+  return normalizeInferenceRecord(payload as InferencePayload);
+}
+
+function normalizeInferenceRecord(payload: InferencePayload): InferencePayload {
+  // 최종 응답은 domain_reports 안에 metadata와 실제 domain_reports가 한 번 더 들어온다
+  const root = (payload.domain_reports ?? {}) as Record<string, unknown>;
+  const nested = root.domain_reports as Record<string, InferenceDomainReport> | undefined;
+
+  if (!nested || typeof nested !== "object") {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    overall_alarm_level:
+      typeof root.overall_alarm_level === "number" ? root.overall_alarm_level : payload.overall_alarm_level,
+    overall_status:
+      typeof root.overall_status === "string" ? root.overall_status : payload.overall_status,
+    action_required:
+      typeof root.action_required === "string" ? root.action_required : payload.action_required,
+    spike_info:
+      (root.spike_info as InferencePayload["spike_info"]) ?? payload.spike_info,
+    timestamp:
+      typeof root.timestamp === "string" ? root.timestamp : payload.timestamp,
+    domain_reports: nested,
+  };
+}
+
+function buildInferenceKey(payload: InferencePayload): string {
+  // 동일 timestamp/상태/도메인 구성이 반복되면 한 번만 처리
+  const domainKeys = Object.keys(payload.domain_reports ?? {}).sort().join(",");
+  return `${payload.timestamp}|${payload.overall_alarm_level}|${payload.overall_status ?? ""}|${domainKeys}`;
 }
 
 function toFiniteNumber(value: unknown): number | undefined {
@@ -281,10 +312,12 @@ function getTargetLines(
 // threshold는 RAW가 아니라 INFERENCE payload에서 읽음
 // CTP 4개만 골라서 화면용 threshold snapshot으로 정리
 function extractThresholdUpdates(payload: InferencePayload): Record<string, ThresholdSnapshot> {
+  // 최종 payload는 normalizeInferenceRecord를 거친 뒤 domain_reports가 평탄화된 상태
+  const reports = payload.domain_reports ?? {};
 
-  const hydraulic = payload.domain_reports?.hydraulic;
-  const motor = payload.domain_reports?.motor;
-  const nutrient = payload.domain_reports?.nutrient;
+  const hydraulic = reports.hydraulic;
+  const motor = reports.motor;
+  const nutrient = reports.nutrient;
 
   const flowDetail = getFeatureDetail(hydraulic, "flow_rate_l_min");
   const flowBands = (flowDetail?.bands ?? {}) as Record<string, unknown>;
@@ -596,6 +629,8 @@ function useDashboardSocket(): DashboardSocketState {
   const latestRawRef = useRef<RawSensorPayload | null>(null);
   const rawDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSeenRawRef = useRef<RawSensorPayload | null>(null);
+  const lastWsInferenceAtRef = useRef<number>(0);
+  const lastInferenceKeyRef = useRef<string>("");
 
   const recomputeSystemStatus = () => {
     // 최근 10분 alarm 이벤트만 남겨서 상단 시스템 상태를 다시 계산
@@ -605,19 +640,31 @@ function useDashboardSocket(): DashboardSocketState {
   };
 
   const processInferencePayload = (payload: InferencePayload, source: string) => {
-    // INFERENCE는 alert / threshold / 비교분석 지표의 기준이 되는 데이터다
-    console.log(`🔍 INFERENCE [${source}]:`, payload);
+    // 최종 응답 구조를 프론트 공통 형태로 먼저 정규화
+    const normalized = normalizeInferenceRecord(payload);
+    const inferenceKey = buildInferenceKey(normalized);
 
-    // alarm 이력은 threshold 시각화와 별도로,
-    // inference가 발생한 당시 시각 기준으로만 누적
-    const ts = parseTimestampToMs(payload.timestamp);
+    // 같은 inference가 WS/PREDICT 경로로 반복 유입되면 한 번만 반영
+    if (lastInferenceKeyRef.current === inferenceKey) return;
+    lastInferenceKeyRef.current = inferenceKey;
+
+    // WS가 정상 수신 중이면 fallback /predict보다 WS를 우선 사용
+    if (source === "WS") {
+      lastWsInferenceAtRef.current = Date.now();
+    }
+
+    console.log(`🔍 INFERENCE [${source}]:`, normalized);
+
+    // alarm 이벤트는 상단 시스템 상태 계산용으로만 사용
+    // Alert 패널 데이터는 DB history API 결과만 사용
+    const ts = parseTimestampToMs(normalized.timestamp);
     alarmEventsRef.current = pruneAlarmEvents(
-      [...alarmEventsRef.current, { ts, level: payload.overall_alarm_level }],
+      [...alarmEventsRef.current, { ts, level: normalized.overall_alarm_level }],
       Date.now(),
     );
     recomputeSystemStatus();
 
-    setLatestInference(payload);
+    setLatestInference(normalized);
     setChartSnapshot(snapChartBuffer(chartBufRef.current));
 
     // 비교분석용 장기 버퍼는 별도로 유지
@@ -643,7 +690,7 @@ function useDashboardSocket(): DashboardSocketState {
 
     // threshold는 새 값이 있을 때만 갱신
     // 이 단계에서 alert 이력을 다시 만들면 안 됨
-    const thresholdUpdates = extractThresholdUpdates(payload);
+    const thresholdUpdates = extractThresholdUpdates(normalized);
     if (Object.keys(thresholdUpdates).length > 0) {
       thresholdBuffersRef.current = updateThresholdHistoryBuffers(
         thresholdBuffersRef.current,
@@ -653,17 +700,8 @@ function useDashboardSocket(): DashboardSocketState {
       setCtpVisualizationMetrics((prev) => applyThresholdHistoryToMetrics(prev, thresholdBuffersRef.current));
     }
 
-    // alert 이력은 inference payload만 기준으로 생성
-    // 사후 threshold 변경으로 과거 alert를 수정하지 않는다
-    // const newAlerts = mapInferenceToAlerts(payload);
-    // if (newAlerts.length > 0) {
-    //   setAlertItems((prev) => {
-    //     const existingIds = new Set(prev.map((item) => item.id));
-    //     const fresh = newAlerts.filter((a) => !existingIds.has(a.id));
-    //     if (fresh.length === 0) return prev;
-    //     return [...fresh, ...prev].slice(0, ALERT_MAX);
-    //   });
-    // }
+    // Alert 이력은 프론트에서 직접 생성하지 않음
+    // DB에 저장된 history API 응답만 화면에 반영
   };
 
   const handleRawPayload = (raw: RawSensorPayload) => {
@@ -831,6 +869,9 @@ function useDashboardSocket(): DashboardSocketState {
       const raw = lastSeenRawRef.current;
       if (!raw) return;
 
+      // 최근 WS inference가 들어왔으면 /predict fallback은 건너뜀
+      if (Date.now() - lastWsInferenceAtRef.current < 30_000) return;
+
       try {
         const res = await fetch(PREDICT_URL, {
           method: "POST",
@@ -867,35 +908,37 @@ function useDashboardSocket(): DashboardSocketState {
   }, []);
 
   useEffect(() => {
-    // 초기 진입 시 과거 inference history를 읽어서 alert 패널을 먼저 채움
-    // let cancelled = false;
+    // Alert 이력은 DB/API history 결과만 표시
+    let cancelled = false;
 
-    // (async () => {
-    //   try {
-    //     const res = await fetch(HISTORY_URL);
-    //     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    //     const rows: InferencePayload[] = await res.json();
-    //     if (cancelled) return;
+    (async () => {
+      try {
+        const res = await fetch(HISTORY_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    //     const alerts: AlertItem[] = [];
-    //     const seen = new Set<string>();
-    //     for (const row of rows) {
-    //       for (const alert of mapInferenceToAlerts(row)) {
-    //         if (seen.has(alert.id)) continue;
-    //         seen.add(alert.id);
-    //         alerts.push(alert);
-    //       }
-    //     }
+        const rows = (await res.json()) as InferencePayload[];
+        if (cancelled) return;
 
-    //     setAlertItems(alerts.slice(0, ALERT_MAX));
-    //   } catch (error) {
-    //     console.error("❌ Alert 이력 초기 로드 실패:", error);
-    //   }
-    // })();
+        const alerts: AlertItem[] = [];
+        const seen = new Set<string>();
 
-    // return () => {
-    //   cancelled = true;
-      return () => {
+        for (const row of rows) {
+          const normalized = normalizeInferenceRecord(row);
+          for (const alert of mapInferenceToAlerts(normalized)) {
+            if (seen.has(alert.id)) continue;
+            seen.add(alert.id);
+            alerts.push(alert);
+          }
+        }
+
+        setAlertItems(alerts.slice(0, ALERT_MAX));
+      } catch (error) {
+        console.error("❌ Alert 이력 초기 로드 실패:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
