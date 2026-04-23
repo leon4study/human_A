@@ -675,7 +675,7 @@ function ComparativeSection({
       unit: "kPa·min/L",
       series: pressureFlowRatio,
       color: "#9fe7ff",
-      description: "discharge / flow\n배관 저항 지표",
+      description: "배관 저항 지표",
     },
     {
       key: "dp_over_f",
@@ -683,7 +683,7 @@ function ComparativeSection({
       unit: "kPa·min/L",
       series: dpPerFlow,
       color: "#3eb8ff",
-      description: "(discharge − suction) / flow\n에너지 대비 유량",
+      description: "에너지 대비 유량",
     },
     {
       key: "f_over_p",
@@ -691,7 +691,7 @@ function ComparativeSection({
       unit: "L/min/kW",
       series: flowPerPower,
       color: "#4caf50",
-      description: "flow / motor_power\n펌프 효율",
+      description: "펌프 효율",
     },
     {
       key: "p_vol",
@@ -699,7 +699,7 @@ function ComparativeSection({
       unit: "kPa",
       series: pVolSeries,
       color: "#ff9800",
-      description: `std / IQR\n현재 12시간 값 ${aggReady ? fmtAgg(pVol12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
+      description: `현재 12시간 값 ${aggReady ? fmtAgg(pVol12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
     },
     {
       key: "f_cv",
@@ -707,7 +707,7 @@ function ComparativeSection({
       unit: "",
       series: fCvSeries,
       color: "#ffc107",
-      description: `std / mean(flow)\n현재 12시간 값 ${aggReady ? fmtAgg(fCv12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
+      description: `현재 12시간 값 ${aggReady ? fmtAgg(fCv12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
     },
     {
       key: "temp_slope",
@@ -715,7 +715,7 @@ function ComparativeSection({
       unit: "°C/s",
       series: tempSlope,
       color: "#f44336",
-      description: "diff(motor_temp) / dt",
+      description: "",
     },
   ];
 
