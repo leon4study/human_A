@@ -1,0 +1,126 @@
+/* 팝업 전체 배경 */
+.equipment-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(3, 12, 24, 0.6);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* 팝업 박스 */
+.equipment-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 20px;
+  border: 1px solid rgba(120, 200, 255, 0.22);
+  background: linear-gradient(
+    180deg,
+    rgba(8, 27, 52, 0.98) 0%,
+    rgba(10, 34, 64, 0.96) 100%
+  );
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  color: #eaf7ff;
+}
+
+/* 상단 */
+.equipment-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid rgba(120, 200, 255, 0.14);
+}
+
+.equipment-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f3fbff;
+}
+
+.equipment-modal-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(220, 242, 255, 0.72);
+}
+
+.equipment-modal-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+/* 본문 */
+.equipment-modal-body {
+  padding: 18px 22px 22px;
+}
+
+.equipment-modal-section + .equipment-modal-section {
+  margin-top: 20px;
+}
+
+.equipment-modal-section-title {
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #9fe7ff;
+}
+
+.equipment-modal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.equipment-modal-label {
+  font-size: 14px;
+  color: rgba(225, 243, 255, 0.72);
+}
+
+.equipment-modal-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: right;
+}
+
+.equipment-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.equipment-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.equipment-history-time {
+  font-size: 13px;
+  color: rgba(225, 243, 255, 0.7);
+}
+
+.equipment-history-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}

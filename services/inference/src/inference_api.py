@@ -158,7 +158,7 @@ def save_inference_history(sensor_id: str, payload: Dict[str, Any]) -> None:
                     "lvl": payload["overall_alarm_level"],
                     "status": payload["overall_status"],
                     "res": json.dumps(
-                        payload["domain_reports"],
+                        payload,
                         ensure_ascii=False,
                         default=str,
                     ),
@@ -691,6 +691,8 @@ def startup_scheduler() -> None:
         id="inference_s3_batch",
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=300,
+        next_run_time=datetime.datetime.now(),
     )
     scheduler.start()
     logger.info(
