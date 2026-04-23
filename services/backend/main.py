@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import datetime
 import threading
 import sqlalchemy as sa
 from dotenv import load_dotenv
@@ -114,7 +115,12 @@ async def lifespan(app: FastAPI):
     main_loop = asyncio.get_running_loop()
     threading.Thread(target=start_mqtt_loop, args=(main_loop,), daemon=True).start()
     scheduler = BackgroundScheduler()
-    scheduler.add_job(run_scheduled_batch, 'interval', minutes=1)
+    scheduler.add_job(
+        run_scheduled_batch, 'interval', minutes=1,
+        max_instances=1, coalesce=True,
+        misfire_grace_time=300,
+        next_run_time=datetime.datetime.now(),
+    )
     scheduler.start()
     print("✅ 백엔드 허브 및 스케줄러 가동 준비 완료")
     yield
