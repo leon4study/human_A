@@ -200,12 +200,14 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
 
         <div className="ctp-chart">
           <svg className="ctp-chart__svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none">
+            {/* 패턴 정의: 대각선 줄무늬(빗금패턴)로 위험 구간 강조 */}
             <defs>
               <pattern id={patternId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(25)">
                 <line x1="0" y1="0" x2="0" y2="6" className="ctp-chart__critical-pattern-line" />
               </pattern>
             </defs>
-
+            
+            {/* 상한선 */}
             {isFiniteSeries(cautionSeries) && (
               <path d={linePathFromSeries(cautionSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--caution" />
             )}
@@ -216,6 +218,7 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
               <path d={linePathFromSeries(criticalSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--critical" />
             )}
 
+            {/* 하한선 */}
             {showRange && isFiniteSeries(cautionLowerSeries) && (
               <path d={linePathFromSeries(cautionLowerSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--caution" style={{ opacity: 0.55 }} />
             )}

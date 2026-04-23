@@ -316,6 +316,7 @@ const FEATURE_LABEL_MAP: Record<string, string> = {
   zone1_substrate_moisture_pct: "구역 배지 수분 이상",
   zone1_substrate_ec_ds_m: "구역 배지 EC 이상",
   air_temp_c: "실내 기온 이상",
+  pump_rpm : "펌프 회전수 이상",
 };
 
 // 시간 컨텍스트 피처는 alert 원인에서 제외
