@@ -21,8 +21,8 @@ const ENVIRONMENT_COLUMN_MAP: Record<string, keyof RawSensorPayload> = {
 const CTP_COLUMN_MAP: Record<string, keyof RawSensorPayload> = {
   "pump-discharge-flow": "flow_rate_l_min",
   "pump-discharge-pressure": "discharge_pressure_kpa",
-  "motor-current": "motor_current_a",
-  "mix-ec": "mix_ec_ds_m",
+  "motor-temperature": "motor_temperature_c",
+  "motor-power": "motor_power_kw",
 };
 
 // 설비 SVG/패널에 표시용 탱크 수위 컬럼 매핑
@@ -316,7 +316,6 @@ const FEATURE_LABEL_MAP: Record<string, string> = {
   zone1_substrate_moisture_pct: "구역 배지 수분 이상",
   zone1_substrate_ec_ds_m: "구역 배지 EC 이상",
   air_temp_c: "실내 기온 이상",
-  pump_rpm : "펌프 회전수 이상",
 };
 
 // 시간 컨텍스트 피처는 alert 원인에서 제외
