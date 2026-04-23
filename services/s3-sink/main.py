@@ -36,8 +36,8 @@ BUCKET_NAME = "raw-data"
 
 # 상태 관리 변수 (메모리 버퍼)
 data_buffer = []
-# 10분(600초) 주기로 설정 (테스트 시에는 60으로 줄여서 확인하세요)
-FLUSH_INTERVAL = 600 
+# 1분(60초) 주기 — 대시보드 실시간 테스트용
+FLUSH_INTERVAL = 60
 last_flush_time = datetime.now()
 
 def upload_to_s3(buffer):
@@ -70,9 +70,8 @@ def upload_to_s3(buffer):
         
         # 파일 경로 설계 (Hive Partitioning: year/month/day/file.csv)
         now = datetime.now()
-        # 10분 단위로 올림 처리하여 파일명 생성 (예: 15시 12분에 저장 시 15시 10분 데이터로 명명)
-        rounded_min = (now.minute // 10) * 10
-        file_name = f"sensor_{now.strftime('%H')}{rounded_min:02d}.csv"
+        # 1분 단위 파일명 (FLUSH_INTERVAL=60초와 짝을 맞춰 덮어쓰기 방지)
+        file_name = f"sensor_{now.strftime('%H%M')}.csv"
         path = f"year={now.year}/month={now.month:02d}/day={now.day:02d}/{file_name}"
         
         # 업로드 실행
