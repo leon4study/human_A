@@ -133,7 +133,7 @@ function MiniLineChart({
 
   if (valid.length < 2) {
     return (
-      <div style={{ width: CW }}>
+      <div style={{ width: "100%" }}>
         <div className="ai-chart-label">{label}</div>
         <div className="ai-chart-empty">데이터 수집 중...</div>
         <div className="ai-chart-value" style={{ color }}>{lastValStr}</div>
@@ -185,9 +185,15 @@ function MiniLineChart({
   const pointsStr = (seg: Array<{ x: number; y: number }>) => seg.map((p) => `${p.x},${p.y}`).join(" ");
 
   return (
-    <div style={{ width: CW }}>
+    <div style={{ width: "100%" }}>
       <div className="ai-chart-label">{label}</div>
-      <svg width={CW} height={CH} style={{ display: "block" }}>
+      <svg
+        viewBox={`0 0 ${CW} ${CH}`}
+        width="100%"
+        height={CH}
+        preserveAspectRatio="none"
+        style={{ display: "block" }}
+      >
         <rect width={CW} height={CH} rx={6} fill="rgba(255,255,255,0.04)" />
 
         {/* 경고선 반영 */}
@@ -545,7 +551,7 @@ function ChartRow({
 }) {
   return (
     <div className="ai-chart-row">
-      <div className="ai-chart-cell">{chartEl}</div>
+      <div className="ai-chart-200px">{chartEl}</div>
       <div className="ai-chart-desc">
         {description.split("\n").map((line, i) => (
           <div key={i} style={{ lineHeight: 1.5 }}>
