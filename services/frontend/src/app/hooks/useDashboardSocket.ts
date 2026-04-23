@@ -90,7 +90,7 @@ interface DashboardSocketState {
 const SOCKET_URL = "ws://127.0.0.1:8080/ws/smart-farm";
 // Alert 이력 초기 로드는 최대 50개만 요청
 // 추후 날짜 선택 로그 조회가 필요하면 query string만 확장해서 붙일 수 있게 유지
-const HISTORY_URL = "/inference/history?limit=50";
+const HISTORY_URL = "http://127.0.0.1:8080/inference/history?limit=50";
 const ALERT_MAX = 50;
 const STATUS_RECOMPUTE_INTERVAL_MS = 60 * 1000;
 const PREDICT_URL = "/predict";
@@ -331,19 +331,29 @@ function extractThresholdUpdates(payload: InferencePayload): Record<string, Thre
   const pressureWarning = (pressureLines?.warning ?? {}) as Record<string, unknown>;
   const pressureCritical = (pressureLines?.critical ?? {}) as Record<string, unknown>;
 
-  const motorCurrentLines = getTargetLines(motor, "motor_current_a");
-  const currentCaution = (motorCurrentLines?.caution ?? {}) as Record<string, unknown>;
-  const currentWarning = (motorCurrentLines?.warning ?? {}) as Record<string, unknown>;
-  const currentCritical = (motorCurrentLines?.critical ?? {}) as Record<string, unknown>;
+  const motorTempDetail = getFeatureDetail(hydraulic, "motor_temperature_c");
+  const motorTempBands = (motorTempDetail?.bands ?? {}) as Record<string, unknown>;
 
-  const ecLines = getRelatedFeatureLines(
-    nutrient,
-    "pid_error_ec",
-    "mix_ec_ds_m",
+  const motorPowerDetail = getFeatureDetail(hydraulic, "motor_power_kw");
+  const motorPowerBands = (motorPowerDetail?.bands ?? {}) as Record<string, unknown>;
+
+  const motorTempLines = getRelatedFeatureLines(
+    motor,
+    "motor_current_a",
+    "motor_temperature_c",
   );
-  const ecCaution = (ecLines?.caution ?? {}) as Record<string, unknown>;
-  const ecWarning = (ecLines?.warning ?? {}) as Record<string, unknown>;
-  const ecCritical = (ecLines?.critical ?? {}) as Record<string, unknown>;
+  const motorTempCaution = (motorTempLines?.caution ?? {}) as Record<string, unknown>;
+  const motorTempWarning = (motorTempLines?.warning ?? {}) as Record<string, unknown>;
+  const motorTempCritical = (motorTempLines?.critical ?? {}) as Record<string, unknown>;
+
+  const motorPowerLines = getRelatedFeatureLines(
+    motor,
+    "motor_current_a",
+    "motor_power_kw",
+  );
+  const motorPowerCaution = (motorPowerLines?.caution ?? {}) as Record<string, unknown>;
+  const motorPowerWarning = (motorPowerLines?.warning ?? {}) as Record<string, unknown>;
+  const motorPowerCritical = (motorPowerLines?.critical ?? {}) as Record<string, unknown>;
 
   const updates: Record<string, ThresholdSnapshot> = {};
 
@@ -386,45 +396,45 @@ function extractThresholdUpdates(payload: InferencePayload): Record<string, Thre
     };
   }
 
-  // 모터 전류는 upper/lower를 둘 다 보는 range 기준이다
-  const currentUpperCaution = toFiniteNumber(currentCaution.upper);
-  const currentUpperWarning = toFiniteNumber(currentWarning.upper);
-  const currentUpperCritical = toFiniteNumber(currentCritical.upper);
+  // 모터 온도는 hydraulic.feature_details의 동적 밴드를 우선 사용
+  const motorTempCautionUpper = toFiniteNumber(motorTempBands.caution_upper);
+  const motorTempWarningUpper = toFiniteNumber(motorTempBands.warning_upper);
+  const motorTempCriticalUpper = toFiniteNumber(motorTempBands.critical_upper);
   if (
-    currentUpperCaution !== undefined &&
-    currentUpperWarning !== undefined &&
-    currentUpperCritical !== undefined
+    motorTempCautionUpper !== undefined &&
+    motorTempWarningUpper !== undefined &&
+    motorTempCriticalUpper !== undefined
   ) {
-    updates["motor-current"] = {
-      thresholdMode: "range",
-      caution: currentUpperCaution,
-      warning: currentUpperWarning,
-      critical: currentUpperCritical,
-      cautionLower: toFiniteNumber(currentCaution.lower),
-      warningLower: toFiniteNumber(currentWarning.lower),
-      criticalLower: toFiniteNumber(currentCritical.lower),
-      thresholdSource: "motor.target_reference_profiles.motor_current_a.target_lines",
+    updates["motor-temperature"] = {
+      thresholdMode: "high",
+      caution: motorTempCautionUpper,
+      warning: motorTempWarningUpper,
+      critical: motorTempCriticalUpper,
+      cautionLower: toFiniteNumber(motorTempCaution.lower) ?? toFiniteNumber(motorTempBands.caution_lower),
+      warningLower: toFiniteNumber(motorTempWarning.lower) ?? toFiniteNumber(motorTempBands.warning_lower),
+      criticalLower: toFiniteNumber(motorTempCritical.lower) ?? toFiniteNumber(motorTempBands.critical_lower),
+      thresholdSource: "hydraulic.feature_details.motor_temperature_c + motor.target_reference_profiles.motor_current_a.related_feature_lines.motor_temperature_c",
     };
   }
 
-  // EC는 독립 threshold가 아니라 pid_error_ec.related_feature_lines 기준을 빌려온다
-  const ecUpperCaution = toFiniteNumber(ecCaution.upper);
-  const ecUpperWarning = toFiniteNumber(ecWarning.upper);
-  const ecUpperCritical = toFiniteNumber(ecCritical.upper);
+  // 모터 전력은 related_feature_lines의 통계 임계값을 우선 사용
+  const motorPowerUpperCaution = toFiniteNumber(motorPowerCaution.upper) ?? toFiniteNumber(motorPowerBands.caution_upper);
+  const motorPowerUpperWarning = toFiniteNumber(motorPowerWarning.upper) ?? toFiniteNumber(motorPowerBands.warning_upper);
+  const motorPowerUpperCritical = toFiniteNumber(motorPowerCritical.upper) ?? toFiniteNumber(motorPowerBands.critical_upper);
   if (
-    ecUpperCaution !== undefined &&
-    ecUpperWarning !== undefined &&
-    ecUpperCritical !== undefined
+    motorPowerUpperCaution !== undefined &&
+    motorPowerUpperWarning !== undefined &&
+    motorPowerUpperCritical !== undefined
   ) {
-    updates["mix-ec"] = {
+    updates["motor-power"] = {
       thresholdMode: "range",
-      caution: ecUpperCaution,
-      warning: ecUpperWarning,
-      critical: ecUpperCritical,
-      cautionLower: toFiniteNumber(ecCaution.lower),
-      warningLower: toFiniteNumber(ecWarning.lower),
-      criticalLower: toFiniteNumber(ecCritical.lower),
-      thresholdSource: "nutrient.target_reference_profiles.pid_error_ec.related_feature_lines.mix_ec_ds_m",
+      caution: motorPowerUpperCaution,
+      warning: motorPowerUpperWarning,
+      critical: motorPowerUpperCritical,
+      cautionLower: toFiniteNumber(motorPowerCaution.lower) ?? toFiniteNumber(motorPowerBands.caution_lower),
+      warningLower: toFiniteNumber(motorPowerWarning.lower) ?? toFiniteNumber(motorPowerBands.warning_lower),
+      criticalLower: toFiniteNumber(motorPowerCritical.lower) ?? toFiniteNumber(motorPowerBands.critical_lower),
+      thresholdSource: "hydraulic.feature_details.motor_power_kw + motor.target_reference_profiles.motor_current_a.related_feature_lines.motor_power_kw",
     };
   }
 

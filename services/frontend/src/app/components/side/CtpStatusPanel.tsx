@@ -67,11 +67,8 @@ function formatMetricValue(metric: CtpVisualizationMetric) {
   // 미수신 상태 바로 인지
   if (!Number.isFinite(metric.value)) return "---";
 
-  // EC는 작은 변화도 확인해야 해서 소수점 3자리까지 표시
-  if (metric.id === "mix-ec") return metric.value.toFixed(3);
-
-  // 전류, 2자리 표시
-  if (metric.unit === "A") return metric.value.toFixed(2);
+  // 전력, 정밀도 확보를 위해 2자리 표시
+  if (metric.unit === "kW") return metric.value.toFixed(2);
 
   // 나머지 값은 카드 가독성을 위해 소수점 1자리로 맞춤
   return metric.value.toFixed(1);
