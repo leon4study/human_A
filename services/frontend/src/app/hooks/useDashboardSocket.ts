@@ -58,8 +58,8 @@ export interface ChartBuffer {
   zone3_ec: number[];
 }
 
-// 설비 상세/모달에 보여주는 짧은 비교 그래프는 최근 20개까지만 유지
-const CHART_MAX = 20;
+// 비교분석 그래프는 RAW tick마다 흐르도록 720틱까지 유지 (SHORT=60/LONG=72 커버)
+const CHART_MAX = 720;
 // 비교분석용 장기 버퍼는 최근 12시간(1분 기준 720개)을 기준으로 설정
 const LONG_BUF_MAX = 720;
 const MIN_SAMPLES_FOR_STATS = 30;
@@ -663,7 +663,7 @@ function useDashboardSocket(): DashboardSocketState {
       lastWsInferenceAtRef.current = Date.now();
     }
 
-    console.log(`🔍 INFERENCE [${source}]:`, normalized);
+    // console.log(`🔍 INFERENCE [${source}]:`, normalized);
 
     // alarm 이벤트는 상단 시스템 상태 계산용으로만 사용
     // Alert 패널 데이터는 DB history API 결과만 사용
@@ -795,6 +795,9 @@ function useDashboardSocket(): DashboardSocketState {
           ? raw.discharge_pressure_kpa
           : prev.pressure,
     }));
+
+    // 비교분석 그래프가 RAW tick마다 흐르도록 스냅샷 갱신
+    setChartSnapshot(snapChartBuffer(chartBufRef.current));
   };
 
   useEffect(() => {
@@ -811,6 +814,9 @@ function useDashboardSocket(): DashboardSocketState {
     socket.onmessage = (event) => {
       try {
         const message: AnySocketMessage = JSON.parse(event.data);
+        if (message.type != "RAW") {
+          console.log(message)
+        }
 
         if (message.type === "RAW") {
           // RAW는 sensor_data 래핑 여부를 먼저 정규화

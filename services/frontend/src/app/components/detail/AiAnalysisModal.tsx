@@ -632,24 +632,25 @@ function ComparativeSection({
 
     for (let i = longStart; i < n; i += 1) {
       const winStart = Math.max(longStart, i - CMP_WIN_SHORT + 1);
-      const winP: number[] = [];
+      const winDp: number[] = [];
       const winF: number[] = [];
 
       for (let j = winStart; j <= i; j += 1) {
-        if (Number.isFinite(pressure[j])) winP.push(pressure[j]);
+        const dp = pressure[j] - suction[j];
+        if (Number.isFinite(dp)) winDp.push(dp);
         if (Number.isFinite(flow[j])) winF.push(flow[j]);
       }
 
       const flowMean = meanOf(winF);
       const flowStd = stdOf(winF);
-      const pressureStd = stdOf(winP);
-      const pressureIqr = winP.length >= 4
-        ? [...winP].sort((a, b) => a - b)[Math.floor(winP.length * 0.75)] - [...winP].sort((a, b) => a - b)[Math.floor(winP.length * 0.25)]
+      const dpStd = stdOf(winDp);
+      const dpIqr = winDp.length >= 4
+        ? [...winDp].sort((a, b) => a - b)[Math.floor(winDp.length * 0.75)] - [...winDp].sort((a, b) => a - b)[Math.floor(winDp.length * 0.25)]
         : NaN;
 
       pVolSeries.push(
-        Number.isFinite(pressureStd) && Number.isFinite(pressureIqr) && pressureIqr > 0
-          ? pressureStd / pressureIqr
+        Number.isFinite(dpStd) && Number.isFinite(dpIqr) && dpIqr > 0
+          ? dpStd / dpIqr
           : NaN,
       );
 
