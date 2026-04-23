@@ -1,0 +1,48 @@
+import type { CtpVisualizationMetric } from "../types/dashboard";
+
+export const ctpVisualizationData: CtpVisualizationMetric[] = [
+  {
+    id: "pump-discharge-flow",
+    label: "펌프 토출 유량",
+    value: 88,
+    unit: "L/min",
+    direction: "low",
+    caution: 105,
+    warning: 95,
+    critical: 85,
+    trend: [116, 112, 108, 101, 97, 92, 84, 89, 83, 87, 88],
+  },
+  {
+    id: "pump-discharge-pressure",
+    label: "펌프 토출 압력",
+    value: 334,
+    unit: "kPa",
+    direction: "high",
+    caution: 280,
+    warning: 320,
+    critical: 360,
+    trend: [268, 276, 289, 301, 315, 327, 341, 333, 348, 339, 334],
+  },
+  {
+    id: "ph",
+    label: "pH",
+    value: 6.4,
+    unit: "",
+    direction: "high",
+    caution: 6.0,
+    warning: 6.3,
+    critical: 6.6,
+    trend: [5.7, 5.8, 5.9, 6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.4, 6.4],
+  },
+  {
+    id: "motor-current",
+    label: "모터 소비 전류",
+    value: 12.6,
+    unit: "A",
+    direction: "high",
+    caution: 12.0,
+    warning: 13.5,
+    critical: 15.0,
+    trend: [10.4, 10.9, 11.3, 11.9, 12.4, 13.1, 12.7, 13.4, 12.8, 12.3, 12.6],
+  },
+];
