@@ -655,15 +655,15 @@ function useDashboardSocket(): DashboardSocketState {
 
     // alert 이력은 inference payload만 기준으로 생성
     // 사후 threshold 변경으로 과거 alert를 수정하지 않는다
-    const newAlerts = mapInferenceToAlerts(payload);
-    if (newAlerts.length > 0) {
-      setAlertItems((prev) => {
-        const existingIds = new Set(prev.map((item) => item.id));
-        const fresh = newAlerts.filter((a) => !existingIds.has(a.id));
-        if (fresh.length === 0) return prev;
-        return [...fresh, ...prev].slice(0, ALERT_MAX);
-      });
-    }
+    // const newAlerts = mapInferenceToAlerts(payload);
+    // if (newAlerts.length > 0) {
+    //   setAlertItems((prev) => {
+    //     const existingIds = new Set(prev.map((item) => item.id));
+    //     const fresh = newAlerts.filter((a) => !existingIds.has(a.id));
+    //     if (fresh.length === 0) return prev;
+    //     return [...fresh, ...prev].slice(0, ALERT_MAX);
+    //   });
+    // }
   };
 
   const handleRawPayload = (raw: RawSensorPayload) => {

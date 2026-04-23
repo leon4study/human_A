@@ -106,6 +106,10 @@ function linePathFromSeries(series: number[], chartWidth: number, normalizeY: (v
     .join(" ");
 }
 
+function isFiniteSeries(series?: number[]) {
+  return Array.isArray(series) && series.some((value) => Number.isFinite(value));
+}
+
 function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
   const chartWidth = 100;
   const chartHeight = 180;
@@ -135,9 +139,9 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
   }
 
   // threshold 시계열이 없으면 현재 threshold를 길이에 맞춰 임시로 채움
-  const cautionSeries = selectedMetric.cautionTrend ?? Array.from({ length: values.length }, () => selectedMetric.caution);
-  const warningSeries = selectedMetric.warningTrend ?? Array.from({ length: values.length }, () => selectedMetric.warning);
-  const criticalSeries = selectedMetric.criticalTrend ?? Array.from({ length: values.length }, () => selectedMetric.critical);
+  const cautionSeries = selectedMetric.cautionTrend ?? [];
+  const warningSeries = selectedMetric.warningTrend ?? [];
+  const criticalSeries = selectedMetric.criticalTrend ?? [];
   const cautionLowerSeries = selectedMetric.cautionLowerTrend ?? [];
   const warningLowerSeries = selectedMetric.warningLowerTrend ?? [];
   const criticalLowerSeries = selectedMetric.criticalLowerTrend ?? [];
@@ -186,24 +190,28 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ");
 
-  // 카드 옆 라벨 위치는 현재 threshold 값 기준으로 설정
-  const cautionY = normalizeY(selectedMetric.caution);
-  const warningY = normalizeY(selectedMetric.warning);
-  const criticalY = normalizeY(selectedMetric.critical);
+  const hasCaution = Number.isFinite(selectedMetric.caution);
+  const hasWarning = Number.isFinite(selectedMetric.warning);
+  const hasCritical = Number.isFinite(selectedMetric.critical);
+  const hasCautionLower = Number.isFinite(selectedMetric.cautionLower);
+  const hasWarningLower = Number.isFinite(selectedMetric.warningLower);
+  const hasCriticalLower = Number.isFinite(selectedMetric.criticalLower);
+
+  const cautionY = hasCaution ? normalizeY(selectedMetric.caution) : null;
+  const warningY = hasWarning ? normalizeY(selectedMetric.warning) : null;
+  const criticalY = hasCritical ? normalizeY(selectedMetric.critical) : null;
 
   // critical을 넘은 구간만 따로 채우기 위해 segment를 미리 계산
-  const criticalSegments = buildCriticalSegments(
-    points,
-    criticalSeries,
-    selectedMetric.direction,
-    chartHeight,
-    normalizeY,
-  );
+  const hasCriticalSeries = isFiniteSeries(criticalSeries);
+  const criticalSegments = hasCriticalSeries
+    ? buildCriticalSegments(points, criticalSeries, selectedMetric.direction, chartHeight, normalizeY)
+    : [];
 
   const patternId = `ctp-critical-pattern-${selectedMetric.id}`;
 
   // range 모드는 upper/lower threshold를 둘 다 그려야 한다
   const showRange = selectedMetric.thresholdMode === "range";
+  const showThresholdGuide = hasCaution || hasWarning || hasCritical;
 
   return (
     <Panel title="CTP 시각화">
@@ -213,28 +221,42 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
         </div>
 
         <div className="ctp-chart">
-          <div className="ctp-chart__line-label ctp-chart__line-label--caution" style={{ top: `${cautionY - 10}px` }}>
-            Caution
-          </div>
-          <div className="ctp-chart__line-label ctp-chart__line-label--warning" style={{ top: `${warningY - 10}px` }}>
-            Warning
-          </div>
-          <div className="ctp-chart__line-label ctp-chart__line-label--critical" style={{ top: `${criticalY - 10}px` }}>
-            Critical
-          </div>
-
-          <div className="ctp-chart__threshold ctp-chart__threshold--caution" style={{ top: `${cautionY}px` }} />
-          <div className="ctp-chart__threshold ctp-chart__threshold--warning" style={{ top: `${warningY}px` }} />
-          <div className="ctp-chart__threshold ctp-chart__threshold--critical" style={{ top: `${criticalY}px` }} />
-
-          {showRange && selectedMetric.cautionLower !== undefined && (
-            <div className="ctp-chart__threshold ctp-chart__threshold--caution" style={{ top: `${normalizeY(selectedMetric.cautionLower)}px`, opacity: 0.55 }} />
+          {!showThresholdGuide && (
+            <div className="ctp-visualization__subtitle">threshold 수신 대기 중</div>
           )}
-          {showRange && selectedMetric.warningLower !== undefined && (
-            <div className="ctp-chart__threshold ctp-chart__threshold--warning" style={{ top: `${normalizeY(selectedMetric.warningLower)}px`, opacity: 0.55 }} />
+          {cautionY !== null && (
+            <>
+              <div className="ctp-chart__line-label ctp-chart__line-label--caution" style={{ top: `${cautionY - 10}px` }}>
+                Caution
+              </div>
+              <div className="ctp-chart__threshold ctp-chart__threshold--caution" style={{ top: `${cautionY}px` }} />
+            </>
           )}
-          {showRange && selectedMetric.criticalLower !== undefined && (
-            <div className="ctp-chart__threshold ctp-chart__threshold--critical" style={{ top: `${normalizeY(selectedMetric.criticalLower)}px`, opacity: 0.55 }} />
+          {warningY !== null && (
+            <>
+              <div className="ctp-chart__line-label ctp-chart__line-label--warning" style={{ top: `${warningY - 10}px` }}>
+                Warning
+              </div>
+              <div className="ctp-chart__threshold ctp-chart__threshold--warning" style={{ top: `${warningY}px` }} />
+            </>
+          )}
+          {criticalY !== null && (
+            <>
+              <div className="ctp-chart__line-label ctp-chart__line-label--critical" style={{ top: `${criticalY - 10}px` }}>
+                Critical
+              </div>
+              <div className="ctp-chart__threshold ctp-chart__threshold--critical" style={{ top: `${criticalY}px` }} />
+            </>
+          )}
+
+          {showRange && hasCautionLower && (
+            <div className="ctp-chart__threshold ctp-chart__threshold--caution" style={{ top: `${normalizeY(selectedMetric.cautionLower!)}px`, opacity: 0.55 }} />
+          )}
+          {showRange && hasWarningLower && (
+            <div className="ctp-chart__threshold ctp-chart__threshold--warning" style={{ top: `${normalizeY(selectedMetric.warningLower!)}px`, opacity: 0.55 }} />
+          )}
+          {showRange && hasCriticalLower && (
+            <div className="ctp-chart__threshold ctp-chart__threshold--critical" style={{ top: `${normalizeY(selectedMetric.criticalLower!)}px`, opacity: 0.55 }} />
           )}
 
           <svg className="ctp-chart__svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none">
@@ -244,23 +266,23 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
               </pattern>
             </defs>
 
-            {cautionSeries.length > 0 && (
+            {isFiniteSeries(cautionSeries) && (
               <path d={linePathFromSeries(cautionSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--caution" />
             )}
-            {warningSeries.length > 0 && (
+            {isFiniteSeries(warningSeries) && (
               <path d={linePathFromSeries(warningSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--warning" />
             )}
-            {criticalSeries.length > 0 && (
+            {isFiniteSeries(criticalSeries) && (
               <path d={linePathFromSeries(criticalSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--critical" />
             )}
 
-            {showRange && cautionLowerSeries.length > 0 && (
+            {showRange && isFiniteSeries(cautionLowerSeries) && (
               <path d={linePathFromSeries(cautionLowerSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--caution" style={{ opacity: 0.55 }} />
             )}
-            {showRange && warningLowerSeries.length > 0 && (
+            {showRange && isFiniteSeries(warningLowerSeries) && (
               <path d={linePathFromSeries(warningLowerSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--warning" style={{ opacity: 0.55 }} />
             )}
-            {showRange && criticalLowerSeries.length > 0 && (
+            {showRange && isFiniteSeries(criticalLowerSeries) && (
               <path d={linePathFromSeries(criticalLowerSeries, chartWidth, normalizeY)} className="ctp-chart__threshold-path ctp-chart__threshold-path--critical" style={{ opacity: 0.55 }} />
             )}
 
