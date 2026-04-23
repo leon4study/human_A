@@ -8,10 +8,17 @@ interface CtpStatusPanelProps {
   onSelect: (metricId: string) => void;
 }
 
+function hasFiniteThreshold(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 // 카드 색을 정할 때는 thresholdMode 우선 적용,
 // direction 값 fallback 사용
 function getMetricStatus(metric: CtpVisualizationMetric): "normal" | "warning" | "danger" {
   const mode = metric.thresholdMode ?? metric.direction;
+
+  // threshold 미수신 상태, 중립 유지
+  if (!Number.isFinite(metric.value)) return "normal";
 
   // range 모드, 상한/하한 동시 판정
   // EC, 전류처럼 너무 높아도 문제고 너무 낮아도 문제인 경우에 사용
@@ -20,12 +27,12 @@ function getMetricStatus(metric: CtpVisualizationMetric): "normal" | "warning" |
     const cautionLower = metric.cautionLower;
     const criticalLower = metric.criticalLower;
 
-    // 하한 기준 누락 시 오판 방지
-    // 일단 normal 처리, 화면 유지
+    // 상하한 threshold가 모두 준비되어야 판정
     if (
-      cautionLower === undefined ||
-      criticalLower === undefined ||
-      !Number.isFinite(value)
+      !hasFiniteThreshold(metric.caution) ||
+      !hasFiniteThreshold(metric.critical) ||
+      !hasFiniteThreshold(cautionLower) ||
+      !hasFiniteThreshold(criticalLower)
     ) {
       return "normal";
     }

@@ -833,7 +833,7 @@ function AiAnalysisModal({
 
           {hasData && (
             <>
-              <div
+              {/* <div
                 style={{
                   borderRadius: "14px",
                   padding: "16px 20px",
@@ -867,7 +867,7 @@ function AiAnalysisModal({
                     {inference.action_required}
                   </div>
                 )}
-              </div>
+              </div> */}
 
               {inference.spike_info && <SpikeBadges spike={inference.spike_info} />}
 
