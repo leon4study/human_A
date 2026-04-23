@@ -16,7 +16,7 @@ export const nutrientTanks: NutrientTankLayout[] = [
   { id: "tankA", label: "양액 A", color: "#eab308", x: 65, levelKey: "tankALevel" },
   { id: "tankB", label: "양액 B", color: "#22c55e", x: 70.5, levelKey: "tankBLevel" },
   { id: "tankPH", label: "pH 조절제", color: "#a855f7", x: 76, levelKey: "acidTankLevel" },
-  { id: "tankD", label: "임의 액", color: "#94a3b8", x: 81.5, fallbackLevel: 45 },
+  { id: "tankD", label: "임의 액", color: "#5a718f", x: 81.5, fallbackLevel: 45 },
   { id: "tankE", label: "임의 액", color: "#64748b", x: 87, fallbackLevel: 55 },
 ];
 

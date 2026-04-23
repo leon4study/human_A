@@ -17,17 +17,23 @@ interface Segment {
   linePath: string;
 }
 
-function formatTickLabel(timestamp: number, index: number, total: number): string {
-  const date = new Date(timestamp);
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
+const DISPLAY_POINTS = 12;
 
-  // 라벨을 전부 찍으면 너무 촘촘해지기 때문에 일부만 표시
-  if (total > 8 && index % Math.ceil(total / 6) !== 0 && index !== total - 1) {
-    return "";
+function sampleSeries(series: number[] | undefined, target = DISPLAY_POINTS): number[] {
+  if (!Array.isArray(series) || series.length === 0) return [];
+  if (series.length === target) return [...series];
+
+  const result: number[] = [];
+  for (let index = 0; index < target; index += 1) {
+    const sourceIndex = Math.round((index / Math.max(target - 1, 1)) * (series.length - 1));
+    result.push(series[sourceIndex] ?? Number.NaN);
   }
+  return result;
+}
 
-  return `${hour}:${minute}`;
+function buildThresholdLine(value: number | undefined, length: number): number[] {
+  if (typeof value !== "number" || !Number.isFinite(value) || length <= 0) return [];
+  return Array.from({ length }, () => value);
 }
 
 function buildCriticalSegments(
@@ -38,11 +44,7 @@ function buildCriticalSegments(
   normalizeY: (value: number) => number,
 ): Segment[] {
   const segments: Segment[] = [];
-
-  // high 모드는 아래쪽을 채우고,
-  // low 모드는 위쪽을 채워서 초과 영역을 보이게 한다
   const fillBaseY = direction === "low" ? 0 : chartHeight;
-
   const isExceeded = (value: number, critical: number) =>
     direction === "low" ? value < critical : value > critical;
 
@@ -54,10 +56,8 @@ function buildCriticalSegments(
     const startExceeded = isExceeded(start.value, startCritical);
     const endExceeded = isExceeded(end.value, endCritical);
 
-    // 두 점 모두 정상 범위면 채울 필요가 없다
     if (!startExceeded && !endExceeded) continue;
 
-    // 두 점이 모두 critical을 넘은 구간은 그대로 사각형처럼 채움
     if (startExceeded && endExceeded) {
       segments.push({
         polygonPoints: `${start.x},${fillBaseY} ${start.x},${start.y} ${end.x},${end.y} ${end.x},${fillBaseY}`,
@@ -66,8 +66,6 @@ function buildCriticalSegments(
       continue;
     }
 
-    // 한 점만 초과한 경우는 threshold와 만나는 교차점을 계산해서
-    // 초과 구간만 정확히 채움
     const numerator = startCritical - start.value;
     const denominator = end.value - start.value;
     const ratio = denominator === 0 ? 0 : numerator / denominator;
@@ -96,7 +94,6 @@ function buildCriticalSegments(
 function linePathFromSeries(series: number[], chartWidth: number, normalizeY: (value: number) => number): string {
   if (series.length === 0) return "";
 
-  // threshold도 시점마다 바뀔 수 있으므로 고정선이 아니라 path로 그린다
   return series
     .map((value, index) => {
       const x = series.length === 1 ? 0 : (index / (series.length - 1)) * chartWidth;
@@ -124,27 +121,24 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
     );
   }
 
-  const values = selectedMetric.trend;
-  const timestamps = selectedMetric.timestamps ?? [];
+  const values = sampleSeries(selectedMetric.trend, DISPLAY_POINTS);
 
-  // 실제 시계열이 아직 없으면 빈 상태 표시
   if (values.length === 0) {
     return (
       <Panel title="CTP 시각화">
         <div className="ctp-visualization ctp-visualization--empty">
-          <div className="ctp-visualization__placeholder">표시할 12시간 데이터 없음</div>
+          <div className="ctp-visualization__placeholder">표시할 데이터 없음</div>
         </div>
       </Panel>
     );
   }
 
-  // threshold 시계열이 없으면 현재 threshold를 길이에 맞춰 임시로 채움
-  const cautionSeries = selectedMetric.cautionTrend ?? [];
-  const warningSeries = selectedMetric.warningTrend ?? [];
-  const criticalSeries = selectedMetric.criticalTrend ?? [];
-  const cautionLowerSeries = selectedMetric.cautionLowerTrend ?? [];
-  const warningLowerSeries = selectedMetric.warningLowerTrend ?? [];
-  const criticalLowerSeries = selectedMetric.criticalLowerTrend ?? [];
+  const cautionSeries = buildThresholdLine(selectedMetric.caution, values.length);
+  const warningSeries = buildThresholdLine(selectedMetric.warning, values.length);
+  const criticalSeries = buildThresholdLine(selectedMetric.critical, values.length);
+  const cautionLowerSeries = buildThresholdLine(selectedMetric.cautionLower, values.length);
+  const warningLowerSeries = buildThresholdLine(selectedMetric.warningLower, values.length);
+  const criticalLowerSeries = buildThresholdLine(selectedMetric.criticalLower, values.length);
 
   const rangeCandidates = [
     ...values,
@@ -156,7 +150,6 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
     ...criticalLowerSeries,
   ].filter((value) => Number.isFinite(value));
 
-  // 유효 숫자가 하나도 없으면 그래프 대신 빈 상태 표시
   if (rangeCandidates.length === 0) {
     return (
       <Panel title="CTP 시각화">
@@ -190,28 +183,13 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ");
 
-  const hasCaution = Number.isFinite(selectedMetric.caution);
-  const hasWarning = Number.isFinite(selectedMetric.warning);
-  const hasCritical = Number.isFinite(selectedMetric.critical);
-  const hasCautionLower = Number.isFinite(selectedMetric.cautionLower);
-  const hasWarningLower = Number.isFinite(selectedMetric.warningLower);
-  const hasCriticalLower = Number.isFinite(selectedMetric.criticalLower);
-
-  const cautionY = hasCaution ? normalizeY(selectedMetric.caution) : null;
-  const warningY = hasWarning ? normalizeY(selectedMetric.warning) : null;
-  const criticalY = hasCritical ? normalizeY(selectedMetric.critical) : null;
-
-  // critical을 넘은 구간만 따로 채우기 위해 segment를 미리 계산
   const hasCriticalSeries = isFiniteSeries(criticalSeries);
   const criticalSegments = hasCriticalSeries
     ? buildCriticalSegments(points, criticalSeries, selectedMetric.direction, chartHeight, normalizeY)
     : [];
 
   const patternId = `ctp-critical-pattern-${selectedMetric.id}`;
-
-  // range 모드는 upper/lower threshold를 둘 다 그려야 한다
   const showRange = selectedMetric.thresholdMode === "range";
-  const showThresholdGuide = hasCaution || hasWarning || hasCritical;
 
   return (
     <Panel title="CTP 시각화">
@@ -221,44 +199,6 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
         </div>
 
         <div className="ctp-chart">
-          {!showThresholdGuide && (
-            <div className="ctp-visualization__subtitle">threshold 수신 대기 중</div>
-          )}
-          {cautionY !== null && (
-            <>
-              <div className="ctp-chart__line-label ctp-chart__line-label--caution" style={{ top: `${cautionY - 10}px` }}>
-                Caution
-              </div>
-              <div className="ctp-chart__threshold ctp-chart__threshold--caution" style={{ top: `${cautionY}px` }} />
-            </>
-          )}
-          {warningY !== null && (
-            <>
-              <div className="ctp-chart__line-label ctp-chart__line-label--warning" style={{ top: `${warningY - 10}px` }}>
-                Warning
-              </div>
-              <div className="ctp-chart__threshold ctp-chart__threshold--warning" style={{ top: `${warningY}px` }} />
-            </>
-          )}
-          {criticalY !== null && (
-            <>
-              <div className="ctp-chart__line-label ctp-chart__line-label--critical" style={{ top: `${criticalY - 10}px` }}>
-                Critical
-              </div>
-              <div className="ctp-chart__threshold ctp-chart__threshold--critical" style={{ top: `${criticalY}px` }} />
-            </>
-          )}
-
-          {showRange && hasCautionLower && (
-            <div className="ctp-chart__threshold ctp-chart__threshold--caution" style={{ top: `${normalizeY(selectedMetric.cautionLower!)}px`, opacity: 0.55 }} />
-          )}
-          {showRange && hasWarningLower && (
-            <div className="ctp-chart__threshold ctp-chart__threshold--warning" style={{ top: `${normalizeY(selectedMetric.warningLower!)}px`, opacity: 0.55 }} />
-          )}
-          {showRange && hasCriticalLower && (
-            <div className="ctp-chart__threshold ctp-chart__threshold--critical" style={{ top: `${normalizeY(selectedMetric.criticalLower!)}px`, opacity: 0.55 }} />
-          )}
-
           <svg className="ctp-chart__svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none">
             <defs>
               <pattern id={patternId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(25)">
@@ -300,7 +240,7 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
 
         <div className="ctp-chart__xlabels" style={{ gridTemplateColumns: `repeat(${values.length}, 1fr)` }}>
           {values.map((_, index) => (
-            <span key={index}>{timestamps[index] ? formatTickLabel(timestamps[index], index, values.length) : `T${index + 1}`}</span>
+            <span key={index}>{`t${index + 1}`}</span>
           ))}
         </div>
       </div>
@@ -308,5 +248,4 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
   );
 }
 
-// 선택된 metric이 바뀔 때만 다시 그리게 해서 SVG 재렌더를 축소
 export default memo(CtpVisualizationPanel);

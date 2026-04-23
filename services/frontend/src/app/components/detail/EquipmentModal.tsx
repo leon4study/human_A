@@ -41,12 +41,6 @@ function fmt(value: unknown, decimals = 1): string {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(decimals) : "—";
 }
 
-function statusLabel(status: string) {
-  if (status === "danger") return "위험";
-  if (status === "warning") return "경고";
-  if (status === "caution") return "주의";
-  return "정상";
-}
 
 function finiteValues(values: number[]) {
   return values.filter((value) => Number.isFinite(value));
@@ -116,7 +110,7 @@ function computePidError(actual: number[], target: number[]) {
   return result;
 }
 
-// 배액 EC - 조제 현재 EC 계산
+// 배액 EC - 혼합EC 계산
 function computeSaltAccumulation(drainEc: number[], mixEc: number[]) {
   const length = Math.min(drainEc.length, mixEc.length);
   const result: number[] = [];
@@ -136,7 +130,7 @@ function computeSaltAccumulation(drainEc: number[], mixEc: number[]) {
   return result;
 }
 
-// 구역 배지 EC - 조제 현재 EC 계산
+// 구역 배지 EC - 혼합EC 계산
 function computeZoneEcAccumulation(zoneEc: number[], mixEc: number[]) {
   const length = Math.min(zoneEc.length, mixEc.length);
   const result: number[] = [];
@@ -307,7 +301,7 @@ function autoSupplyRows(sensor: RawSensorPayload): SensorRow[] {
 
   return [
     { label: "조제 목표 EC", value: `${fmt(sensor.mix_target_ec_ds_m, 2)} dS/m` },
-    { label: "조제 현재 EC", value: `${fmt(sensor.mix_ec_ds_m, 2)} dS/m` },
+    { label: "혼합EC", value: `${fmt(sensor.mix_ec_ds_m, 2)} dS/m` },
     { label: "조제 목표 pH", value: `${fmt(sensor.mix_target_ph, 2)} pH` },
     { label: "조제 현재 pH", value: `${fmt(sensor.mix_ph, 2)} pH` },
     { label: "조제 온도", value: `${fmt(sensor.mix_temp_c)} °C` },
@@ -321,12 +315,21 @@ function autoSupplyRows(sensor: RawSensorPayload): SensorRow[] {
 }
 
 // 구역 데이터 구성
-function zoneRows(zoneNumber: number, sensor: RawSensorPayload): SensorRow[] {
+function zoneRows(zoneNumber: number, sensor: RawSensorPayload, chart: ChartBuffer | null): SensorRow[] {
   const flow = sensor[`zone${zoneNumber}_flow_l_min` as keyof RawSensorPayload];
   const pressure = sensor[`zone${zoneNumber}_pressure_kpa` as keyof RawSensorPayload];
   const moisture = sensor[`zone${zoneNumber}_substrate_moisture_pct` as keyof RawSensorPayload];
   const zoneEc = sensor[`zone${zoneNumber}_substrate_ec_ds_m` as keyof RawSensorPayload];
   const zonePh = sensor[`zone${zoneNumber}_substrate_ph` as keyof RawSensorPayload];
+
+  const moistureSeries =
+    zoneNumber === 1
+      ? computeMoistureResponse(chart?.zone1_moisture ?? [])
+      : zoneNumber === 2
+        ? computeMoistureResponse(chart?.zone2_moisture ?? [])
+        : computeMoistureResponse(chart?.zone3_moisture ?? []);
+
+  const moistureReaction = latestValue(moistureSeries, 2);
 
   const ecAccumulation =
     typeof zoneEc === "number" && typeof sensor.mix_ec_ds_m === "number"
@@ -339,12 +342,12 @@ function zoneRows(zoneNumber: number, sensor: RawSensorPayload): SensorRow[] {
     { label: `${zoneNumber}구역 배지 수분`, value: `${fmt(moisture)} %` },
     { label: `${zoneNumber}구역 배지 EC`, value: `${fmt(zoneEc, 2)} dS/m` },
     { label: `${zoneNumber}구역 배지 pH`, value: `${fmt(zonePh, 2)} pH` },
-    { label: `${zoneNumber}구역 수분 반응`, value: "그래프 참고" },
+    { label: `${zoneNumber}구역 수분 반응`, value: moistureReaction === "—" ? "—" : `${moistureReaction} %p` },
     { label: `${zoneNumber}구역 EC 축적`, value: ecAccumulation !== undefined ? `${ecAccumulation.toFixed(3)} dS/m` : "—" },
   ];
 }
 
-function getSensorRows(equipmentId: string, sensor: RawSensorPayload) {
+function getSensorRows(equipmentId: string, sensor: RawSensorPayload, chart: ChartBuffer | null) {
   if (equipmentId === "rawWaterTank") {
     return [
       { label: "원수 저장탱크 수위", value: `${fmt(sensor.raw_tank_level_pct)} %` },
@@ -360,9 +363,9 @@ function getSensorRows(equipmentId: string, sensor: RawSensorPayload) {
   if (equipmentId === "valve1") return [{ label: "1구역 유량", value: `${fmt(sensor.zone1_flow_l_min)} L/min` }, { label: "1구역 압력", value: `${fmt(sensor.zone1_pressure_kpa)} kPa` }];
   if (equipmentId === "valve2") return [{ label: "2구역 유량", value: `${fmt(sensor.zone2_flow_l_min)} L/min` }, { label: "2구역 압력", value: `${fmt(sensor.zone2_pressure_kpa)} kPa` }];
   if (equipmentId === "valve3") return [{ label: "3구역 유량", value: `${fmt(sensor.zone3_flow_l_min)} L/min` }, { label: "3구역 압력", value: `${fmt(sensor.zone3_pressure_kpa)} kPa` }];
-  if (equipmentId === "growingZone1") return zoneRows(1, sensor);
-  if (equipmentId === "growingZone2") return zoneRows(2, sensor);
-  if (equipmentId === "growingZone3") return zoneRows(3, sensor);
+  if (equipmentId === "growingZone1") return zoneRows(1, sensor, chart);
+  if (equipmentId === "growingZone2") return zoneRows(2, sensor, chart);
+  if (equipmentId === "growingZone3") return zoneRows(3, sensor, chart);
   return [];
 }
 
@@ -442,7 +445,7 @@ function TrendChart({ title, unit, values }: TrendCard) {
 function EquipmentModal({ equipment, sensorPayload, chartSnapshot, onClose }: EquipmentModalProps) {
   if (!equipment) return null;
 
-  const sensorRows = sensorPayload ? getSensorRows(equipment.id, sensorPayload) : [];
+  const sensorRows = sensorPayload ? getSensorRows(equipment.id, sensorPayload, chartSnapshot ?? null) : [];
   const trendCards = getTrendCards(equipment.id, chartSnapshot ?? null).filter((item) => finiteValues(item.values).length >= 2);
 
   return (
@@ -452,7 +455,7 @@ function EquipmentModal({ equipment, sensorPayload, chartSnapshot, onClose }: Eq
           <div className="equipment-modal-header-main">
             <div className="equipment-modal-title">{equipment.name}</div>
             {/* 설비명 줄 오른쪽에 현재 상태만 표시 */}
-            <div className="equipment-modal-status">현재 상태 {statusLabel(equipment.status)}</div>
+            {/* <div className="equipment-modal-status">현재 상태 {statusLabel(equipment.status)}</div> */}
           </div>
 
           <button className="equipment-modal-close" onClick={onClose}>

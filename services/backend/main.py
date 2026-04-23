@@ -5,7 +5,7 @@ import datetime
 import threading
 import sqlalchemy as sa
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import paho.mqtt.client as mqtt
@@ -135,3 +135,28 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True: await websocket.receive_text()
     except WebSocketDisconnect: manager.disconnect(websocket)
+
+@app.get("/inference/history")
+def read_inference_history(limit: int = Query(default=50, ge=1, le=500)):
+    with engine.connect() as conn:
+        result = conn.execute(sa.text("""
+            SELECT sensor_id, overall_level, overall_status,
+                   inference_result, action_required, data_timestamp
+            FROM inference_history
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """), {"limit": limit})
+        rows = result.fetchall()
+
+    payload = []
+    for row in rows:
+        payload.append({
+            "sensor_id": row.sensor_id,
+            "overall_alarm_level": row.overall_level,
+            "overall_status": row.overall_status,
+            "domain_reports": row.inference_result,
+            "action_required": row.action_required,
+            "timestamp": row.data_timestamp.isoformat() if row.data_timestamp else None,
+        })
+
+    return payload

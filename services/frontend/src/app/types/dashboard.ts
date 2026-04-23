@@ -87,6 +87,17 @@ export interface ZoneCauseItem {
   count: number;
 }
 
+export interface InferenceHistoryRow {
+  sensor_id?: string;
+  overall_alarm_level?: number;
+  overall_status?: string | null;
+  action_required?: string | null;
+  timestamp?: string | null;
+  data_timestamp?: string | null;
+  domain_reports?: Record<string, InferenceDomainReport>;
+  inference_result?: Record<string, InferenceDomainReport>;
+}
+
 // 프론트가 받아서 바로 화면에 넣는 대시보드 메시지 타입
 export interface DashboardSocketPayload {
   systemStatus?: "normal" | "warning" | "danger";

@@ -310,12 +310,13 @@ const FEATURE_LABEL_MAP: Record<string, string> = {
   motor_temperature_c: "모터 온도 이상",
   bearing_vibration_rms_mm_s: "베어링 진동 이상",
   bearing_temperature_c: "베어링 온도 이상",
-  mix_ec_ds_m: "조제 현재 EC 이상",
+  mix_ec_ds_m: "혼합EC 이상",
   mix_ph: "조제 현재 pH 이상",
   drain_ec_ds_m: "배액 EC 이상",
   zone1_substrate_moisture_pct: "구역 배지 수분 이상",
   zone1_substrate_ec_ds_m: "구역 배지 EC 이상",
   air_temp_c: "실내 기온 이상",
+  pump_rpm : "펌프 회전수 이상",
 };
 
 // 시간 컨텍스트 피처는 alert 원인에서 제외

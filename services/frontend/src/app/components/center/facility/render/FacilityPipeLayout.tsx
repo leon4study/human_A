@@ -60,17 +60,18 @@ function FacilityPipeLayoutImpl() {
               flowColor={tank.color}
               bodyColor="#94a3b8"
               shellColor="#475569"
+              flowing={staticEquipmentStatus.nutrientFeedValves[i]}
             />
           );
         })}
 
         {/* 각 탱크 바로 아래 피드 파이프에 붙는 작은 밸브 */}
-        {nutrientTanks.map((tank) => (
+        {nutrientTanks.map((tank, i) => (
           <SmallValve
             key={`nutrient-valve-${tank.id}`}
             x={tank.x}
             y={nutrientFeedSmallValveY}
-            isOpen={true}
+            isOpen={staticEquipmentStatus.nutrientFeedValves[i]}
           />
         ))}
 
