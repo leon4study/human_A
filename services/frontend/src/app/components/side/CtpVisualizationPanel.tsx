@@ -17,7 +17,7 @@ interface Segment {
   linePath: string;
 }
 
-const DISPLAY_POINTS = 12;
+const DISPLAY_POINTS = 60;
 
 function sampleSeries(series: number[] | undefined, target = DISPLAY_POINTS): number[] {
   if (!Array.isArray(series) || series.length === 0) return [];
@@ -239,9 +239,14 @@ function CtpVisualizationPanel({ selectedMetric }: CtpVisualizationPanelProps) {
         </div>
 
         <div className="ctp-chart__xlabels" style={{ gridTemplateColumns: `repeat(${values.length}, 1fr)` }}>
-          {values.map((_, index) => (
-            <span key={index}>{`t${index + 1}`}</span>
-          ))}
+          {values.map((_, index) => {
+            // 라벨이 너무 빽빽해지지 않도록 6개 정도만 균등 분포로 표시
+            const stride = Math.max(1, Math.floor(values.length / 6));
+            const show = index % stride === 0 || index === values.length - 1;
+            return (
+              <span key={index}>{show ? `t${index + 1}` : ""}</span>
+            );
+          })}
         </div>
       </div>
     </Panel>

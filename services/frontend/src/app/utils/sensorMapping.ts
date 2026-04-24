@@ -114,9 +114,10 @@ export function mapTankLevels(raw: RawSensorPayload): TankLevels {
   };
 }
 
-// CTP 시각화는 10분 버킷 72칸으로 12시간 유지
-const TEN_MINUTES_MS = 10 * 60 * 1000;
-const MAX_BUCKETS = 72;
+// CTP 시각화는 RAW tick마다 append해서 최근 60포인트(1분@1Hz)를 흐르게 보여줌.
+// 디스플레이 포인트(60)와 동일 크기로 유지해 매 tick마다 1칸씩 명확하게 밀려난다.
+// threshold는 INFERENCE tick(1분)에 별도 버퍼로 갱신되어 각 point에 붙음.
+const MAX_POINTS = 60;
 
 export interface CtpTimeBucket {
   bucketStart: number;
@@ -132,15 +133,14 @@ function parseTimestamp(value: string | undefined): number {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 }
 
-// 같은 10분 구간이면 마지막 값만 최신값으로 교체
-// 구간이 바뀌면 새 점 추가
+// RAW tick마다 새 point를 append해서 그래프가 매초 흐르도록 구성.
+// 동일 timestamp가 들어오면(동일 RAW 재처리) 마지막만 교체.
 export function updateCtpTrendBuffers(
   buffers: CtpTrendBuffers,
   raw: RawSensorPayload,
   metrics: CtpVisualizationMetric[],
 ): CtpTrendBuffers {
   const ts = parseTimestamp(raw.timestamp);
-  const bucketStart = Math.floor(ts / TEN_MINUTES_MS) * TEN_MINUTES_MS;
   const next: CtpTrendBuffers = { ...buffers };
 
   for (const metric of metrics) {
@@ -153,11 +153,11 @@ export function updateCtpTrendBuffers(
     const existing = next[metric.id] ?? [];
     const last = existing[existing.length - 1];
 
-    if (last && last.bucketStart === bucketStart) {
-      next[metric.id] = [...existing.slice(0, -1), { bucketStart, value }];
+    if (last && last.bucketStart === ts) {
+      next[metric.id] = [...existing.slice(0, -1), { bucketStart: ts, value }];
     } else {
-      const appended = [...existing, { bucketStart, value }];
-      next[metric.id] = appended.slice(-MAX_BUCKETS);
+      const appended = [...existing, { bucketStart: ts, value }];
+      next[metric.id] = appended.slice(-MAX_POINTS);
     }
   }
 
@@ -316,7 +316,12 @@ const FEATURE_LABEL_MAP: Record<string, string> = {
   zone1_substrate_moisture_pct: "구역 배지 수분 이상",
   zone1_substrate_ec_ds_m: "구역 배지 EC 이상",
   air_temp_c: "실내 기온 이상",
-  pump_rpm: "펌프 회전수 이상"
+  pump_rpm: "펌프 회전수 이상",
+  // context fallback (motor 등 도메인에서 RCA 낙타낱 시 노출)
+  time_sin: "시간 주기 이상",
+  time_cos: "시간 주기 이상",
+  pump_on: "펌프 가동 상태 이상",
+  minutes_since_startup: "기동 경과 시간 이상",
 };
 
 // 시간 컨텍스트 피처는 alert 원인에서 제외

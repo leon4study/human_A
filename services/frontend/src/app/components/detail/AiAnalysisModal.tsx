@@ -53,6 +53,19 @@ const FEATURE_LABELS: Record<string, string> = {
   temp_slope_c_per_s: "온도 변화율",
   zone1_ec_accumulation: "구역1 EC 축적",
   zone1_moisture_response_pct: "구역1 수분 반응",
+  // context 피처 (fallback RCA 시 motor 도메인 등에서 나타남)
+  time_sin: "시간 주기(sin)",
+  time_cos: "시간 주기(cos)",
+  pump_on: "펌프 가동 상태",
+  minutes_since_startup: "기동 경과 시간",
+  minutes_since_shutdown: "정지 경과 시간",
+  minute_of_day: "일중 분",
+  pump_start_event: "펌프 기동 이벤트",
+  pump_stop_event: "펌프 정지 이벤트",
+  is_startup_phase: "기동 단계",
+  is_off_phase: "정지 단계",
+  cleaning_event_flag: "청소 이벤트",
+  ph_instability_flag: "pH 불안정 플래그",
 };
 
 const LEVEL_COLORS: Record<number, string> = {
@@ -64,7 +77,7 @@ const LEVEL_COLORS: Record<number, string> = {
 
 
 const CW = 200;
-const CH = 75;
+const CH = 180;
 const PAD = 8;
 const IW = CW - PAD * 2;
 const IH = CH - PAD * 2;
@@ -134,7 +147,7 @@ function MiniLineChart({
   if (valid.length < 2) {
     return (
       <div style={{ width: "100%" }}>
-        <div className="ai-chart-label">{label}</div>
+        {label && <div className="ai-chart-label">{label}</div>}
         <div className="ai-chart-empty">데이터 수집 중...</div>
         <div className="ai-chart-value" style={{ color }}>{lastValStr}</div>
       </div>
@@ -186,7 +199,7 @@ function MiniLineChart({
 
   return (
     <div style={{ width: "100%" }}>
-      <div className="ai-chart-label">{label}</div>
+      {label && <div className="ai-chart-label">{label}</div>}
       <svg
         viewBox={`0 0 ${CW} ${CH}`}
         width="100%"
@@ -254,6 +267,9 @@ function MiniLineChart({
         )}
       </svg>
       <div className="ai-chart-value" style={{ color }}>{lastValStr}</div>
+      <div className="ai-chart-range">
+        {`${fmt(mn)} ~ ${fmt(mx)}${unit ? ` ${unit}` : ""}`}
+      </div>
     </div>
   );
 }
@@ -348,11 +364,6 @@ function getFeatureLabel(featureKey: string) {
   return FEATURE_LABELS[featureKey] ?? featureKey;
 }
 
-function toProblemLabel(featureKey: string, contribution: number) {
-  const label = getFeatureLabel(featureKey);
-  return `${label} 영향 증가 (${safePct(contribution).toFixed(1)}%)`;
-}
-
 function formatMetricShort(v?: number) {
   if (v === undefined || !Number.isFinite(v)) return "—";
   return defaultFmt(v);
@@ -413,7 +424,6 @@ function CauseDiagnosisSection({
 }) {
   const rcaList = pickRcaItems(report);
   const featureImportanceRows = rcaList.slice(0, 5);
-  const top3 = rcaList.slice(0, 3);
   const shapRows = buildShapRows(report).slice(0, 5);
   const level = report?.alarm?.level ?? 0;
   const domainLabel = domainKey ? getDomainLabel(domainKey) : "";
@@ -431,20 +441,24 @@ function CauseDiagnosisSection({
         <div className="ai-diag-panel">
           <div className="ai-diag-subtitle">Feature Importance</div>
           {featureImportanceRows.length > 0 ? (
-            featureImportanceRows.map((item) => {
-              const pct = safePct(item.contribution);
-              return (
-                <div className="ai-diag-feature-row" key={item.feature}>
-                  <span className="ai-diag-feature-label" title={getFeatureLabel(item.feature)}>
-                    {getFeatureLabel(item.feature)}
-                  </span>
-                  <div className="ai-diag-feature-bar-wrap">
-                    <div className="ai-diag-feature-bar" style={{ width: `${pct}%` }} />
+            <div className="ai-diag-feature-list">
+              {featureImportanceRows.map((item) => {
+                const pct = safePct(item.contribution);
+                return (
+                  <div className="ai-diag-feature-row" key={item.feature}>
+                    <div className="ai-diag-feature-header">
+                      <span className="ai-diag-feature-label" title={getFeatureLabel(item.feature)}>
+                        {getFeatureLabel(item.feature)}
+                      </span>
+                      <span className="ai-diag-feature-pct">{pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="ai-diag-feature-bar-wrap">
+                      <div className="ai-diag-feature-bar" style={{ width: `${pct}%` }} />
+                    </div>
                   </div>
-                  <span className="ai-diag-feature-pct">{pct.toFixed(0)}%</span>
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           ) : (
             <div className="ai-modal-placeholder">
               {level === 0 ? "이상 징후 없음" : "표시할 기여도 데이터 없음"}
@@ -492,23 +506,6 @@ function CauseDiagnosisSection({
           )}
         </div>
       </div>
-
-      <div className="ai-diag-subtitle">Top-3 문제현상</div>
-      {top3.length > 0 ? (
-        <ol className="ai-top3-list">
-          {top3.map((item, index) => (
-            <li className="ai-top3-item" key={item.feature}>
-              <span className="ai-top3-rank">{index + 1}</span>
-              <span className="ai-top3-feature">{toProblemLabel(item.feature, item.contribution)}</span>
-              <span className="ai-top3-pct">{safePct(item.contribution).toFixed(1)}%</span>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <div className="ai-modal-placeholder">
-          {level === 0 ? "이상 징후 없음" : "표시할 문제현상 데이터 없음"}
-        </div>
-      )}
     </div>
   );
 }
@@ -563,8 +560,8 @@ function ChartRow({
   );
 }
 
-const CMP_MIN_DENOM_FLOW = 1;
-const CMP_MIN_DENOM_POWER = 0.05;
+const CMP_MIN_DENOM_FLOW = 0.01;
+const CMP_MIN_DENOM_POWER = 0.001;
 const CMP_WIN_SHORT = 5;
 const SHORT_SERIES_POINTS = 60;
 const CMP_MIN_SAMPLES = 30;
@@ -603,11 +600,26 @@ function ComparativeSection({
     const shortStart = Math.max(0, n - SHORT_SERIES_POINTS);
     const longStart = Math.max(0, n - LONG_SERIES_POINTS);
 
+    // 순간 결측(NaN)에도 라인이 끊기지 않도록 직전의 유효값을 carry-forward.
+    // 버퍼 앞쪽(shortStart 이전)까지 뒤져서 초기 last 값을 채워둠.
+    let lastDp = NaN, lastSp = NaN, lastFl = NaN, lastPw = NaN;
+    for (let i = 0; i < shortStart; i += 1) {
+      if (Number.isFinite(pressure[i])) lastDp = pressure[i];
+      if (Number.isFinite(suction[i])) lastSp = suction[i];
+      if (Number.isFinite(flow[i])) lastFl = flow[i];
+      if (Number.isFinite(motor_power[i])) lastPw = motor_power[i];
+    }
+
     for (let i = shortStart; i < n; i += 1) {
-      const dp = pressure[i];
-      const sp = suction[i];
-      const fl = flow[i];
-      const pw = motor_power[i];
+      if (Number.isFinite(pressure[i])) lastDp = pressure[i];
+      if (Number.isFinite(suction[i])) lastSp = suction[i];
+      if (Number.isFinite(flow[i])) lastFl = flow[i];
+      if (Number.isFinite(motor_power[i])) lastPw = motor_power[i];
+
+      const dp = lastDp;
+      const sp = lastSp;
+      const fl = lastFl;
+      const pw = lastPw;
 
       pressureFlowRatio.push(
         Number.isFinite(dp) && Number.isFinite(fl) && fl >= CMP_MIN_DENOM_FLOW ? dp / fl : NaN,
@@ -700,7 +712,7 @@ function ComparativeSection({
       unit: "kPa",
       series: pVolSeries,
       color: "#ff9800",
-      description: `현재 12시간 값 ${aggReady ? fmtAgg(pVol12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
+      description: `압력 안정성 지표\n현재 12시간 값 ${aggReady ? fmtAgg(pVol12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
     },
     {
       key: "f_cv",
@@ -708,7 +720,7 @@ function ComparativeSection({
       unit: "",
       series: fCvSeries,
       color: "#ffc107",
-      description: `현재 12시간 값 ${aggReady ? fmtAgg(fCv12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
+      description: `유량 안정성 지표\n현재 12시간 값 ${aggReady ? fmtAgg(fCv12h) : `수집 중 ${samples}/${CMP_MIN_SAMPLES}`}`,
     },
     {
       key: "temp_slope",
@@ -716,7 +728,7 @@ function ComparativeSection({
       unit: "°C/s",
       series: tempSlope,
       color: "#f44336",
-      description: "",
+      description: "모터 온도 상승 속도",
     },
   ];
 
@@ -726,7 +738,7 @@ function ComparativeSection({
       {charts.map((chart) => (
         <ChartRow
           key={chart.key}
-          chartEl={<MiniLineChart values={chart.series} label={chart.label} unit={chart.unit} color={chart.color} />}
+          chartEl={<MiniLineChart values={chart.series} label="" unit={chart.unit} color={chart.color} />}
           description={chart.description}
         />
       ))}
