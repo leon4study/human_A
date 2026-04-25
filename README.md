@@ -11,6 +11,8 @@
 5. **Visualization**: 실시간 대시보드 제공 (FastAPI & React)
 
 ## 폴더 구조
+
+```
 smart-farm-root/
 ├── docker-compose.yml         # 전체 서비스의 배치도 및 연결 정의
 ├── .env                       # DB 암호, API 키, 호스트 주소 등 민감 정보/설정
@@ -47,6 +49,8 @@ smart-farm-root/
 └── data/                      # [로컬 전용] 컨테이너 데이터 보존 (Git 제외)
     ├── db-data/               # PostgreSQL 데이터 파일 (파일 있으면 schema.sql 실행 안 된다. )
     └── s3-bucket/             # MinIO 저장소 파일
+
+```
 
 ## 🛠️ Tech Stack
 - **Language**: Python 3.12
