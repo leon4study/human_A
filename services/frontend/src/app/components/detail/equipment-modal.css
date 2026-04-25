@@ -1,0 +1,553 @@
+/* 팝업 전체 배경 */
+.equipment-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(3, 12, 24, 0.6);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* 팝업 박스 */
+.equipment-modal {
+  width: 100%;
+  max-width: 550px;
+  max-height: 80vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  border: 1px solid rgba(120, 200, 255, 0.22);
+  background: linear-gradient(
+    180deg,
+    rgba(8, 27, 52, 0.98) 0%,
+    rgba(10, 34, 64, 0.96) 100%
+  );
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  color: #eaf7ff;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* 상단 */
+.equipment-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid rgba(120, 200, 255, 0.14);
+}
+
+.equipment-modal-header-main {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+}
+
+.equipment-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f3fbff;
+}
+
+.equipment-modal-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(220, 242, 255, 0.72);
+}
+
+.equipment-modal-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+/* 본문 */
+.equipment-modal-body {
+  padding: 18px 22px;
+}
+
+.equipment-modal-section + .equipment-modal-section {
+  margin-top: 20px;
+}
+
+.equipment-modal-section-title {
+  display: flex;
+  margin-bottom: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #9fe7ff;
+}
+
+.equipment-modal-row {
+  display: flex;
+  justify-content: space-between;
+  line-height: 1.6;
+  gap: 30px;
+}
+
+.equipment-modal-chart-title {
+  text-align: center;
+  margin: 10px 0;
+  color: #b7caff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.equipment-modal-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 92px;
+}
+
+.equipment-modal--xwide {
+  max-width: 1100px;
+}
+
+.ai-modal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 18px;
+}
+
+.ai-modal-col {
+  min-width: 0;
+}
+
+.ai-modal-placeholder {
+  padding: 24px 16px;
+  font-size: 12px;
+  text-align: center;
+  color: rgba(225, 243, 255, 0.4);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.ai-domain-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ai-domain-tab {
+  border: 1px solid rgba(120, 200, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(225, 243, 255, 0.72);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-domain-tab.is-active {
+  background: rgba(62, 184, 255, 0.16);
+  border-color: rgba(62, 184, 255, 0.44);
+  color: #9fe7ff;
+  box-shadow: 0 0 0 1px rgba(62, 184, 255, 0.12) inset;
+}
+
+.ai-diag-domain-label {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(159, 231, 255, 0.55);
+}
+
+.ai-perf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ai-perf-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+}
+
+.ai-perf-label {
+  color: rgba(225, 243, 255, 0.7);
+}
+
+.ai-perf-value {
+  color: #9fe7ff;
+  font-weight: 600;
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+.ai-perf-chart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.ai-diag-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ai-diag-panel {
+  padding: 10px 12px;
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+
+.ai-diag-subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(159, 231, 255, 0.72);
+  letter-spacing: 0.03em;
+  margin-bottom: 8px;
+}
+
+.ai-diag-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.ai-diag-feature-row:last-child {
+  margin-bottom: 0;
+}
+
+.ai-diag-feature-label {
+  flex-shrink: 0;
+  width: 74px;
+  color: rgba(225, 243, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-diag-feature-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ai-diag-feature-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3eb8ff, #9fe7ff);
+  border-radius: 3px;
+}
+
+.ai-diag-feature-pct {
+  flex-shrink: 0;
+  width: 36px;
+  text-align: right;
+  color: #9fe7ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-shap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-shap-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-shap-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-shap-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(225, 243, 255, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-shap-meta {
+  font-size: 10px;
+  color: rgba(225, 243, 255, 0.5);
+  white-space: nowrap;
+}
+
+.ai-shap-track {
+  position: relative;
+  height: 18px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.02) 100%);
+  overflow: hidden;
+}
+
+.ai-shap-axis {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(159, 231, 255, 0.32);
+}
+
+.ai-shap-node {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.ai-top3-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-top3-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.ai-top3-item:last-child {
+  margin-bottom: 0;
+}
+
+.ai-top3-rank {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(62, 184, 255, 0.18);
+  color: #9fe7ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ai-top3-feature {
+  flex: 1;
+  color: rgba(225, 243, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-top3-pct {
+  flex-shrink: 0;
+  color: #9fe7ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-chart-row {
+  max-height: 145px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ai-chart-row:last-child {
+  border-bottom: none;
+}
+
+.ai-chart-cell {
+  flex-shrink: 0;
+}
+
+.ai-chart-desc {
+  flex: 1;
+  min-width: 0;
+  padding-top: 3px;
+}
+
+.ai-chart-label {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(225, 243, 255, 0.82);
+}
+
+.ai-chart-empty {
+  width: 200px;
+  height: 75px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(225, 243, 255, 0.35);
+  font-size: 11px;
+}
+
+.ai-chart-value {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ai-spike-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ai-spike-badge--danger {
+  background: rgba(244, 67, 54, 0.14);
+  color: #ff7d74;
+  border: 1px solid rgba(244, 67, 54, 0.24);
+}
+
+.ai-spike-badge--muted {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(225, 243, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 1100px) {
+  .ai-modal-grid,
+  .ai-diag-grid,
+  .ai-perf-chart-grid,
+  .ai-perf-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Equipment modal wide layout */
+.equipment-modal-status {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(225, 243, 255, 0.82);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.equipment-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.equipment-modal-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(120, 200, 255, 0.1);
+}
+
+.equipment-modal-item__label {
+  color: rgba(225, 243, 255, 0.72);
+  font-size: 13px;
+}
+
+.equipment-modal-item__value {
+  color: #f3fbff;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.equipment-modal-chart__bg {
+  fill: rgba(14, 35, 68, 0.96);
+  stroke: rgba(120, 200, 255, 0.12);
+  stroke-width: 1;
+}
+
+.equipment-modal-chart__line {
+  fill: none;
+  stroke: #58c7ff;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.equipment-modal-chart__critical-fill {
+  fill: rgba(255, 84, 84, 0.16);
+}
+
+.equipment-modal-chart__critical-line {
+  fill: none;
+  stroke: #ff6666;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.equipment-modal-chart-value {
+  margin-top: 8px;
+  color: rgba(225, 243, 255, 0.86);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 980px) {
+  .equipment-modal-grid,
+  .equipment-modal-chart-grid,
+  .ai-modal-grid,
+  .ai-diag-grid,
+  .ai-perf-chart-grid,
+  .ai-perf-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .equipment-modal-header-main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .equipment-modal-status {
+    align-self: flex-start;
+  }
+}
