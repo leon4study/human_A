@@ -106,8 +106,6 @@ human_A/
 └── ppt/                         # 발표 자료
 ```
 
-> **참고**: 루트 [src/](src/)는 [services/inference/src/](services/inference/src/)와 동일한 미러본입니다. 단일 소스화 작업 진행 예정.
-
 ## 5. 빠른 시작
 
 ### 전체 스택 기동
