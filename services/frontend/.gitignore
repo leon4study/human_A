@@ -22,3 +22,37 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# env files
+.env
+.env.*
+!.env.example
+
+# python cache / venv
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# test / coverage
+coverage/
+
+# build cache
+.cache/
+.parcel-cache/
+.eslintcache
+*.tsbuildinfo
+
+# temp files
+tmp/
+temp/
+*.tmp
+
+# archives
+*.zip
+*.tar
+*.gz
+*.rar
+
+# windows
+Thumbs.db

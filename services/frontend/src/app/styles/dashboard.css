@@ -1,0 +1,411 @@
+/* 기본 스타일 */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* fit 컨테이너 바깥에 스크롤바가 뜨지 않도록 */
+}
+
+body {
+  font-family: "Pretendard", "Noto Sans KR", sans-serif;
+  color: #e9fff4;
+  /* letterbox(남는 공간)를 대시보드와 같은 톤으로 채워서 '빈 공간'처럼
+     보이지 않게 한다. .dashboard__bg 의 linear-gradient 와 동일. */
+  background: linear-gradient(90deg, #7496bb 0%, #4c7197 50%, #7496bb 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font: inherit;
+}
+
+/* 대시보드를 뷰포트 가운데로 모으고 바깥에 스크롤이 생기지 않게 감싸는 래퍼.
+   대시보드는 1920×1080 고정 디자인 + zoom 으로 축소/확대되며, 남는 공간은
+   body 배경 그라데이션으로 자연스럽게 메워진다. */
+.dashboard-fit {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* 대시보드 스타일 — 동적 설계 크기 + 균등 zoom
+   transform 대신 zoom 을 쓰는 이유: transform:scale 은 rasterized pixel 을 다시
+   스케일해서 텍스트가 흐릿해지지만, zoom 은 레이아웃 단계에서 재계산되어 텍스트가
+   선명하게 유지됨. 단, zoom 은 구 Firefox(<126) 미지원이므로 필요 시 폴리필 고려.
+
+   width/height 는 JS(useFitScale) 가 뷰포트 비율에 맞춰 동적 설정:
+   - 넓은 뷰포트: height=1080 고정, width 가 확장되어 letterbox 없음
+   - 좁은(세로) 뷰포트: width=1920 고정, height 가 확장 */
+.dashboard {
+  position: relative;
+  width: var(--app-width, 1920px);
+  height: var(--app-height, 1080px);
+  overflow: hidden;
+  flex-shrink: 0;
+  zoom: var(--app-zoom, 1);
+}
+
+/* 배경 장식 레이어 */
+.dashboard__bg {
+  position: absolute;
+  inset: 0; /* 부모를 덮는다 */
+  z-index: 1;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(118, 228, 255, 0.12), transparent 28%),  /* 위에서 원형 또는 타원형으로 내려오는 빛 */
+    /* radial-gradient(circle at right center, rgba(79, 200, 247, 1), transparent 24%), */
+    linear-gradient(90deg, #7496bb 0%, #4c7197 50%, #7496bb 100%);
+}
+
+.dashboard__overlay {
+  position: relative;
+  z-index: 5;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard__bottom-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 320px;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    linear-gradient(
+      0deg,
+      rgba(10, 36, 80, 0.96) 0%,
+      rgba(11, 38, 84, 0.73) 30%,
+      rgba(12, 42, 90, 0.55) 55%,
+      rgba(13, 46, 96, 0.32) 80%,
+      rgba(13, 46, 96, 0) 100%
+    );
+}
+
+
+/* 헤더 스타일 */
+.dashboard__header {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(121, 111, 255, 0.18);
+  background: rgba(1, 31, 58, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.dashboard__header-left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.dashboard__title-wrap {
+  display: flex;
+  align-items: center; /* 세로 중앙 정렬 */
+  gap: 20px;
+}
+
+.dashboard__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #e7fff2;
+}
+
+/* 시스템 상태 스타일 (정상, 경고, 위험) */
+.dashboard__system-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.dashboard__system-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 3px solid currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.dashboard__system-text {
+  line-height: 1;
+}
+
+.dashboard__system-status.is-normal {
+  color: #2fd36b;
+}
+
+.dashboard__system-status.is-warning {
+  color: #ffd84d;
+}
+
+.dashboard__system-status.is-danger {
+  color: #ff000f;
+}
+
+.dashboard__header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.dashboard__top-device-button {
+  min-width: 78px;
+  padding: 8px 14px;
+  border: 1px solid rgba(111, 255, 185, 0.22);
+  border-radius: 999px;
+  background: rgba(127, 240, 166, 0.117);
+  color: #dfffee;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dashboard__top-device-button:hover {
+  background: rgba(111, 255, 185, 0.12);
+}
+
+.dashboard__top-device-button.is-active {
+  background: linear-gradient(180deg, #7ff0a7, #4fc773);
+  border-color: rgba(127, 240, 167, 0.7);
+  color: #062213;
+  font-weight: 700;
+}
+
+.dashboard__header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.dashboard__ai-button {
+  padding: 10px 16px;
+  border: 1px solid rgba(111, 255, 185, 0.35);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(39, 80, 58, 0.9), rgba(22, 51, 37, 0.9));
+  color: #eafff2;
+  cursor: pointer;
+}
+
+.dashboard__time {
+  font-size: 13px;
+  color: rgba(226, 255, 238, 0.8);
+}
+
+.dashboard__body {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  gap: 34px;
+  padding: 28px;
+}
+
+/* 왼쪽/오른쪽 전체 오버레이 레이어 */
+.dashboard__body::before,
+.dashboard__body::after {
+  content: ""; /* 장식용 박스 생성 */
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  min-width: 400px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 왼쪽 끝에서 시작해서 가운데로 갈수록 사라짐 */
+.dashboard__body::before {
+  left: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(10, 36, 80, 0.96) 0%,
+      rgba(11, 38, 84, 0.73) 30%,
+      rgba(12, 42, 90, 0.55) 55%,
+      rgba(13, 46, 96, 0.32) 80%,
+      rgba(13, 46, 96, 0) 100%
+    );
+}
+
+/* 오른쪽 끝에서 시작해서 가운데로 갈수록 사라짐 */
+.dashboard__body::after {
+  right: 0;
+  background:
+    linear-gradient(
+      270deg,
+      rgba(10, 36, 80, 0.96) 0%,
+      rgba(11, 38, 84, 0.73) 30%,
+      rgba(12, 42, 90, 0.55) 55%,
+      rgba(13, 46, 96, 0.32) 80%,
+      rgba(13, 46, 96, 0) 100%
+      /* rgba(5, 20, 45, 0.96) 0%,
+      rgba(6, 22, 49, 0.78) 30%,
+      rgba(7, 26, 55, 0.65) 55%,
+      rgba(8, 30, 61, 0.32) 80%,
+      rgba(8, 30, 61, 0) 100% */
+    );
+}
+
+.dashboard__center-wrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 중앙 구조도 배경 레이어 */
+.dashboard__center-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 260px;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+/* FacilityDiagram이 center-layer 안을 꽉 채우도록 */
+.dashboard__center-layer > * {
+  width: 100%;
+  height: 100%;
+}
+
+
+.dashboard__left-panels,
+.dashboard__right-panels {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 26px;
+  width: 260px;
+  flex-shrink: 0;
+  min-height: 0;
+  z-index: 6;
+}
+
+.dashboard__bottom-panel {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 0 100px;
+  text-align: center;
+  z-index: 6;
+}
+
+.dashboard__bottom-panel .panel {
+  padding: 10px 20px 0;
+  border: 1px solid #0e477ccb;
+  border-radius: 30px;
+}
+
+/* .dashboard__left-panels::before,
+.dashboard__right-panels::before {
+  content: "";
+  position: absolute;
+  top: -24px;
+  bottom: -24px;
+  width: 150%;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(18px);
+  opacity: 0.95;
+}
+
+.dashboard__left-panels::before {
+  left: -40px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(2, 8, 18, 0.92) 0%,
+      rgba(4, 14, 28, 0.8) 40%,
+      rgba(5, 18, 34, 0.35) 100%,
+      rgba(5, 18, 34, 0) 100%
+    );
+}
+
+.dashboard__right-panels::before {
+  right: -40px;
+  background:
+    linear-gradient(
+      270deg,
+      rgba(2, 8, 18, 0.92) 0%,
+      rgba(4, 14, 28, 0.8) 42%,
+      rgba(5, 18, 34, 0.35) 72%,
+      rgba(5, 18, 34, 0) 100%
+    );
+} */
+
+/* .dashboard__left-panels {
+  left: 34px;
+}
+
+.dashboard__right-panels {
+  right: 34px;
+} */
+
+/* .center-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.center-placeholder__inner {
+  width: 72%;
+  max-width: 900px;
+  min-height: 420px;
+  border: 1px dashed rgba(143, 255, 193, 0.28);
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.center-placeholder__title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ebfff3;
+}
+
+.center-placeholder__desc {
+  font-size: 15px;
+  color: rgba(227, 255, 238, 0.72);
+  text-align: center;
+} */
+
+

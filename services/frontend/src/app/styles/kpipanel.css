@@ -1,0 +1,120 @@
+.kpi-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  padding: 18px 20px 0;
+}
+
+.kpi-row {
+  display: flex;
+  justify-content: center;
+  gap: 45px;
+  width: 100%;
+}
+
+.kpi-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 게이지 공통 및 띠 두께 설정 */
+.kpi-gauge {
+  position: relative;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  
+  /* [핵심] 띠가 들어갈 전체 경로를 배경보다 훨씬 진한 색으로 설정 */
+  /* 배경이 #0f121a라면, 트랙은 완전한 블랙에 가깝게 */
+  background: #050608; 
+}
+
+.kpi-gauge--small { width: 90px; height: 90px; }
+.kpi-gauge--large { width: 110px; height: 110px; }
+
+.kpi-gauge::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--gauge-color-start) 0%, 
+    var(--gauge-color-end) calc(var(--percent) * 1%),
+    transparent 0
+  );
+  /* 글로우 효과 강도를 색상에 맞춰 강화 */
+  filter: drop-shadow(0 0 8px var(--gauge-color-end));
+  
+  /* 띠 두께 조절 (55%로 두껍게 유지) */
+  -webkit-mask: radial-gradient(transparent 55%, black 58%);
+  mask: radial-gradient(transparent 55%, black 58%);
+}
+
+/* 게이지 내부 중앙 (가장 안쪽 원) */
+.kpi-gauge__inner {
+  position: absolute;
+  /* 띠 두께 마스크(55%)보다 아주 살짝 크게 설정해서 경계를 깨끗하게 */
+  width: 80%; 
+  height: 80%;
+  /* [핵심] 이 부분 색상을 배경색과 맞추면 띠 부분만 진하게 남습니다 */
+  background-color: #0f121a; 
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 3;
+  
+  /* 안쪽 원 테두리에 살짝 밝은 선을 주어 띠(트랙)와의 경계를 더 뚜렷하게 함 */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.kpi-gauge__value {
+  color: #ffffff;
+  font-weight: 800;
+  z-index: 4;
+  text-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+/* 상단 노출용 레이아웃 배경색 확인 (중요) */
+
+
+.kpi-gauge--small .kpi-gauge__value { font-size: 1.3rem; }
+.kpi-gauge--large .kpi-gauge__value { font-size: 1.7rem; }
+
+.kpi-gauge__label {
+  color: #a0aec0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* 색상 테마 */
+/* 1. 그린 (가동율): 완전한 형광 그린 (Neon Green) */
+.kpi-gauge--green {
+  --gauge-color-start: #00ff87;
+  --gauge-color-end: #60efff;
+}
+
+/* 2. 오렌지/레드 (고장율): 불타는 듯한 오렌지 레드 (Vivid Orange) */
+.kpi-gauge--orange {
+  --gauge-color-start: #ff0000;
+  --gauge-color-end: #ffb100;
+}
+
+/* 3. 블루 (설비 종합 효율): 깊고 선명한 일렉트릭 블루 (Electric Blue) */
+.kpi-gauge--blue {
+  --gauge-color-start: #0051ff;
+  --gauge-color-end: #00eeff;
+}
+
+/* 텍스트 가독성 추가 */
+.kpi-gauge__value {
+  color: #ffffff;
+  font-weight: 800;
+  /* 숫자가 배경에 묻히지 않게 아주 약간의 그림자 추가 */
+  text-shadow: 0px 0px 5px rgba(0,0,0,0.8);
+}
