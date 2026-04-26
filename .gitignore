@@ -350,3 +350,6 @@ models2/
 models_phaseD_*/
 services/inference/logs/
 services/inference/notebooks_jun/
+
+serper.py
+
