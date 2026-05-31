@@ -355,3 +355,7 @@ serper.py
 
 jun_portfolio/
 notion_page/
+
+# docs/modeling 방법론 문서(01_..., 08_...)는 전역 [0-9]*(OpenFOAM 결과) 규칙에 잡히므로 추적 예외
+!docs/modeling/
+!docs/modeling/*.md

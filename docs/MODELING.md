@@ -1,6 +1,7 @@
 # 🧠 MODELING — 모델링 파이프라인
 
-이 문서는 **전처리 → 피처 선택 → AE 학습 → 임계치 → 평가** 의 모델링 파이프라인을 코드 기준으로 정리합니다.
+이 문서는 **전처리 → 피처 선택 → AE 학습 → 임계치 → 평가** 의 모델링 파이프라인을 **코드 기준(as-built)**으로 정리합니다.
+- 🧭 **앞으로 어떻게 탄탄하게 모델링·성능테스트 할지(기획·방법론)**: [modeling/](modeling/) — 재현성·실험추적·평가설계·dynamic threshold 방법론·착수 체크리스트
 - 데이터 분석 인사이트: [ANALYSIS.md](ANALYSIS.md)
 - 도메인 배경지식 (양액·CNL 핀·기동 spike 메커니즘): [DOMAIN_KNOWLEDGE.md](DOMAIN_KNOWLEDGE.md)
 - 실패 학습·진행 중 문제·다음 단계: [PROJECT_BRIEF.md](PROJECT_BRIEF.md)

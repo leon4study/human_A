@@ -1,9 +1,7 @@
 # train.py 는 1분단위의 데이터를 학습시켜야 성능이 우수함.
 
 import os
-import csv
 import json
-import joblib
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -24,6 +22,30 @@ from math_utils import calculate_sigma_thresholds
 from model_builder import build_autoencoder
 from utils import save_model_artifacts
 
+# [재현성/추적 인프라] — repro.py (docs/modeling/05_reproducibility_implementation.md)
+#   set_global_determinism : 모든 난수원(특히 TF)을 고정해 재학습이 같은 결과를 내게 함
+#   get_git_sha            : 이 모델이 어떤 코드(commit)에서 나왔는지 출처 기록
+#   new_run_id             : 이번 학습 1회를 식별하는 타임스탬프 이름
+#   snapshot_run           : 학습 결과를 models/runs/<run_id>/에 불변 박제(덮어쓰기 방지)
+#   append_experiment_row  : 학습 결과를 experiments CSV에 누적(손표 대신 정량 비교용)
+from repro import (
+    set_global_determinism,
+    get_git_sha,
+    new_run_id,
+    snapshot_run,
+    append_experiment_row,
+)
+
+# [진단 시각화] — viz.py (docs/modeling/06_visualization_logging.md)
+#   matplotlib가 없는 환경에서도 학습 자체는 진행되도록 import 실패를 흡수한다.
+#   (시각화는 평가의 일부지만, 라이브러리 부재가 학습을 막아서는 안 됨)
+try:
+    from viz import plot_threshold_diagnosis, plot_loss_curve, build_contact_sheet
+    _VIZ_AVAILABLE = True
+except Exception as _viz_err:  # matplotlib 미설치 등
+    _VIZ_AVAILABLE = False
+    _VIZ_IMPORT_ERROR = _viz_err
+
 # 로거 생성
 logger = get_logger("TRAIN")
 
@@ -31,38 +53,53 @@ logger = get_logger("TRAIN")
 # ==============================================================================
 # 실험 결과 기록 (리더보드 CSV)
 # ==============================================================================
-def save_experiment_to_csv(model_name, mse_mean, t_caut, t_warn, t_cri):
-    """리더보드(CSV)에 실험 결과를 누적 저장합니다."""
+def save_experiment_to_csv(model_name, mse_mean, t_caut, t_warn, t_cri,
+                           run_id="legacy", git_sha="nogit"):
+    """
+    리더보드(CSV)에 학습 결과 1줄을 누적 저장합니다.
+
+    [run_id / git_sha 컬럼이 추가된 이유]
+      예전엔 Date·Domain·MSE·threshold만 남겨서, 여러 번 학습하면 "이 줄이 어느
+      실험(어느 코드)의 결과인지" 묶을 수가 없었다. run_id(이번 학습 묶음 식별자)와
+      git_sha(코드 출처)를 같이 박으면, 같은 run의 4개 도메인이 한 묶음으로 추적되고
+      나중에 정렬·필터로 "어느 실험이 FAR을 낮췄나"를 즉시 비교할 수 있다.
+      (분류 성능 P/R/F1은 라벨 평가가 필요해 evaluate_test_metrics.py가 같은 run_id로 별도 기록)
+
+    실제 파일 쓰기는 repro.append_experiment_row가 담당(헤더 자동 관리 + append-only).
+    """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(current_dir)
     csv_path = os.path.join(project_root, "logs", "experiment_board.csv")
 
-    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    file_exists = os.path.isfile(csv_path)
-
-    with open(csv_path, mode="a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(
-                ["Date", "Domain", "Mean_MSE", "Threshold_Caution", "Threshold_Warning", "Threshold_Error"]
-            )
-        writer.writerow([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            model_name,
-            round(mse_mean, 6),
-            round(t_caut, 6),
-            round(t_warn, 6),
-            round(t_cri, 6),
-        ])
+    append_experiment_row(
+        csv_path,
+        {
+            "run_id": run_id,
+            "git_sha": git_sha,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "domain": model_name,
+            "mean_mse": round(mse_mean, 6),
+            "threshold_caution": round(t_caut, 6),
+            "threshold_warning": round(t_warn, 6),
+            "threshold_critical": round(t_cri, 6),
+        },
+        logger=logger,
+    )
 
 
 # ==============================================================================
 # 🛠️ [모델 학습 및 아티팩트 저장 통합 함수]
 # ==============================================================================
-def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=None):
+def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=None,
+                         run_id="legacy", git_sha="nogit", figures_dir=None):
     """
     특정 도메인(예: motor, hydraulic)의 데이터를 받아
     독립적인 AutoEncoder 모델을 학습하고 아티팩트를 저장합니다.
+
+    run_id / git_sha
+        이번 학습이 어느 실험 묶음(run_id)과 어느 코드(git_sha)에서 나왔는지를
+        실험 리더보드 CSV에 함께 기록하기 위한 식별자입니다. 메인 블록에서 한 번
+        생성해 4개 도메인에 동일하게 전달하므로, 같은 run의 결과가 한 묶음으로 추적됩니다.
     """
     start_time = time.time()
 
@@ -160,6 +197,38 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
         f"  📊 피처별 threshold 계산 완료: {len(per_feature_thresholds)}개 피처"
     )
 
+    # 4-b. 진단 시각화 저장 (run 폴더의 figures/ 로 자동 적재)
+    #   - MSE 분포(쏠림 확인) + 시계열(임계치 적용·기동 음영) 한 장
+    #   - 학습 곡선(과적합 확인)
+    #   기동 마스크: AE 입력에 남아 있는 운전 맥락 피처에서 도출한다. is_startup_phase가
+    #   있으면 그대로 쓰고, 없으면 minutes_since_startup<=5(기동 직후 5분)로 근사한다.
+    #   이 마스크가 있어야 "기동 스파이크가 threshold를 부풀렸는지"를 그래프에서 비교할 수 있다.
+    #   학습 데이터는 이상 구간이 제거돼 있으므로 anomaly 음영은 평가 단계(evaluate)에서 그린다.
+    if _VIZ_AVAILABLE and figures_dir is not None:
+        try:
+            startup_mask = None
+            if "is_startup_phase" in X_train_ae.columns:
+                startup_mask = (X_train_ae["is_startup_phase"].to_numpy() == 1)
+            elif "minutes_since_startup" in X_train_ae.columns:
+                startup_mask = (X_train_ae["minutes_since_startup"].to_numpy() <= 5)
+
+            plot_threshold_diagnosis(
+                mse_scores, thresholds, model_name,
+                save_path=os.path.join(figures_dir, f"{model_name}__mse_diagnosis.png"),
+                startup_mask=startup_mask,
+                anomaly_mask=None,  # 학습 데이터엔 이상 라벨 없음(정상 구간만)
+            )
+            plot_loss_curve(
+                history, model_name,
+                save_path=os.path.join(figures_dir, f"{model_name}__loss_curve.png"),
+            )
+            logger.info(f"  진단 시각화 저장 완료: {figures_dir}")
+        except Exception as e:
+            # 시각화 실패가 학습/저장을 막아서는 안 된다
+            logger.warning(f"  진단 시각화 저장 실패(학습은 정상 완료): {e}")
+    elif not _VIZ_AVAILABLE:
+        logger.warning("  matplotlib 미가용으로 진단 시각화 생략(학습은 정상 진행)")
+
     # 5. 프론트엔드용 메타데이터(Config) 조립
 
     logger.info("💾 [Phase 5-5] 서버 배포용 아티팩트(Artifacts) 저장...")
@@ -202,6 +271,8 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
         t_caut=thresholds["caution"],
         t_warn=thresholds["warning"],
         t_cri=thresholds["critical"],
+        run_id=run_id,
+        git_sha=git_sha,
     )
 
     end_time = time.time()
@@ -218,11 +289,35 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
 # ==============================================================================
 if __name__ == "__main__":
     total_start_time = time.time()
-    logger.info("🏁 [MAIN] 다중 도메인(Multi-Domain) 예지보전 AI 파이프라인 학습 시작")
+    logger.info("[MAIN] 다중 도메인(Multi-Domain) 예지보전 AI 파이프라인 학습 시작")
 
-    # 🌟 [수정됨] 경로 하드코딩 제거 -> 동적 경로 탐색 로직 적용
+    # --------------------------------------------------------------------------
+    # [재현성 고정] 어떤 학습보다 먼저 실행한다.
+    #   AutoEncoder 가중치 초기화는 시드가 없으면 매번 다른 값에서 출발해 다른 모델로
+    #   수렴한다. 모델을 만들기(build_autoencoder) 전에 전역 시드를 박아야, 같은 코드와
+    #   같은 데이터면 같은 모델이 나온다. 이 한 줄이 "성능이 좋아졌는지, 운이 좋았는지"를
+    #   구분 가능하게 만드는 전제 조건이다. (docs/modeling/01_experiment_protocol.md §1)
+    # --------------------------------------------------------------------------
+    set_global_determinism(seed=42, logger=logger)
+
+    # --------------------------------------------------------------------------
+    # [실험 식별자] 이번 학습 1회(4개 도메인)를 하나로 묶는 이름과 코드 출처를 만든다.
+    #   - git_sha : 이 결과가 어느 커밋에서 나왔는지 → 나중에 그 시점 코드를 되살릴 수 있게.
+    #   - run_id  : '시각__sha__phase' 형태. PHASE 환경변수로 실험 라벨을 줄 수 있다.
+    #               예) PHASE=percentile-thr python train.py
+    # --------------------------------------------------------------------------
+    git_sha = get_git_sha()
+    run_id = new_run_id(git_sha=git_sha)
+    logger.info(f"[MAIN] run_id={run_id} (git={git_sha})")
+
+    # 경로 하드코딩 제거 -> 동적 경로 탐색 로직 적용
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(current_dir)
+
+    # [시각화 출력 폴더] 이번 run의 보존본 폴더 아래 figures/ 에 도메인별 그래프를 모은다.
+    #   같은 run_id로 모델·메트릭·이미지가 한 묶음으로 보존되어, 옵션을 바꾼 다른 run과
+    #   같은 파일명으로 바로 비교된다. (docs/modeling/06_visualization_logging.md)
+    run_figures_dir = os.path.join(project_root, "models", "runs", run_id, "figures")
 
     # /Users/... 대신 project_main_folder/data 폴더를 찾아가도록 설정
     data_filename = (
@@ -318,6 +413,9 @@ if __name__ == "__main__":
             model_name=system_name,
             target_dict=target_dict,
             df_reference=df_agg,
+            run_id=run_id,
+            git_sha=git_sha,
+            figures_dir=run_figures_dir,
         )
 
         # 3. SHAP 아티팩트 저장 (frontend beeswarm 렌더용)
@@ -351,11 +449,36 @@ if __name__ == "__main__":
             json.dump(shap_payload, f)
         logger.info(f"💾 [{system_name.upper()}] SHAP 아티팩트 저장: {shap_path}")
 
+    # --------------------------------------------------------------------------
+    # [불변 스냅샷] 4개 도메인 학습이 모두 끝난 뒤, 라이브 폴더(models/)에 쌓인
+    #   아티팩트 일습을 models/runs/<run_id>/ 로 복사해 박제한다.
+    #   - models/ 는 서빙(inference_api)이 직접 읽는 곳이라 그대로 둔다(계약 불변).
+    #   - runs/<run_id>/ 는 이 학습 시점의 박제본으로, 다음 재학습이 덮어쓰지 않는다.
+    #   과거 A-3 사고(좋은 모델이 재학습에 소실)를 구조적으로 막는 장치다.
+    # --------------------------------------------------------------------------
+    models_dir = os.path.join(project_root, "models")
+
+    # 도메인별 그래프를 한 장의 대조표로 묶어 run 폴더에서 한눈에 비교 가능하게 한다.
+    if _VIZ_AVAILABLE and os.path.isdir(run_figures_dir):
+        try:
+            sheet = build_contact_sheet(run_figures_dir)
+            if sheet:
+                logger.info(f"[MAIN] 진단 대조표 생성: {sheet}")
+        except Exception as e:
+            logger.warning(f"[MAIN] 대조표 생성 실패(학습은 정상 완료): {e}")
+
+    snapshot_run(
+        models_dir,
+        run_id,
+        meta={"domains": list(subsystem_targets.keys()), "seed": 42},
+        logger=logger,
+    )
+
     total_end_time = time.time()
     t_min, t_sec = divmod(total_end_time - total_start_time, 60)
     logger.info(
-        "🎉 모든 서브시스템(Motor, Hydraulic, Nutrient, Zone Drip)의 모델 학습이 성공적으로 종료되었습니다!"
+        "모든 서브시스템(Motor, Hydraulic, Nutrient, Zone Drip)의 모델 학습이 성공적으로 종료되었습니다."
     )
     logger.info(
-        f"🏆 전체 파이프라인 구동 완료! (총 소요 시간: {int(t_min)}분 {t_sec:.2f}초)"
+        f"전체 파이프라인 구동 완료 (총 소요 시간: {int(t_min)}분 {t_sec:.2f}초)"
     )

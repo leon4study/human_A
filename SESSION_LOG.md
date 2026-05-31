@@ -1,5 +1,128 @@
 # SESSION_LOG
 
+## 2026-05-31 — 도메인 운영 지표 검증(막힘률·Cpk·OEE) 핸드오프 (docs/modeling/08 신설)
+
+현재 진행 중인 모델 성능 작업(재현성 인프라 → NUTRIENT threshold → 단일센서 baseline)이 끝난 뒤 이어서 수행할 검증 작업을 문서로 고정했다. 강사가 경력기술서에 제시한 제조 지표(막힘률 10→2% · Cpk 1.67 · OEE 78→85%)를 실제 측정해 격상하는 단계다.
+
+### 달성 (Accomplished)
+
+1. `docs/modeling/08_domain_metrics_validation.md` 신설 — 막힘률·Cpk·OEE의 정의·측정 절차·효과 책정 기준을 정리. 효과 크기의 절대값이 아니라 "도메인이 인정하는 지표를 정의하고 그에 맞춘 테스트를 했다"는 점에 집중.
+   - 막힘률: 막힘 사건 조작적 정의 + episode 단위 + baseline 대비 동일 시나리오 비교
+   - Cpk: CTQ(토출 유량) 선정 → LSL/USL 명시 → within σ(R̄/d₂) → 정규성 → Cpk 산출. F1과 분리 강조
+   - OEE: 가용성×성능×품질 구성요소 정의 + 출처 표기
+   - RMSE/Confusion Matrix는 모델 지표군으로 분리
+2. `docs/modeling/README.md` 색인에 08 추가, `04_modeling_kickoff_checklist.md` 현재 우선순위 표에 6(막힘률)·7(Cpk)·8(OEE) 추가.
+
+### 재개 지점 (Resume Point)
+
+`04_modeling_kickoff_checklist.md` "현재 프로젝트 적용 우선순위" 표 순서대로. 현재 작업(1~5번: 인프라·threshold·baseline)이 끝나면 **6번 막힘률부터** [08_domain_metrics_validation.md](docs/modeling/08_domain_metrics_validation.md) §8 착수 체크리스트를 따라 진행한다. 5번 baseline이 6번의 선행 조건이다.
+
+### 절대 규칙 (Absolutes)
+
+- 막힘률은 baseline 대비 비교가 핵심 — baseline 없이 단독 측정하면 "10→2%"가 목표에 머문다.
+- F1(분류)과 Cpk(공정 산포)는 별개 지표 — 한 결과로 묶지 않는다.
+- 측정이 검증값으로 확정되면 08 §7 동기화 5종(로드맵 §0 표·portfolio_interview_facts·CEDR 원칙·경력기술서/SSOT·MODEL_CHANGELOG)을 함께 갱신한다.
+
+---
+
+## 2026-05-31 — 모델링 기획 문서(docs/modeling/) + 재현성·추적 인프라(repro.py) 신설
+
+참고: 이 항목부터 신규 규칙(이모지 금지·격식 문어체, 메모리 feedback_no_emoji_formal_docs)을 적용한다. 이전 항목들의 이모지 섹션 마커는 레거시로 보존한다.
+
+### 달성 (Accomplished)
+
+1. `docs/modeling/` 폴더 신설 — 모델 성능 검증·모델링 기획을 어떻게 체계적으로 수행할지 방법론으로 정리. 기존 `docs/MODELING.md`(as-built 구조)와 역할 분리(이 폴더 = 앞으로의 프로세스).
+   - `README.md` 색인+철학(반복 실험을 복원·비교 가능하게)
+   - `01_experiment_protocol.md` 재현성·덮어쓰지 않는 저장·experiments.csv·한 번에 한 변수
+   - `02_evaluation_design.md` 시간순 split·정상 순도·메트릭(FAR≤5%)·baseline-first·에러분석
+   - `03_threshold_methodology.md` dynamic threshold: σ 고정 → PR curve/percentile, 도메인별 보정
+   - `04_modeling_kickoff_checklist.md` 착수 전 게이트 0~4 + 현재 우선순위
+   - `05_reproducibility_implementation.md` repro.py 구현·신규 개념 설명
+   - `06_visualization_logging.md` 진단 시각화 자동 저장·실험별 이미지 관리(구현 반영)
+2. `src/repro.py` 신설(코드) — `set_global_determinism`(TF 포함 전역 시드+op_determinism), `get_git_sha`, `new_run_id`, `snapshot_run`(models/runs/<run_id> 보존본+LATEST_RUN.txt), `append_experiment_row`. 상세 주석 포함.
+3. `src/viz.py` 신설(코드) — `plot_threshold_diagnosis`(히스토그램 skew + 시계열 임계치 + 기동/이상 음영 + '기동 제외 시 임계치' 점선 병기), `plot_loss_curve`, `build_contact_sheet`. matplotlib Agg, import 실패 흡수.
+4. `src/train.py` 연동 — 메인 시작 시 결정성 고정·run_id 생성, 도메인 학습에 run_id/git_sha/figures_dir 전달, experiments CSV에 run_id·git_sha 컬럼, 도메인별 진단 그래프를 `models/runs/<run_id>/figures/`에 저장, 4도메인 후 contact sheet + snapshot_run 1회. (services/inference/src/ 동일 동기화, 구문 검증 통과, matplotlib 3.7.5 확인)
+5. `src/evaluate_test_metrics.py` 시각화 연동 — `run_inference`가 도메인별 임계치 맵 반환, 도메인별 MSE 타임라인(이상 라벨 음영 + 학습/평가 경계선)을 `latest_run_dir`로 찾은 같은 run의 figures/에 `<도메인>__eval_timeline.png`로 저장 + contact sheet. 평가에선 `show_excl_startup=False`. `repro.latest_run_dir` 헬퍼 추가. (런타임 렌더 검증: 합성 데이터로 그림 생성 확인)
+6. `docs/MODELING.md` 상단 교차 링크 추가.
+
+### 향후 (다음 모델링 세션)
+
+- 재현성 검증: `python src/train.py` 2회 실행 → 두 `*_config.json`의 thresholds·features 동일 확인. 다르면 비결정 연산 격리.
+- 실제 학습/평가 1회 실행으로 figures/ 산출 확인(데이터 월1 정상→월2 drift→월3 이상 구조에서 경계선 이후 MSE가 critical 돌파하는지). 무거운 작업이라 사용자 직접 실행.
+- 그 다음 NUTRIENT threshold(percentile/PR) 실험·baseline 구축.
+
+### 절대 규칙 (Absolutes)
+
+- 재현성 확보 전의 "성능 개선"은 보고하지 않는다(우연과 구분 불가). A-3 비결정성 교훈.
+- 모델 아티팩트는 덮어쓰지 않는다 — 라이브(models/)는 서빙용 유지 + runs/<run_id> 보존본 추가. inference_api 서빙 계약 불변.
+- `docs/modeling/`(방법론)과 `docs/MODELING.md`(구조)는 분리 유지.
+- 비결정성 직접 원인은 TF(무시드)였음. feature_selection RF/KMeans는 이미 random_state로 재현 가능.
+
+### 재개 지점 (Resume Point)
+
+`docs/modeling/04_modeling_kickoff_checklist.md` "현재 프로젝트 적용 우선순위" 표 순서대로. 무거운 학습(train.py)·대량 렌더는 사용자 직접 실행. 다음 후보: 06 시각화 viz.py 구현 여부 결정.
+
+---
+
+## 2026-05-28 — 포트폴리오 강점 강화 디벨롭 로드맵 신설 (docs/DEVELOPMENT_ROADMAP.md)
+
+### ✅ 달성 (Accomplished)
+
+1. **MDOF·NN 보정·Cpk·OEE/막힘률 4개 항목의 출처·현재 상태 검증 완료**:
+   - 출처: 전부 `jun_portfolio/03_A트랙_데이터기술_notion.md`·`05_노션_경력기술서_페이지.md`의 **팀 기획·목표 단계** 기술. 외부 레퍼런스(커리큘럼 명세 인용·산업 벤치마크·논문) 0건
+   - 현재 상태: **네 항목 모두 최종 코드에 미구현/미측정** (MDOF·NN은 시도 기록도 0건, Cpk·OEE는 측정 로직 0줄)
+   - 최종 모델 = 4도메인 독립 AutoEncoder + 6σ 3단계 알람 + SHAP RCA (물리모델 없음)
+
+2. **`docs/DEVELOPMENT_ROADMAP.md` 신설** — 강사님 제시 키워드를 "제거"가 아니라 **"실제 구현·측정해 포트폴리오 강점으로 격상"**하기 위한 향후 디벨롭 계획. 항목별 [무엇인가·왜 강점·구현할 것·완료 시 발화 격상] + 권장 작업 순서(§4 막힘률/OEE → §3 Cpk → §1 MDOF → §2 NN) + 동기화 체크리스트.
+
+### ⏳ 향후 (다음 디벨롭 세션)
+
+- 1순위 §4 막힘률·OEE baseline 비교 시뮬레이션부터. 상세는 `docs/DEVELOPMENT_ROADMAP.md` §5 참조.
+- 구현 완료 항목은 ROADMAP §0 상태 표(❌→✅) + `docs/portfolio_interview_facts.md` + make_portfolio CEDR 카탈로그 동기화.
+
+### 🔒 절대 규칙 (Absolutes)
+
+- 구현·측정 전까지 MDOF·NN·Cpk·OEE·막힘률 %는 **포트폴리오 본문 노출 금지** (현 상태 = 목표/기획값). P-002 원칙 유지.
+- 디벨롭 시 출처(기계공학 수식 레퍼런스, OEE 78/85 근거)를 **반드시 표기** — 현재 출처 0건이 가장 큰 약점.
+
+---
+
+## 2026-05-27 — 포트폴리오 발화 정확도 점검 (docs/portfolio_interview_facts.md 신설)
+
+### ✅ 달성 (Accomplished)
+
+1. **`docs/portfolio_interview_facts.md` 신설** — 1분 자기소개·면접 발화에 들어가는 펌프 프로젝트 사실 매핑 SSOT. 발화 표현 ↔ 코드/문서 위치 매핑, 검증된 결과(F1 0.95) vs 환산값(연 4000만원) vs **제외된 수치(막힘률 10%→2%)** 명확히 구분.
+
+2. **"막힘률 10% → 2%" 표현을 발화에서 제거 결정** — 코드·문서 검증 결과 측정 근거 부재 확인:
+   - `evaluate_test_metrics.py`는 `anomaly_label`(0/1)만 측정. "막힘률" 측정 로직 부재
+   - "10%"·"2%"는 `jun_portfolio/03_A트랙_데이터기술_notion.md:16`에 "목표"로만 기술
+   - F1 0.95 → 막힘률 환산 공식 없음
+   - → 정직성 위해 본문/두괄식에서 모두 삭제
+
+3. **1분 자기소개 옵션 B 확정** — 검증된 사실(F1 0.95)만 본문 결과로 노출 + 비즈니스 임팩트는 "환산" 단어로 추정값임을 명시:
+   - 두괄식: "양액 펌프 막힘을 95% 정확도로 사전에 감지하는 모델을 만든"
+   - 본문 마지막 문장: "네 모델 모두 정상·이상 구분에서 F1 0.95를 넘겼고, 1000평 농장 기준 연 4000만원 손실 예방 효과로 환산했습니다"
+
+### ⏳ 향후 코드/문서 수정 시 점검 필요
+
+다음 항목 변경 시 `docs/portfolio_interview_facts.md` §4 체크리스트 + 원본 발화(`~/GitStudy/make_portfolio/분석가_포트폴리오_범용/1분_자기소개.md`)도 같이 갱신:
+
+1. **F1 0.95 수치 변동** — nutrient 도메인 오탐 근본 수정 시 발화 검토
+2. **4도메인 구성 변경** (motor/hydraulic/nutrient/zone_drip)
+3. **AutoEncoder → 다른 모델 전환**
+4. **6시그마 3단계 알람 사양 변경** (현재 2σ/3σ/6σ → 1σ/2σ/3σ + 디바운싱 예정)
+5. **연 4000만원 환산 가정 변경** (1000평·작물·고품질 비율)
+6. **농장 실측 배포 시작** — "환산" → "달성"으로 표현 격상 가능
+7. **막힘률 % 표현 부활 금지** — 실측 로직이 코드에 들어오기 전까지 발화 재진입 불가
+
+### 🔒 절대 규칙 (Absolutes)
+
+- 포트폴리오 발화는 **검증된 사실만 본문에 노출**. 환산값은 "환산" 단어로 신호.
+- "막힘률 10%→2%" 같은 목표 수치는 본문에서 사용 금지. 면접 후속 질문에서 "사업 목표였습니다"로 풀이 가능.
+- 원본 발화 갱신은 `~/GitStudy/make_portfolio/분석가_포트폴리오_범용/1분_자기소개.md` 단일 SSOT. 본 docs는 매핑 참조용.
+
+---
+
 ## 2026-04-21 — 프론트 연동 스펙 정리 (FRONTEND_PAGES.md 신설 · 필터 페이지 결정 · raw_inputs 확장)
 
 ### ✅ 달성 (Accomplished)
