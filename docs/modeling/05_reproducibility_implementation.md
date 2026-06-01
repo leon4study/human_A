@@ -26,22 +26,26 @@ A-3 실험에서 `random_state=42`를 설정했음에도 재학습 결과가 매
 
 | 난수원 | 무엇을 흔드는가 |
 |---|---|
-| `PYTHONHASHSEED` | set/dict의 해시 순서. 피처 목록을 set으로 다루면 순서가 바뀜 |
+| `PYTHONHASHSEED` | set/dict의 해시 순서. **이번 비결정성의 진범.** 다중공선성 드롭·robust voting이 set 순서에 의존 |
 | `random` | 파이썬 표준 random |
 | `numpy` | 샘플링·셔플 등 수치 연산 난수 |
-| `tensorflow` | AE 가중치 초기화·드롭아웃·셔플. 이번 비결정성의 직접 원인 |
+| `tensorflow` | AE 가중치 초기화·드롭아웃·셔플 |
 
-feature_selection의 RandomForest·KMeans는 이미 `random_state`가 지정돼 재현 가능했고, 비어 있던 곳은 TensorFlow였습니다.
+2026-06-01 재현성 테스트에서 2회 실행의 config가 4도메인 전부 달랐고, set 순서가 실행마다 바뀌는 것을 확인해 진범이 해시 무작위화임을 규명했습니다. feature_selection의 RandomForest·KMeans는 `random_state`로 재현 가능하지만, 그 위 set 순서가 흔들리고 있었습니다.
 
-### 2-2. enable_op_determinism()이 별도로 필요한 이유
+### 2-2. PYTHONHASHSEED는 왜 re-exec가 필요한가
+
+`os.environ["PYTHONHASHSEED"]=...`를 실행 중에 대입해도 현재 인터프리터의 해시 무작위화는 바뀌지 않습니다. 이 값은 파이썬이 시작되기 전에 환경에 있어야 합니다. 그래서 `set_global_determinism`은 미설정 시 환경변수를 박고 `os.execv`로 프로세스를 재실행해 해시 순서를 고정합니다. (초기 구현은 런타임 대입만 해서 무효였고, 재현성 테스트가 이 함정을 잡았습니다.)
+
+### 2-3. enable_op_determinism()이 별도로 필요한 이유
 
 `tf.random.set_seed()`는 난수 자체만 고정합니다. 그러나 GPU·멀티스레드에서는 덧셈 같은 연산의 누적 순서가 실행마다 달라질 수 있고(부동소수점은 순서에 민감), 그 결과 미세하게 다른 값이 나옵니다. `enable_op_determinism()`은 이 연산 순서까지 고정합니다. 일부 연산은 느려지거나 미지원이라 예외가 발생할 수 있어 try/except로 감싸고, 미적용 시 경고만 남기고 진행합니다(TF 2.8 이상에서 제공).
 
-### 2-3. 코드 출처 추적(provenance)과 git SHA
+### 2-4. 코드 출처 추적(provenance)과 git SHA
 
 수개월 뒤 "이 run의 결과가 좋았는데 그때 코드가 무엇이었는가"를 추적하려면 메트릭만으로는 부족합니다. commit SHA를 모델 폴더에 기록해 두면 `git checkout <sha>`로 그 시점 코드를 정확히 되살릴 수 있습니다. git이 없거나 repo가 아니면 `nogit`을 반환해 학습을 막지 않습니다.
 
-### 2-4. 라이브 폴더와 보존본 스냅샷의 분리
+### 2-5. 라이브 폴더와 보존본 스냅샷의 분리
 
 inference_api는 기동 시 `models/` 폴더를 직접 스캔해 모델을 로드합니다(서빙 계약). 저장 위치를 `runs/` 아래로 옮기면 서빙이 깨집니다. 그래서 두 위치로 분리합니다.
 
@@ -52,7 +56,7 @@ inference_api는 기동 시 `models/` 폴더를 직접 스캔해 모델을 로�
 
 심링크(latest symlink) 대신 복사 스냅샷과 포인터 파일(`LATEST_RUN.txt`)을 사용합니다. 심링크는 서빙이 의도치 않은 폴더를 가리킬 위험이 있어, 서빙은 그대로 두고 보존본만 추가하는 방식이 안전합니다.
 
-### 2-5. run_id로 실험을 묶는 이유
+### 2-6. run_id로 실험을 묶는 이유
 
 `run_id`는 `<시각>__<git_sha>__<phase>` 형식입니다(예: `2026-05-31_142210__41c58ea__baseline`). 한 번의 학습(4개 도메인)이 하나의 run_id로 묶이므로, experiments.csv·보존본·시각화가 모두 같은 키로 연결됩니다. `phase`는 환경변수로 실험 라벨을 줄 수 있어 코드 수정 없이 구분됩니다.
 

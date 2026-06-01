@@ -57,6 +57,9 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         "pump_rpm",
         "rpm_slope",
         "temp_slope_c_per_s",
+        # 피처 1차 배치 (09 원장 §3-4)
+        "bearing_thermal_margin",
+        "load_per_speed",
     ],
     "hydraulic": [
         "flow_rate_l_min",
@@ -68,6 +71,9 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         "filter_delta_p_kpa",
         "pressure_trend_10",
         "flow_trend_10",
+        # 피처 1차 배치 (09 원장 §3-2) — 막힘 직격
+        "system_resistance",
+        "specific_energy",
     ],
     "nutrient": [
         "mix_ph",
@@ -79,11 +85,16 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         "ph_trend_30",
     ],
     "zone_drip": [
-        "zone1_flow_l_min",
-        "zone1_pressure_kpa",
+        # zone_drip = 구역별 관수·토양 환경 전문가(PPT 설계). 토양 EC/수분이 Critical.
+        # zone1_flow_l_min·zone1_pressure_kpa는 단일 펌프에 연동돼 펌프 센서와 중복(공선성)
+        # 이라 의도적으로 제외 — 구역 고유 정보를 담은 토양 센서와 공급 균형 지표만 사용.
         "zone1_substrate_moisture_pct",
         "zone1_substrate_ec_ds_m",
         "supply_balance_index",
+        # 피처 1차 배치 (09 원장 §3-1) — 구역 간 편차·집적속도로 국부 막힘/염해 탐지
+        "zone_ec_variance",
+        "zone_moisture_variance",
+        "substrate_ec_accum_rate",
     ],
 }
 

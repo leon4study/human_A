@@ -24,6 +24,7 @@ import json
 import random
 import shutil
 import subprocess
+import sys
 from datetime import datetime
 
 
@@ -39,14 +40,20 @@ def set_global_determinism(seed: int = 42, logger=None) -> None:
       파이썬 한 번 학습에는 서로 다른 난수 엔진이 동시에 돈다. 하나만 고정하면
       나머지가 흔들려서 결과가 매번 달라진다. 그래서 4곳을 전부 잡아야 한다:
 
-        (a) PYTHONHASHSEED  : 파이썬 set/dict의 해시 순서. 피처 목록을 set으로 다루는
-                              코드가 있으면 순서가 바뀌어 다운스트림이 흔들린다.
+        (a) PYTHONHASHSEED  : 파이썬 set/dict의 해시 순서. 이번 비결정성의 '진짜' 원인.
+                              피처 목록을 set으로 다루는 코드(다중공선성 드롭, robust
+                              voting의 교집합/합집합)가 있어, 순서가 바뀌면 어느 컬럼을
+                              드롭/선택하는지가 매 실행 달라져 파이프라인 전체가 흔들린다.
         (b) random          : 파이썬 표준 random 모듈.
         (c) numpy           : 샘플링·셔플 등 수치 연산 난수 (X.sample 등).
-        (d) tensorflow      : 이번 비결정성의 직접 원인. AE 가중치 초기화와 학습은
-                              시드가 없으면 매번 다른 초기값에서 출발해 다른 모델로 수렴한다.
-                              (feature_selection.py의 RandomForest/KMeans는 이미
-                               random_state=42가 걸려 있어 재현 가능 → TF만 비어 있었다.)
+        (d) tensorflow      : AE 가중치 초기화·학습. 시드가 없으면 다른 초기값에서 출발한다.
+
+    [PYTHONHASHSEED는 왜 re-exec가 필요한가]
+      이 환경변수는 파이썬 인터프리터가 '시작되기 전'에 환경에 있어야 효과가 있다.
+      이미 실행 중인 프로세스에서 os.environ["PYTHONHASHSEED"]=... 로 대입해도
+      현재 프로세스의 해시 무작위화(sys.flags.hash_randomization)는 바뀌지 않는다.
+      따라서 미설정 상태면 환경변수를 박은 뒤 동일 인자로 프로세스를 재실행(os.execv)해
+      해시 순서를 고정한다. (2026-06-01 재현성 테스트로 이 함정을 발견·수정)
 
     [enable_op_determinism()이 따로 필요한 이유]
       tf.random.set_seed()는 '난수 자체'만 고정한다. 하지만 GPU/멀티스레드에서는
@@ -55,10 +62,16 @@ def set_global_determinism(seed: int = 42, logger=None) -> None:
       고정한다. 대신 일부 연산이 느려지거나 미지원이라 에러가 날 수 있어 try/except로 감싼다.
 
     Returns:
-        None. (부수효과: 전역 시드 설정)
+        None. (부수효과: 전역 시드 설정. PYTHONHASHSEED 미설정 시 프로세스 재실행)
     """
-    # (a) 파이썬 해시 시드 — 반드시 다른 import보다 먼저 환경변수로 박혀야 효과가 있다.
-    os.environ["PYTHONHASHSEED"] = str(seed)
+    # (a) 파이썬 해시 시드 — 런타임 대입은 효과가 없으므로, 미설정이면 환경변수를 박고
+    #     프로세스를 재실행한다. 재실행 후에는 이 분기를 건너뛰고 아래 시드 고정으로 진행.
+    if os.environ.get("PYTHONHASHSEED") != str(seed):
+        os.environ["PYTHONHASHSEED"] = str(seed)
+        _log(logger, "info",
+             f"PYTHONHASHSEED 미고정 감지 → {seed}로 설정 후 프로세스 재실행"
+             f"(set/dict 순서 고정, 재현성 확보)")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
     # (b) 파이썬 표준 random
     random.seed(seed)
@@ -234,10 +247,34 @@ def append_experiment_row(csv_path: str, row: dict, logger=None) -> None:
         row: dict. 키가 곧 CSV 컬럼이 된다. (예: run_id, git_sha, domain, ...)
     """
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    file_exists = os.path.isfile(csv_path)
+    fieldnames = list(row.keys())
+    header = ",".join(fieldnames)
+
+    # 스키마 변경 안전장치:
+    #   기존 파일의 헤더가 지금 쓰려는 컬럼과 다르면(예: 옛 6열 → 새 8열),
+    #   헤더 없이 덧붙이면 열이 어긋난다. 이 경우 기존 파일을 .legacy.csv로 보존하고
+    #   새 스키마로 새로 시작한다. (옛 데이터 손실 없이 자동 이행)
+    write_header = True
+    if os.path.isfile(csv_path):
+        with open(csv_path, "r", encoding="utf-8") as f:
+            existing_header = f.readline().strip()
+        if existing_header == header:
+            write_header = False
+        else:
+            stem = csv_path[:-4] if csv_path.endswith(".csv") else csv_path
+            legacy = f"{stem}.legacy.csv"
+            n = 1
+            while os.path.exists(legacy):
+                legacy = f"{stem}.legacy{n}.csv"
+                n += 1
+            os.rename(csv_path, legacy)
+            _log(logger, "warning",
+                 f"experiments CSV 스키마 변경 감지 → 기존 파일을 "
+                 f"{os.path.basename(legacy)}로 보존하고 새 스키마로 시작")
+
     with open(csv_path, mode="a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
-        if not file_exists:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if write_header:
             writer.writeheader()
         writer.writerow(row)
     _log(logger, "info", f"실험 기록 누적: {csv_path} ({row.get('domain', '?')})")

@@ -528,3 +528,60 @@ feature_details = build_feature_details(
 - 구모델(Phase B)은 per_feature_thresholds 필드 없음 → inference는 graceful fallback
 
 ---
+
+## Phase D — 비결정성 진범 규명: PYTHONHASHSEED와 set 순서 (2026-06-01)
+
+### 가설
+재현성 인프라(repro.set_global_determinism: numpy/random/TF 시드 + op_determinism)를 넣고 train.py 첫 실행(baseline-repro) 성공. "이제 같은 코드·데이터면 config가 동일할 것"이라 가정하고 2회차(repro-check)로 검증.
+
+### 시도
+`train.py`를 2회 실행해 run1 vs run2의 `*_config.json`을 diff.
+
+### 관측 (재현성 테스트 실패)
+4개 도메인 config 전부 다름. 단순 가중치 차이가 아니라 **피처 선택 자체가 달라짐**:
+- motor 다중공선성 드롭: run1 13개 제거(25 남음) vs run2 10개 제거(28 남음)
+- motor SHAP robust: run1 `[pressure_trend_10]` vs run2 `[flow_rate_l_min, pressure_trend_10]`
+- zone_drip robust: run1 2개 vs run2 0개
+
+### 진단 (데이터로 확증)
+- `sys.flags.hash_randomization == 1` (해시 무작위화 ON).
+- 동일 set을 두 프로세스에서 list로 출력 → 순서가 다름(`['suction_pressure_kpa', ...]` vs `['pressure_flow_ratio', ...]`).
+- 즉 진범은 TF가 아니라 **Python 해시 무작위화**. preprocessing 다중공선성 드롭과 feature_selection robust voting이 set/dict 순서에 의존 → 매 실행 어느 컬럼을 드롭/선택하는지가 달라지고 전체 파이프라인이 어긋남.
+- 핵심 함정: `os.environ["PYTHONHASHSEED"]="42"`를 **런타임에** 대입해도 이미 실행 중인 인터프리터의 해시 시드는 바뀌지 않는다(시작 전 환경에 있어야 함). repro 1차 구현이 이 대입만 해서 무효였다.
+
+### 수정 — [repro.set_global_determinism](../src/repro.py)
+PYTHONHASHSEED가 seed로 박혀 있지 않으면 환경변수를 설정하고 `os.execv`로 프로세스를 재실행(re-exec). 재실행 후에는 해시 시드가 고정돼 set 순서가 매 실행 동일.
+- 격리 검증: 동일 스크립트 2회 실행 → set 순서 동일 확인.
+- 전체 파이프라인 검증(train.py 2회 config diff)은 사용자 재실행 대기.
+
+### 배운 원칙 (절대 규칙 #7 추가)
+7. **PYTHONHASHSEED는 런타임 대입 불가**: 해시 무작위화를 끄려면 인터프리터 시작 전 환경변수로 박거나 re-exec해야 한다. set/dict 순서에 의존하는 파이프라인(피처 드롭·voting)은 이걸 안 하면 매 실행 결과가 달라진다. 재현성은 시드 4종(hash/random/numpy/TF)을 모두 잡아야 완성된다.
+
+### 메모
+- 이전 기록·문서에서 "비결정성 직접 원인 = TF(무시드)"라 적었던 것은 오진이었다. feature_selection RF/KMeans는 random_state로 재현 가능하나, 그 위 set 순서가 흔들리고 있었다. TF 시드도 필요하지만 진범은 해시였다.
+
+---
+
+## Phase E — 빈약 도메인 보강: zone_drip 토양 복원 + 피처 1차 배치 (2026-06-02, 성공)
+
+### 가설
+재현성 확보 후 첫 실험. (1) zone_drip이 토양 센서 0개로 학습돼 퇴화(기동 spike만 반복) → 토양 센서 복원하면 실제 신호가 생긴다. (2) 중복 제거 후 도메인이 빈약 → 물리 근거 있는 파생 피처를 추가하면 막힘 직격 신호가 강해진다. (근거: [docs/modeling/09_feature_rationale_ledger.md](../docs/modeling/09_feature_rationale_ledger.md))
+
+### 시도 (PHASE=feature-v2)
+- preprocessing `model_cols`+collinearity whitelist에 zone 토양 센서 복원(`zone1_substrate_moisture/ec`, `supply_balance_index`). 펌프 중복인 zone 압력/유량은 제외.
+- 신규 파생 7개: zone(`zone_ec_variance`·`zone_moisture_variance`·`substrate_ec_accum_rate`), hydraulic(`system_resistance`·`specific_energy`), motor(`bearing_thermal_margin`·`load_per_speed`). `create_modeling_features`에 추가 + 도메인별 `SENSOR_MANDATORY` 배정.
+- 스모크 테스트로 `system_resistance` 저유량 분모 발산(4.5e7) 선제 발견 → pump_on & flow≥1.0 게이트 적용(절대규칙 #5).
+
+### 관측 (진단 그림)
+- **zone_drip**: X_train_ae 피처 5~10 → **14개**(토양·변동성 피처 전부 주입). 진단 그림이 0/0.5 이분 반복(무변동)에서 연속 변동으로 회복, skew 18.69→11.28, 후반부(월3 drift)에서 baseline 상승 관측. 기동 제외 임계치와 실선 간격 10배→약 1.3배.
+- **hydraulic**: `system_resistance`·`specific_energy`가 robust 교집합(6개)으로 선정. skew 3.44(최저), 타임라인이 정상 구간 평탄→월3 drift에서 깨끗하게 critical 돌파. 가장 명료한 막힘 응답.
+- motor/nutrient: 회귀 없음(기존 + 신규 일부 흡수). 재현성 re-exec 정상 작동.
+
+### 진단
+빈약의 근본은 "raw 센서 부족"이 아니라 "도메인 고유 신호를 담은 파생 피처 부족"이었다. 토양 변동성·시스템 저항 같은 물리 근거 피처가 들어가자 두 도메인 모두 실제 이상 구간(월3)에 반응. zone_drip은 robust voting은 여전히 0(타깃 간 공통 예측자 부재)이나 union+MANDATORY로 충분한 입력 확보.
+
+### 다음 단계
+- 정량 확인: `evaluate_test_metrics.py`로 라벨 기반 F1/FAR + 이상 음영 타임라인(월1정상→월3이상 구조에서 검출 확인).
+- threshold: skew 여전(zone 11·motor 15) → percentile/PR 전환 실험([03](../docs/modeling/03_threshold_methodology.md)).
+
+---

@@ -1,5 +1,40 @@
 # SESSION_LOG
 
+## 2026-06-01 — 재현성 진범 규명·수정 (PYTHONHASHSEED re-exec)
+
+### 달성 (Accomplished)
+1. 재현성 2회차 테스트 실패 → 진범 규명: TF 아님, **Python 해시 무작위화(PYTHONHASHSEED 미고정)**. set 순서가 매 실행 달라져 다중공선성 드롭·robust voting이 다른 컬럼 선택 → config 4도메인 전부 다름. 격리검증으로 set 순서 변동 확인.
+2. `repro.set_global_determinism` 수정 — 런타임 os.environ 대입은 무효이므로, PYTHONHASHSEED 미설정 시 환경변수 박고 `os.execv`로 프로세스 재실행(re-exec). set 순서 고정 격리검증 완료.
+3. 오진 정정 — 01·05 문서, handoff/status, MODEL_CHANGELOG에서 "TF가 진범" 서술을 해시 원인으로 수정. MODEL_CHANGELOG Phase D + 절대규칙 #7 추가.
+
+### 재개 지점 (Resume Point)
+1. 재현성 재검증: `train.py` 2회(re-exec 적용본) → config 동일 확인 (handoff.md §4 명령).
+2. 통과 시 zone_drip 센서 드롭 추적 → percentile threshold 실험.
+3. 미커밋: repro.py(CSV 안전장치+re-exec), 정리된 csv, status/handoff, 문서 정정 → 다음 커밋.
+
+---
+
+## 2026-05-31 — 첫 기준선 학습 실행 + 진단 그림 + handoff/status 신설
+
+### 달성 (Accomplished)
+
+1. `python src/train.py` 첫 실행 성공(run_id `2026-05-31_172229__5de0f9e__baseline-repro`, 4도메인 2분37초). 결정성 고정·run 스냅샷(16파일)·figures·contact sheet·experiments.csv 모두 정상 산출.
+2. experiments.csv 스키마 버그 수정 — 옛 6열 파일에 새 8열 행이 어긋나 쌓이던 문제. `repro.append_experiment_row`에 스키마 변경 시 `.legacy.csv` 자동 보존장치 추가, 현재 파일은 `experiment_board.legacy.csv`(145행) + 새 스키마(4행)로 분리.
+3. `status.md`·`handoff.md` 신설(루트) — 최초 질문의 "handoff/status" 요청 반영. status=현재상태 대시보드, handoff=인수인계+실행법. 둘 다 SESSION_LOG/docs/modeling을 가리키는 front door.
+
+### 핵심 발견 (Findings)
+
+- 진단 그림이 모델 품질 문제를 즉시 가시화. motor는 건강(skew 14.82, 기동이 threshold 안 부풀림, 꼬리에 drift). zone_drip은 퇴화(기동 spike가 threshold 약 10배 부풀림, MSE가 0.5만 반복·무변동).
+- zone_drip 원인 규명 진행: `zone1_*` 센서가 **raw 데이터엔 존재**(zone1_flow/pressure/substrate_* + zone2/3까지)하나 **집계본 df_agg에서 누락** → 실제 구역 센서 0개로 학습. preprocessing의 드롭 지점(collinearity/whitelist) 추적이 다음 과제.
+
+### 재개 지점 (Resume Point)
+
+1. 재현성 2회차: `train.py` 재실행 후 run1 vs run2 config diff (handoff.md §4).
+2. 통과 시 zone_drip 센서 드롭 추적 → percentile threshold 실험.
+3. 미커밋: `repro.py` CSV 안전장치 + 정리된 csv → 다음 커밋.
+
+---
+
 ## 2026-05-31 — 도메인 운영 지표 검증(막힘률·Cpk·OEE) 핸드오프 (docs/modeling/08 신설)
 
 현재 진행 중인 모델 성능 작업(재현성 인프라 → NUTRIENT threshold → 단일센서 baseline)이 끝난 뒤 이어서 수행할 검증 작업을 문서로 고정했다. 강사가 경력기술서에 제시한 제조 지표(막힘률 10→2% · Cpk 1.67 · OEE 78→85%)를 실제 측정해 격상하는 단계다.

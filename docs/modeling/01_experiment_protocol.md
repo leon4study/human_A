@@ -6,7 +6,7 @@
 
 ## 1. 재현성 고정 (최우선 — 없으면 나머지가 무의미)
 
-`train.py`는 `random_state=42`임에도 재학습마다 결과가 달랐습니다. 점검 결과, feature_selection의 RandomForest·KMeans는 이미 `random_state`가 지정돼 재현 가능하며, **시드가 비어 있던 곳은 TensorFlow** 였습니다. AE 가중치 초기화와 학습은 시드가 없으면 매번 다른 초기값에서 출발해 다른 모델로 수렴합니다.
+`train.py`는 `random_state=42`임에도 재학습마다 결과가 달랐습니다. 2026-06-01 재현성 테스트로 진범을 규명했습니다: **Python 해시 무작위화(PYTHONHASHSEED 미고정)** 입니다. set/dict 순서가 매 실행 달라져 다중공선성 드롭과 robust voting이 다른 컬럼을 선택했습니다. 결정적으로, 이 환경변수는 인터프리터 시작 전에 설정돼야 효과가 있어 런타임 대입은 무효이며, 미설정 시 프로세스를 재실행(re-exec)해야 합니다. TensorFlow 시드(가중치 초기화)도 함께 잡아야 하지만 핵심 변수는 해시였습니다. 상세는 [.claude/MODEL_CHANGELOG.md](../../.claude/MODEL_CHANGELOG.md) Phase D.
 
 모든 학습 스크립트의 최상단에서 다음을 고정합니다.
 

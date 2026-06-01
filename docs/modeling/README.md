@@ -36,6 +36,7 @@
 | [06_visualization_logging.md](06_visualization_logging.md) | 진단 시각화 자동 저장·실험별 이미지 관리 | 의도대로 동작함을 그래프로 보이고 수많은 이미지를 어떻게 정리하는가 |
 | [07_training_runbook.md](07_training_runbook.md) | train.py 실행 전 체크리스트·실행 기록 양식 | 학습 돌리기 전에 무엇을 맞추고 무엇을 기록하는가 |
 | [08_domain_metrics_validation.md](08_domain_metrics_validation.md) | 도메인 운영 지표(막힘률·Cpk·OEE) 정의·측정 절차·효과 책정 | baseline 완료 후 강사 제시 제조 지표를 어떻게 측정·격상하는가 |
+| [09_feature_rationale_ledger.md](09_feature_rationale_ledger.md) | 파생 피처 근거 원장(기존+제안, 공식·물리근거·탐지·출처) | 빈약한 도메인에 어떤 컬럼을 근거 있게 추가할 수 있는가 |
 
 ---
 

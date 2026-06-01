@@ -24,15 +24,15 @@
 
 > 관련 코드: [services/inference/src/data_gen_jun.py](../services/inference/src/data_gen_jun.py), [data_gen_dabin.py](../services/inference/src/data_gen_dabin.py), [data_gen_test.py](../services/inference/src/data_gen_test.py)
 
-### 1-3. 화학 센서(EC/pH) 학습 배제 결정
-**왜 배제했나** — EC/pH는 화학 센서 특성상 양액에 상시 노출되어 다음 문제가 잦습니다:
+### 1-3. 화학 센서(EC/pH) 처리 — 버리지 않되 보조 지표로 분리
+**왜 신뢰도가 낮나** — EC/pH는 화학 센서 특성상 양액에 상시 노출되어 다음 문제가 잦습니다:
 - 미생물막(biofilm) 형성으로 인한 오감지
 - 스케일(석회·염류 침전)에 의한 측정값 왜곡
 - 잦은 보정·교체 필요 → 현장 신뢰도 ↓
 
-→ **현실 반영도 측면에서 신뢰성 있는 결과를 위해, 가상 데이터 자체에는 EC/pH 값이 포함되어 있어도 학습 입력 피처에서는 제외**했습니다. 실제 학습은 압력·유량·전류·온도·진동·RPM 등 **물리 센서**에 집중합니다.
+→ 다만 EC/pH는 막힘의 가장 직접적인 신호라 폐기하지 않고, **EC/pH 전용 `nutrient` 도메인으로 분리**했습니다. 물리 도메인(motor·hydraulic)에는 EC/pH를 넣지 않아 화학 노이즈가 물리 판정을 오염시키지 않게 하고, nutrient는 다변량 AE로 단일 센서 노이즈를 흡수하게 설계했습니다. 1차 막힘 판단은 신뢰도 높은 **물리 센서**(압력·유량·전류·온도·진동·RPM)가 담당합니다.
 
-(*nutrient 도메인의 `pid_error_ec`, `salt_accumulation_delta`는 raw EC가 아닌 *오차/축적* 형태의 파생 지표라 별도 취급. 운영상으로도 [evaluate_test_metrics.py:41](../services/inference/src/evaluate_test_metrics.py#L41)에서 `EXCLUDE_FROM_OVERALL = {"nutrient"}`로 voting 제외 — **이유: EVAL FP 581건 중 547건(94%)이 nutrient에서 발생, 단독으로 잡은 진짜 이상은 0건**. [PROJECT_BRIEF.md §5-1](PROJECT_BRIEF.md) 참조.*)
+(*보조 지표 운용의 근거 — [evaluate_test_metrics.py:41](../services/inference/src/evaluate_test_metrics.py#L41)에서 `EXCLUDE_FROM_OVERALL = {"nutrient"}`로 nutrient를 종합 알람 voting에서 제외. 즉 nutrient(EC/pH)는 1차 알람이 아니라 보조 모니터링 채널. 정량 근거: EVAL FP 581건 중 547건(94%)이 nutrient에서 발생, 단독으로 잡은 진짜 이상은 0건. [PROJECT_BRIEF.md §5-1](PROJECT_BRIEF.md) 참조.*)
 
 ## 2. EDA 결과 요약
 
@@ -80,7 +80,7 @@
 
 ### 3-3. 🧪 NUTRIENT — 양액/수질
 **관심사** — 양액 조성의 PID 제어 오차, 염류 축적 추이
-**핵심 입력** — `pid_error_ec`, `pid_error_ph`, `salt_accumulation_delta`, `mix_target_ec_ds_m` (raw EC/pH는 학습 배제 — §1-3)
+**핵심 입력** — `mix_ec_ds_m`·`mix_ph`(공급단 raw), `drain_ec_ds_m`, `mix_target_ec_ds_m`, `pid_error_ph`, `ph_trend_30` (EC/pH는 보조 지표로 nutrient에만 두고 종합 voting 제외 — §1-3)
 **탐지 이상** — A/B액 투입 비율 오류 / EC 센서 드리프트 / 양액펌프 막힘 / 원수 공급 불량
 **현장 영향** — 잘못된 농도 → 염류 장해(뿌리 끝 갈변·흡수 장애) → 엽소 → 수율 저하·비료 낭비
 

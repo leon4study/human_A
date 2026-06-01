@@ -65,7 +65,7 @@
 
 | 외부 자료 | 흡수된 위치 |
 |---|---|
-| 노션 — 최종 보고서 | [PROJECT_BRIEF.md](PROJECT_BRIEF.md) (전반), [MODELING.md §9 알려진 이슈](MODELING.md), [ANALYSIS.md §1-3 EC/pH 배제](ANALYSIS.md) |
+| 노션 — 최종 보고서 | [PROJECT_BRIEF.md](PROJECT_BRIEF.md) (전반), [MODELING.md §9 알려진 이슈](MODELING.md), [ANALYSIS.md §1-3 EC/pH 보조 지표 분리](ANALYSIS.md) |
 | 노션 — 데이터 분석 프로젝트 기획서 | [PROJECT_BRIEF.md §3-1 기획 단계](PROJECT_BRIEF.md), 루트 [README.md §1](../README.md) |
 | 노션 — 프로젝트 중간 보고서 | [PROJECT_BRIEF.md](PROJECT_BRIEF.md) |
 | 노션 — 프로젝트 docs (배경지식·논문·환경) | [DOMAIN_KNOWLEDGE.md](DOMAIN_KNOWLEDGE.md) |

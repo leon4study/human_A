@@ -319,6 +319,45 @@ def create_modeling_features(df, extra_cols=None):
         )
 
     # =========================================================
+    # [피처 1차 배치] 빈약 도메인 보강 + 막힘 직격
+    #   각 피처의 물리 근거는 docs/modeling/09_feature_rationale_ledger.md §3 참조.
+    # =========================================================
+    # --- zone_drip: 구역 간 편차 = 국부 막힘 신호 (단일 펌프와 무관한 고유 정보) ---
+    _zone_ec_cols = [f"zone{i}_substrate_ec_ds_m" for i in range(1, 4)]
+    _zone_moist_cols = [f"zone{i}_substrate_moisture_pct" for i in range(1, 4)]
+    df_feat["zone_ec_variance"] = df_feat[_zone_ec_cols].std(axis=1).fillna(0)
+    df_feat["zone_moisture_variance"] = df_feat[_zone_moist_cols].std(axis=1).fillna(0)
+    # 배지 염류 집적 속도 (EC 변화율)
+    df_feat["substrate_ec_accum_rate"] = (
+        df_feat["zone1_substrate_ec_ds_m"].diff() / dt_seconds
+    ).fillna(0)
+
+    # --- hydraulic: 막힘 직격 ---
+    # 시스템 저항: 막히면 같은 유량에 압력 급증 (discharge / flow^2).
+    #   정지/저유량 구간에서 분모(flow^2)가 0에 근접해 발산하므로 게이트를 건다
+    #   (절대규칙 #5: eps는 0-division 방지용이지 작은 분모 안정화 도구가 아님.
+    #    flow_drop_rate와 동일 병리 — MODEL_CHANGELOG 3차 시도 참조).
+    _flow = df_feat["flow_rate_l_min"]
+    _sys_res = df_feat["discharge_pressure_kpa"] / (_flow ** 2 + eps)
+    df_feat["system_resistance"] = _sys_res.where(
+        (df_feat["pump_on"] == 1) & (_flow >= 1.0), 0.0
+    )
+    # 비에너지: 단위 유량당 전력. 막힘·노후 시 상승
+    df_feat["specific_energy"] = df_feat["motor_power_kw"] / (
+        df_feat["flow_rate_l_min"] + eps
+    )
+
+    # --- motor: 베어링·부하 ---
+    # 베어링 열 마진: 베어링이 모터보다 뜨거우면 윤활 불량/마모
+    df_feat["bearing_thermal_margin"] = (
+        df_feat["bearing_temperature_c"] - df_feat["motor_temperature_c"]
+    )
+    # 속도당 부하: 같은 RPM에 전류↑ = 기계적 마찰/막힘 부하
+    df_feat["load_per_speed"] = df_feat["motor_current_a"] / (
+        df_feat["pump_rpm"] + eps
+    )
+
+    # =========================================================
     # 7. 모델 입력용 / 해석용 분리
     # =========================================================
     model_cols = [
@@ -336,6 +375,16 @@ def create_modeling_features(df, extra_cols=None):
         "temp_slope_c_per_s", "pid_error_ec", "pid_error_ph", "salt_accumulation_delta",
         "pressure_roll_mean_10", "flow_roll_mean_10", "pressure_trend_10", "flow_trend_10",
         "ph_roll_mean_30", "ph_trend_30", "pressure_flow_ratio",
+        # zone(구역 토양) — zone_drip 도메인 전문가용. PPT 설계상 zone_drip은
+        # "구역별 관수·토양 환경 모델"로 Soil EC/Moisture가 Critical 센서다.
+        # 과거 이들이 model_cols에 없어 집계 전에 잘려 zone_drip이 토양 센서를
+        # 하나도 못 보고 모터/압력 파생만 학습하는 괴리가 있었음(2026-06-01 규명).
+        # 펌프 레벨과 중복인 zone1_pressure/flow는 의도적으로 제외(공선성).
+        "zone1_substrate_moisture_pct", "zone1_substrate_ec_ds_m", "supply_balance_index",
+        # 피처 1차 배치 (09 원장 §3) — 빈약 도메인 보강 + 막힘 직격
+        "zone_ec_variance", "zone_moisture_variance", "substrate_ec_accum_rate",
+        "system_resistance", "specific_energy",
+        "bearing_thermal_margin", "load_per_speed",
     ]
 
     # extra_cols: SHAP 타겟처럼 반드시 보존해야 하는 컬럼들
@@ -665,6 +714,13 @@ def step2_clean_and_drop_collinear_dynamic(df_agg, corr_threshold=0.85, protecte
         "minutes_since_startup", "pressure_diff", "rpm_slope", "rpm_acc",
         # ── 환경 도메인 핵심
         "zone1_substrate_moisture_pct", "daily_light_integral_mol_m2_d",
+        # zone_drip 토양 전문가 핵심 — 펌프 센서와 무관한 구역 고유 정보라
+        # 공선성 제거에서 보호한다(펌프 중복인 zone1_pressure/flow는 미보호=제외 의도).
+        "zone1_substrate_ec_ds_m", "supply_balance_index",
+        # 피처 1차 배치 (09 원장 §3) — 의도적으로 설계한 고유 지표라 공선성 제거에서 보호
+        "zone_ec_variance", "zone_moisture_variance", "substrate_ec_accum_rate",
+        "system_resistance", "specific_energy",
+        "bearing_thermal_margin", "load_per_speed",
     ]
     if protected_cols:
         whitelist = list(set(whitelist) | set(protected_cols))
