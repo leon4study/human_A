@@ -155,25 +155,98 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
 
     mse_scores = np.mean(sq_err[:, scoring_mask], axis=1)
 
-    # 6-Sigma 기법
-    """
-    # 백분위수
-    thresh_caution = np.percentile(mse_scores, 85)  # 상위 15% (주의)
-    thresh_warning = np.percentile(mse_scores, 95)  # 상위 5%  (경고)
-    thresh_critical = np.percentile(mse_scores, 99)  # 상위 1%  (치명)
+    # ── 임계치 계산 — 기동(startup) 구간 제외 + 방법 선택 ──────────────────────
+    # [왜] 기동 직후 transient는 MSE가 크게 튀어 σ/percentile을 부풀린다. eval에서
+    #   zone_drip이 이상 구간에 반응(MSE 상승)했음에도 임계치가 너무 높아 recall이 막힌
+    #   원인이 이것. 그래서 threshold는 기동 구간을 빼고 계산한다.
+    #   (docs/modeling/03_threshold_methodology.md)
+    startup_row_mask = np.zeros(len(mse_scores), dtype=bool)
+    if "is_startup_phase" in X_train_ae.columns:
+        startup_row_mask = (X_train_ae["is_startup_phase"].to_numpy() == 1)
+    elif "minutes_since_startup" in X_train_ae.columns:
+        # 주의: minutes_since_startup는 정지(off) 구간에서 0이다. 따라서 단순히
+        #   minutes<=5 로 잡으면 '진짜 기동 5분'뿐 아니라 off 전체(데이터의 ~50%)가
+        #   기동으로 잘못 분류돼 baseline이 왜곡된다(2026-06-02 평가에서 hydraulic 회귀로 발견).
+        #   pump_on==1 조건을 함께 걸어 '펌프가 켜진 직후 5분'만 정확히 제외한다.
+        mss = X_train_ae["minutes_since_startup"].to_numpy()
+        if "pump_on" in X_train_ae.columns:
+            startup_row_mask = (X_train_ae["pump_on"].to_numpy() == 1) & (mss <= 5)
+        else:
+            startup_row_mask = (mss <= 5)
+    mse_base = mse_scores[~startup_row_mask]
+    if len(mse_base) < 100:  # 기동 제외 후 표본이 너무 적으면 전체로 폴백
+        mse_base = mse_scores
 
-    옵션 A (정석 3시그마): Caution=1, Warning=2, critical=3
-    thresholds = calculate_sigma_thresholds(mse_scores, sigma_levels=(1, 2, 3))
-    # thresholds_630 = calculate_topdown_sigma_thresholds(mse_scores, top_sigma=6, step=3)
-    """
+    # ── 임계치 산정 '방법'을 분포 비대칭도(skew)로 도메인별 자동 선택 ────────────
+    #
+    # [배경 — 왜 도메인마다 '방법'을 달리하나]
+    #   평가(2026-06-02)에서 단일 percentile을 4개 도메인에 똑같이 적용했더니 결과가 갈렸다:
+    #     - zone_drip(꼬리 긴 분포): recall 0.015 → 0.41 로 살아남  → percentile이 맞음
+    #     - hydraulic(정규에 가까운 분포): recall 0.30 → 0.15 로 망가짐 → sigma가 맞음
+    #   즉 "어떤 방법이 옳은가"는 그 도메인 오차 분포의 '모양'에 달려 있고, 모양은 도메인마다 다르다.
+    #   그리고 이 '모양' 불일치는 percentile '레벨'(P95→P98)을 조절해도 고쳐지지 않는다.
+    #   레벨은 같은 방법 안에서 threshold를 위아래로 옮길 뿐이고, hydraulic처럼 방법 자체가
+    #   안 맞는 도메인은 레벨을 어디로 옮겨도 sigma만 못하다. → 그래서 '방법'을 분기한다.
+    #
+    # [skew(왜곡도)란 — 한 줄 정의]
+    #   분포가 한쪽으로 얼마나 치우쳤는지를 재는 표준화 3차 모멘트.
+    #     skew ≈ 0  : 좌우 대칭(정규에 가까움)            → μ+kσ(sigma)가 분포를 잘 기술
+    #     skew >> 0 : 오른쪽 꼬리가 긴 분포(소수 극단값)   → σ가 그 극단값에 부풀려짐 → percentile이 robust
+    #   AE 복원오차는 대개 오른쪽으로 치우치는데 그 '정도'가 도메인마다 다르다
+    #   (관측: hydraulic ~3, zone_drip ~11, motor ~15).
+    #
+    # [분기 규칙]
+    #   skew >  SKEW_CUTOFF → percentile (꼬리 긴 도메인: P95/99/99.9, 극단값에 안 흔들림)
+    #   skew <= SKEW_CUTOFF → sigma      (정규형 도메인: μ+2σ/3σ/6σ, 모양이 맞음)
+    #   둘 다 위에서 만든 mse_base(기동 제외)에서 계산한다.
+    #
+    # [환경변수 override — 비교 실험·튜닝용]
+    #   THRESHOLD_METHOD=auto(기본) → skew로 자동 분기
+    #   THRESHOLD_METHOD=sigma|percentile → 모든 도메인 강제 고정(방법 비교 실험)
+    #   SKEW_CUTOFF(기본 8.0) → 자동 분기 경계. PCT_CAUTION/WARNING/CRITICAL → percentile 레벨.
+    #   설계 근거: docs/modeling/03_threshold_methodology.md §4(도메인별 보정).
 
-    # 옵션 B : Caution=2, Warning=3, critical=6
-    thresholds = calculate_sigma_thresholds(mse_scores, sigma_levels=(2, 3, 6))
+    # (1) 분포 왜곡도 계산 — 표준 라이브러리만(scipy 불필요), 3차 모멘트 직접 계산.
+    _mu = float(np.mean(mse_base))
+    _sd = float(np.std(mse_base))
+    mse_skew = (
+        float(np.mean(((mse_base - _mu) / _sd) ** 3))
+        if _sd > 0 and len(mse_base) >= 3
+        else 0.0
+    )
 
-    logger.info(f"✅ 6-Sigma 236 임계값 설정 완료!")
-    logger.info(f"  🔸 Caution(2σ): {thresholds['caution']:.6f}")
-    logger.info(f"  🟠 Warning(3σ): {thresholds['warning']:.6f}")
-    logger.info(f"  🔴 Critical(6σ): {thresholds['critical']:.6f}")
+    # (2) 방법 결정 — auto면 skew로 분기, 아니면 환경변수가 지정한 방법으로 강제.
+    SKEW_CUTOFF = float(os.environ.get("SKEW_CUTOFF", "8.0"))
+    method_opt = os.environ.get("THRESHOLD_METHOD", "auto").lower()
+    if method_opt == "auto":
+        chosen_method = "percentile" if mse_skew > SKEW_CUTOFF else "sigma"
+    else:
+        chosen_method = method_opt  # "sigma" 또는 "percentile" 강제
+
+    # (3) 선택된 방법으로 3단계 임계치 산정.
+    if chosen_method == "percentile":
+        # P95≈정상의 상위 5%(주의)·P99≈1%(경고)·P99.9≈0.1%(치명).
+        # 운영 제약(FAR)과 직결되며, 레벨은 환경변수로 미세조정 가능.
+        p_caut = float(os.environ.get("PCT_CAUTION", "95.0"))
+        p_warn = float(os.environ.get("PCT_WARNING", "99.0"))
+        p_crit = float(os.environ.get("PCT_CRITICAL", "99.9"))
+        thresholds = {
+            "mean":     _mu,
+            "caution":  float(np.percentile(mse_base, p_caut)),
+            "warning":  float(np.percentile(mse_base, p_warn)),
+            "critical": float(np.percentile(mse_base, p_crit)),
+        }
+    else:
+        # 정규형 분포에 적합한 6시그마 3단계(μ+2σ/3σ/6σ).
+        thresholds = calculate_sigma_thresholds(mse_base, sigma_levels=(2, 3, 6))
+
+    logger.info(
+        f"임계값 설정 (method={chosen_method}{' [auto]' if method_opt == 'auto' else ''}, "
+        f"skew={mse_skew:.2f}, cutoff={SKEW_CUTOFF}, 기동 {int(startup_row_mask.sum())}샘플 제외)"
+    )
+    logger.info(f"   Caution:  {thresholds['caution']:.6f}")
+    logger.info(f"   Warning:  {thresholds['warning']:.6f}")
+    logger.info(f"   Critical: {thresholds['critical']:.6f}")
 
     # 🔬 피처별 재구성오차 시그마 컷 (스케일 공간 기준, 도메인 컷과 동일 정책 2/3/6σ)
     # 도메인 MSE는 axis=1 평균으로 F차원을 압축하지만, sq_err 자체는 (N x F) 행렬이라
@@ -247,6 +320,9 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
         "threshold_caution": thresholds["caution"],
         "threshold_warning": thresholds["warning"],
         "threshold_critical": thresholds["critical"],
+        # 임계치 산정 추적: 실제 적용된 방법(auto면 skew로 분기된 결과)과 그 근거 skew값.
+        "threshold_method": chosen_method,
+        "threshold_skew": round(mse_skew, 4),
         "per_feature_thresholds": per_feature_thresholds,
         "metrics": {
             "train_loss": [float(l) for l in history.history["loss"]],

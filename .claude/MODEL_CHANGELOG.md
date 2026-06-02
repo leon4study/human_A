@@ -585,3 +585,35 @@ PYTHONHASHSEED가 seed로 박혀 있지 않으면 환경변수를 설정하고 `
 - threshold: skew 여전(zone 11·motor 15) → percentile/PR 전환 실험([03](../docs/modeling/03_threshold_methodology.md)).
 
 ---
+
+## Phase F — Dynamic threshold 수렴: percentile 진단 → skew-adaptive → 기동마스크 수정 (2026-06-02)
+
+### 가설
+feature-v2 평가에서 zone_drip은 신호가 있는데(MSE가 이상 구간에 상승) σ 임계치가 너무 높아 recall 0.015로 막혔다. 임계치 산정을 바꾸면 풀릴 것.
+
+### 시도와 관측 (3회)
+1. **percentile(전 도메인, PHASE=pct-thr)**: zone_drip recall 0.015→0.41(F1 0.46)로 진단 적중. 그러나 hydraulic은 percentile이 안 맞아 F1 0.46→0.26으로 악화. overall FAR 1.7%→19%.
+2. **skew-adaptive(PHASE=skew-adaptive)**: 분포 skew>8이면 percentile, 아니면 sigma로 도메인별 자동 분기 구현. 자동 라우팅은 정확(hydraulic skew 3.4→sigma, zone 8.0→percentile). 그러나 hydraulic이 더 떨어짐(F1 0.21).
+3. **진단 — 기동 마스크 버그**: threshold를 "기동 제외"로 계산하는데 `minutes_since_startup<=5`가 정지(off) 구간(minutes=0)까지 잡아 데이터의 50%를 제외 → baseline 왜곡으로 hydraulic 임계치 오염. `(pump_on==1) & (minutes<=5)`로 수정(0.5%만 제외).
+
+### 결과 (PHASE=skew-fix, 최종)
+| EVAL F1 cutoff≥1 | feature-v2(σ all) | pct-thr | skew-fix |
+|---|---|---|---|
+| hydraulic | 0.462 | 0.261 | **0.469** (P0.99, FAR0.001) |
+| zone_drip | 0.029 | 0.458 | **0.456** (R0.38) |
+| overall(no_nut) | 0.455 | 0.458 | **0.481** |
+overall recall 0.31→0.41, FAR(월1 클린) 1.4%, cutoff≥2 운영 시 FAR 2.4%.
+- 마스크 수정 후 zone_drip skew 8.0→7.2로 떨어져 sigma로 분기됐고 그래도 F1 0.456 — 신호만 있으면 방법 무관.
+
+### 진단 / 교훈
+- 임계치 '방법'은 분포 모양(skew)에 종속이며 도메인마다 다르다 → 단일 방법 강제는 한 도메인을 희생. skew-adaptive로 best-of-both.
+- 기동 제외는 반드시 `pump_on==1`과 AND. minutes_since_startup 단독은 off를 오분류(절대규칙 후보).
+- percentile 레벨 조정은 '방법' 불일치를 못 고친다(hydraulic). 레벨이 아니라 방법을 분기해야 한다.
+
+### 구현
+[train.py](../src/train.py) 임계치 블록: 기동 제외(pump_on AND minutes≤5) → mse_base skew 계산 → `THRESHOLD_METHOD=auto`면 SKEW_CUTOFF(기본 8)로 sigma/percentile 분기. config에 threshold_method·threshold_skew 기록. 환경변수(SKEW_CUTOFF, PCT_*)로 튜닝.
+
+### 남은 과제
+- overall FAR(cutoff≥1) 14%는 zone_drip 주도 + 평가라벨이 펌프막힘 기준이라 토양 탐지가 FP로 계수되는 영향 혼재. 운영점(cutoff≥2)·zone 전용 보정·percentile 레벨은 후속 튜닝.
+
+---

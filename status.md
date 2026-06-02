@@ -18,12 +18,17 @@
 - 진단 시각화 자동 저장(`src/viz.py`) — figures/ + contact sheet, train·eval 연동
 
 ## 열린 이슈 (우선순위)
-1. [정량검증 대기] feature-v2 성공(아래 "최근 완료") → `evaluate_test_metrics.py`로 F1/FAR + 이상 음영 타임라인 정량 확인 필요.
-2. [개선] dynamic threshold — 분포 skew 여전(zone 11·motor 15) → σ 고정 대신 percentile/PR 전환 ([docs/modeling/03](docs/modeling/03_threshold_methodology.md))
-3. [관찰] SENSOR_MANDATORY 일부 누락(데이터에 없는 컬럼) — hydraulic(`hydraulic_power_kw`, `filter_delta_p_kpa`), motor(bearing 2종), nutrient(`mix_temp_c`). 필요 시 파생으로 대체 검토.
+1. [후속 튜닝] FAR 컨트롤 — skew-fix overall F1 0.481 달성했으나 cutoff≥1 FAR 14%(zone_drip 주도, 평가라벨이 펌프막힘 기준이라 토양탐지가 FP로 계수되는 영향 혼재). 운영점 cutoff≥2(FAR 2.4%)·percentile 레벨·zone 전용 보정은 후속. ([03](docs/modeling/03_threshold_methodology.md))
+2. [관찰] SENSOR_MANDATORY 일부 누락(데이터에 없는 컬럼) — hydraulic(`hydraulic_power_kw`, `filter_delta_p_kpa`), motor(bearing 2종), nutrient(`mix_temp_c`). 필요 시 파생으로 대체 검토.
+3. [트랙] 피처 자료조사 — 얇은 도메인 보강을 위해 논문 기반 파생 피처 추가([09 원장](docs/modeling/09_feature_rationale_ledger.md)에 근거와 함께 누적). 합성 47센서 조합 한도 내에서.
+
+## 문서↔코드 불일치 점검 목록 (별도 정리 필요, 면접 대비)
+- "4도메인 F1 0.95" ↔ 실제 eval overall F1 0.48 / 도메인별 0.05~0.47
+- "Optuna 20 trials 최적화"(MODELING.md) ↔ active train.py는 고정 구조(Optuna는 tmp_train.py에만)
 
 ## 최근 완료
-- **feature-v2 성공 (2026-06-02, run `..004941..feature-v2`)** — zone_drip 토양 복원 + 피처 1차 배치 7개. zone_drip 진단 그림이 퇴화(0/0.5 무변동)에서 연속 신호로 회복(skew 18.7→11.3), hydraulic은 skew 3.44로 월3 drift에 깨끗이 반응(`system_resistance`·`specific_energy` robust 선정). 회귀 없음. 상세 [MODEL_CHANGELOG Phase E](.claude/MODEL_CHANGELOG.md).
+- **skew-fix 성공 (2026-06-02, run `..180438..skew-fix`)** — dynamic threshold 수렴. skew-adaptive(skew>8 percentile, else sigma) + 기동마스크 버그 수정(`pump_on==1 AND minutes≤5`). overall F1 **0.481**(전 실험 최고), hydraulic 회복(P0.99/F1 0.47/FAR0.001), zone_drip 유지(F1 0.46/R0.38). 상세 [MODEL_CHANGELOG Phase F](.claude/MODEL_CHANGELOG.md). CODE_MAP([docs/CODE_MAP.md](docs/CODE_MAP.md)) 신설.
+- **feature-v2 (2026-06-02)** — zone_drip 토양 복원 + 피처 1차 배치 7개. zone_drip 퇴화 회복, hydraulic 막힘 피처 robust 선정. 상세 [Phase E](.claude/MODEL_CHANGELOG.md).
 - **EC/pH 처리 = 보조 지표(Path B)** — "EC/pH 학습 제외"는 코드와 모순(nutrient가 raw EC/pH 사용)이라, "직접 신호라 포함하되 nutrient 전용 도메인으로 분리, 종합 voting 제외(보조)"로 재정리. 근거: `EXCLUDE_FROM_OVERALL={"nutrient"}`가 이미 보조 취급. 관련 문서·포트폴리오 발화 9곳 수정 완료. 코드 변경 없음.
 
 ## 바로 다음 할 일
