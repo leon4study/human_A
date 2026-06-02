@@ -74,6 +74,9 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         # 피처 1차 배치 (09 원장 §3-2) — 막힘 직격
         "system_resistance",
         "specific_energy",
+        # 도메인 경계 정리(2026-06-02): supply_balance_index는 유량 균형 지표(구역합/메인,
+        # 누수 탐지)라 유량 성격 → zone_drip에서 hydraulic으로 이동. docs/DOMAIN_DESIGN.md.
+        "supply_balance_index",
     ],
     "nutrient": [
         "mix_ph",
@@ -85,12 +88,11 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         "ph_trend_30",
     ],
     "zone_drip": [
-        # zone_drip = 구역별 관수·토양 환경 전문가(PPT 설계). 토양 EC/수분이 Critical.
-        # zone1_flow_l_min·zone1_pressure_kpa는 단일 펌프에 연동돼 펌프 센서와 중복(공선성)
-        # 이라 의도적으로 제외 — 구역 고유 정보를 담은 토양 센서와 공급 균형 지표만 사용.
+        # 구역 배지(substrate) 상태 도메인 — 말단 각 구역의 뿌리 환경(수분·EC). docs/DOMAIN_DESIGN.md.
+        #   배지 수분/EC는 펌프와 무관한 구역 고유 정보(Critical). 펌프 중복인 zone 압력/유량은 제외(공선성).
+        #   유량 균형 지표(supply_balance_index)는 유량 성격이라 hydraulic으로 이동(2026-06-02 경계 정리).
         "zone1_substrate_moisture_pct",
         "zone1_substrate_ec_ds_m",
-        "supply_balance_index",
         # 피처 1차 배치 (09 원장 §3-1) — 구역 간 편차·집적속도로 국부 막힘/염해 탐지
         "zone_ec_variance",
         "zone_moisture_variance",

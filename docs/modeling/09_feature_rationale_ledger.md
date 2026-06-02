@@ -53,7 +53,7 @@
 | `salt_accumulation_delta` | drain_ec − mix_ec 계열 | 배수가 공급보다 진하면 염류 축적 | 염류 집적 | 구현됨(일부 단계서 drop) |
 | `ph_roll_mean_30`, `ph_trend_30` | pH 30분 평균·추세 | 느린 화학 변동 | 드리프트 | 구현됨 |
 
-### 2-4. Zone_drip / 구역 토양
+### 2-4. Zone_drip / 구역 배지
 | 피처 | 공식 | 물리 근거 | 탐지 | 상태 |
 |---|---|---|---|---|
 | `zone1_resistance` | zone1_pressure / zone1_flow | 구역 관로 저항 | 노즐 막힘 | 구현됨 |

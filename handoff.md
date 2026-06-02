@@ -7,13 +7,13 @@
 1. 모델링 기획·방법론 문서 [docs/modeling/](docs/modeling/) (README + 01~09): 01 실험프로토콜 / 02 평가설계 / 03 threshold / 04 착수체크리스트 / 05 재현성구현 / 06 시각화 / 07 학습런북 / 08 도메인지표검증 / 09 피처 근거 원장
 2. 재현성·추적 인프라 [src/repro.py](src/repro.py) + 진단 시각화 [src/viz.py](src/viz.py), train/evaluate 연동(services 동기화). 커밋 `5de0f9e`.
 3. 재현성 진범(PYTHONHASHSEED) 규명·수정(re-exec) → **2회 학습 config 동일 확인(확보 완료)**.
-4. zone_drip 퇴화 원인 규명(전역 `model_cols`가 zone 센서를 누락) → 토양 센서 복원 코드 수정(재학습 대기).
+4. zone_drip 퇴화 원인 규명(전역 `model_cols`가 zone 센서를 누락) → 배지 센서 복원 코드 수정(재학습 대기).
 5. EC/pH 처리 재정리(Path B: 보조 지표) — 문서·포트폴리오 발화 9곳 수정.
 6. [09 피처 근거 원장](docs/modeling/09_feature_rationale_ledger.md) 신설 — 기존+제안 파생 피처를 공식·물리근거·탐지로 정리.
 
 ## 2. 핵심 발견
 - **재현성 진범 = Python 해시 무작위화(PYTHONHASHSEED)**. 2회차 테스트가 잡음(config 4도메인 전부 다름). set 순서가 매 실행 달라져 다중공선성 드롭·robust voting이 다른 컬럼 선택. 런타임 os.environ 대입 무효 → re-exec로 수정, 재검증 통과. (초기 "TF가 진범"은 오진) — [MODEL_CHANGELOG Phase D](.claude/MODEL_CHANGELOG.md).
-- **zone_drip 퇴화 = 전역 `model_cols` 화이트리스트에 zone 센서 부재** → 집계 전에 잘려 토양 센서 0개로 학습. 토양 센서(`zone1_substrate_moisture_pct`·`_ec`)+`supply_balance_index`만 복원, 펌프 중복인 zone 압력/유량은 제외.
+- **zone_drip 퇴화 = 전역 `model_cols` 화이트리스트에 zone 센서 부재** → 집계 전에 잘려 배지 센서 0개로 학습. 배지 센서(`zone1_substrate_moisture_pct`·`_ec`, Raw) + 구역 편차 파생 복원, 펌프 중복인 zone 압력/유량은 제외. (도메인 경계 정리: `supply_balance_index`는 유량 지표라 hydraulic으로 이동, zone_drip은 순수 "구역 배지 상태"가 됨 — [docs/DOMAIN_DESIGN.md](docs/DOMAIN_DESIGN.md))
 - **EC/pH는 삭제된 적 없음** — nutrient가 raw `mix_ec`/`mix_ph` 사용. "제외" 서사는 틀렸고, 실제는 "보조 지표로 분리(voting 제외)". 다변량 AE가 단일 센서 노이즈 흡수 + `EXCLUDE_FROM_OVERALL={"nutrient"}`가 보조 취급 뒷받침.
 - 복원오차 분포 skew 14~18 → σ 고정 threshold 부적절, percentile 전환 정당화.
 

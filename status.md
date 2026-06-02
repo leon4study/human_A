@@ -18,7 +18,7 @@
 - 진단 시각화 자동 저장(`src/viz.py`) — figures/ + contact sheet, train·eval 연동
 
 ## 열린 이슈 (우선순위)
-1. [후속 튜닝] FAR 컨트롤 — skew-fix overall F1 0.481 달성했으나 cutoff≥1 FAR 14%(zone_drip 주도, 평가라벨이 펌프막힘 기준이라 토양탐지가 FP로 계수되는 영향 혼재). 운영점 cutoff≥2(FAR 2.4%)·percentile 레벨·zone 전용 보정은 후속. ([03](docs/modeling/03_threshold_methodology.md))
+1. [후속 튜닝] FAR 컨트롤 — skew-fix overall F1 0.481 달성했으나 cutoff≥1 FAR 14%(zone_drip 주도, 평가라벨이 펌프막힘 기준이라 배지탐지가 FP로 계수되는 영향 혼재). 운영점 cutoff≥2(FAR 2.4%)·percentile 레벨·zone 전용 보정은 후속. ([03](docs/modeling/03_threshold_methodology.md))
 2. [관찰] SENSOR_MANDATORY 일부 누락(데이터에 없는 컬럼) — hydraulic(`hydraulic_power_kw`, `filter_delta_p_kpa`), motor(bearing 2종), nutrient(`mix_temp_c`). 필요 시 파생으로 대체 검토.
 3. [트랙] 피처 자료조사 — 얇은 도메인 보강을 위해 논문 기반 파생 피처 추가([09 원장](docs/modeling/09_feature_rationale_ledger.md)에 근거와 함께 누적). 합성 47센서 조합 한도 내에서.
 
@@ -27,8 +27,9 @@
 - "Optuna 20 trials 최적화"(MODELING.md) ↔ active train.py는 고정 구조(Optuna는 tmp_train.py에만)
 
 ## 최근 완료
-- **skew-fix 성공 (2026-06-02, run `..180438..skew-fix`)** — dynamic threshold 수렴. skew-adaptive(skew>8 percentile, else sigma) + 기동마스크 버그 수정(`pump_on==1 AND minutes≤5`). overall F1 **0.481**(전 실험 최고), hydraulic 회복(P0.99/F1 0.47/FAR0.001), zone_drip 유지(F1 0.46/R0.38). 상세 [MODEL_CHANGELOG Phase F](.claude/MODEL_CHANGELOG.md). CODE_MAP([docs/CODE_MAP.md](docs/CODE_MAP.md)) 신설.
-- **feature-v2 (2026-06-02)** — zone_drip 토양 복원 + 피처 1차 배치 7개. zone_drip 퇴화 회복, hydraulic 막힘 피처 robust 선정. 상세 [Phase E](.claude/MODEL_CHANGELOG.md).
+- **domain-cleanup 성공 (2026-06-02, run `..190819..domain-cleanup`)** — supply_balance_index를 zone_drip→hydraulic 이동(유량 본질). zone_drip 순수 "구역 배지 상태"화 → precision 0.51→0.66, **overall F1 0.481→0.504**, FAR 14%→11%. 도메인 분할기준 문서 [DOMAIN_DESIGN.md](docs/DOMAIN_DESIGN.md) 신설. "토양"→"배지" 용어 정정. 상세 [MODEL_CHANGELOG Phase G](.claude/MODEL_CHANGELOG.md).
+- **skew-fix (2026-06-02, run `..180438..skew-fix`)** — dynamic threshold 수렴. skew-adaptive(skew>8 percentile, else sigma) + 기동마스크 버그 수정(`pump_on==1 AND minutes≤5`). overall F1 **0.481**(전 실험 최고), hydraulic 회복(P0.99/F1 0.47/FAR0.001), zone_drip 유지(F1 0.46/R0.38). 상세 [MODEL_CHANGELOG Phase F](.claude/MODEL_CHANGELOG.md). CODE_MAP([docs/CODE_MAP.md](docs/CODE_MAP.md)) 신설.
+- **feature-v2 (2026-06-02)** — zone_drip 배지 복원 + 피처 1차 배치 7개. zone_drip 퇴화 회복, hydraulic 막힘 피처 robust 선정. 상세 [Phase E](.claude/MODEL_CHANGELOG.md).
 - **EC/pH 처리 = 보조 지표(Path B)** — "EC/pH 학습 제외"는 코드와 모순(nutrient가 raw EC/pH 사용)이라, "직접 신호라 포함하되 nutrient 전용 도메인으로 분리, 종합 voting 제외(보조)"로 재정리. 근거: `EXCLUDE_FROM_OVERALL={"nutrient"}`가 이미 보조 취급. 관련 문서·포트폴리오 발화 9곳 수정 완료. 코드 변경 없음.
 
 ## 바로 다음 할 일
@@ -38,6 +39,6 @@
 
 ## 미커밋 변경 (다음 커밋 대상)
 - `src/repro.py` — CSV 스키마 안전장치 + PYTHONHASHSEED re-exec
-- `src/preprocessing.py`, `src/feature_engineering.py` — zone_drip 토양 센서 복원 (services 동기화 완료)
+- `src/preprocessing.py`, `src/feature_engineering.py` — zone_drip 배지 센서 복원 (services 동기화 완료)
 - `logs/experiment_board.csv` 정리(legacy 분리)
 - 문서: README·docs(ANALYSIS·PROJECT_BRIEF·docs/README)·포트폴리오 발화 EC/pH 재정리, `docs/modeling/09` 신설, `status.md`·`handoff.md`

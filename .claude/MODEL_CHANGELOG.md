@@ -562,23 +562,23 @@ PYTHONHASHSEED가 seed로 박혀 있지 않으면 환경변수를 설정하고 `
 
 ---
 
-## Phase E — 빈약 도메인 보강: zone_drip 토양 복원 + 피처 1차 배치 (2026-06-02, 성공)
+## Phase E — 빈약 도메인 보강: zone_drip 배지 복원 + 피처 1차 배치 (2026-06-02, 성공)
 
 ### 가설
-재현성 확보 후 첫 실험. (1) zone_drip이 토양 센서 0개로 학습돼 퇴화(기동 spike만 반복) → 토양 센서 복원하면 실제 신호가 생긴다. (2) 중복 제거 후 도메인이 빈약 → 물리 근거 있는 파생 피처를 추가하면 막힘 직격 신호가 강해진다. (근거: [docs/modeling/09_feature_rationale_ledger.md](../docs/modeling/09_feature_rationale_ledger.md))
+재현성 확보 후 첫 실험. (1) zone_drip이 배지 센서 0개로 학습돼 퇴화(기동 spike만 반복) → 배지 센서 복원하면 실제 신호가 생긴다. (2) 중복 제거 후 도메인이 빈약 → 물리 근거 있는 파생 피처를 추가하면 막힘 직격 신호가 강해진다. (근거: [docs/modeling/09_feature_rationale_ledger.md](../docs/modeling/09_feature_rationale_ledger.md))
 
 ### 시도 (PHASE=feature-v2)
-- preprocessing `model_cols`+collinearity whitelist에 zone 토양 센서 복원(`zone1_substrate_moisture/ec`, `supply_balance_index`). 펌프 중복인 zone 압력/유량은 제외.
+- preprocessing `model_cols`+collinearity whitelist에 zone 배지 센서(`zone1_substrate_moisture/ec`, Raw) + 공급균형 파생지표(`supply_balance_index`, 유량) 복원. 펌프 중복인 zone 압력/유량은 제외. (supply_balance_index는 이후 Phase G에서 유량 성격이라 hydraulic으로 이동)
 - 신규 파생 7개: zone(`zone_ec_variance`·`zone_moisture_variance`·`substrate_ec_accum_rate`), hydraulic(`system_resistance`·`specific_energy`), motor(`bearing_thermal_margin`·`load_per_speed`). `create_modeling_features`에 추가 + 도메인별 `SENSOR_MANDATORY` 배정.
 - 스모크 테스트로 `system_resistance` 저유량 분모 발산(4.5e7) 선제 발견 → pump_on & flow≥1.0 게이트 적용(절대규칙 #5).
 
 ### 관측 (진단 그림)
-- **zone_drip**: X_train_ae 피처 5~10 → **14개**(토양·변동성 피처 전부 주입). 진단 그림이 0/0.5 이분 반복(무변동)에서 연속 변동으로 회복, skew 18.69→11.28, 후반부(월3 drift)에서 baseline 상승 관측. 기동 제외 임계치와 실선 간격 10배→약 1.3배.
+- **zone_drip**: X_train_ae 피처 5~10 → **14개**(배지·변동성 피처 전부 주입). 진단 그림이 0/0.5 이분 반복(무변동)에서 연속 변동으로 회복, skew 18.69→11.28, 후반부(월3 drift)에서 baseline 상승 관측. 기동 제외 임계치와 실선 간격 10배→약 1.3배.
 - **hydraulic**: `system_resistance`·`specific_energy`가 robust 교집합(6개)으로 선정. skew 3.44(최저), 타임라인이 정상 구간 평탄→월3 drift에서 깨끗하게 critical 돌파. 가장 명료한 막힘 응답.
 - motor/nutrient: 회귀 없음(기존 + 신규 일부 흡수). 재현성 re-exec 정상 작동.
 
 ### 진단
-빈약의 근본은 "raw 센서 부족"이 아니라 "도메인 고유 신호를 담은 파생 피처 부족"이었다. 토양 변동성·시스템 저항 같은 물리 근거 피처가 들어가자 두 도메인 모두 실제 이상 구간(월3)에 반응. zone_drip은 robust voting은 여전히 0(타깃 간 공통 예측자 부재)이나 union+MANDATORY로 충분한 입력 확보.
+빈약의 근본은 "raw 센서 부족"이 아니라 "도메인 고유 신호를 담은 파생 피처 부족"이었다. 배지 변동성·시스템 저항 같은 물리 근거 피처가 들어가자 두 도메인 모두 실제 이상 구간(월3)에 반응. zone_drip은 robust voting은 여전히 0(타깃 간 공통 예측자 부재)이나 union+MANDATORY로 충분한 입력 확보.
 
 ### 다음 단계
 - 정량 확인: `evaluate_test_metrics.py`로 라벨 기반 F1/FAR + 이상 음영 타임라인(월1정상→월3이상 구조에서 검출 확인).
@@ -614,6 +614,32 @@ overall recall 0.31→0.41, FAR(월1 클린) 1.4%, cutoff≥2 운영 시 FAR 2.4
 [train.py](../src/train.py) 임계치 블록: 기동 제외(pump_on AND minutes≤5) → mse_base skew 계산 → `THRESHOLD_METHOD=auto`면 SKEW_CUTOFF(기본 8)로 sigma/percentile 분기. config에 threshold_method·threshold_skew 기록. 환경변수(SKEW_CUTOFF, PCT_*)로 튜닝.
 
 ### 남은 과제
-- overall FAR(cutoff≥1) 14%는 zone_drip 주도 + 평가라벨이 펌프막힘 기준이라 토양 탐지가 FP로 계수되는 영향 혼재. 운영점(cutoff≥2)·zone 전용 보정·percentile 레벨은 후속 튜닝.
+- overall FAR(cutoff≥1) 14%는 zone_drip 주도 + 평가라벨이 펌프막힘 기준이라 배지 탐지가 FP로 계수되는 영향 혼재. 운영점(cutoff≥2)·zone 전용 보정·percentile 레벨은 후속 튜닝.
+
+---
+
+## Phase G — 도메인 경계 정리: supply_balance_index를 zone_drip→hydraulic 이동 (2026-06-02, 성공)
+
+### 가설
+zone_drip이 "구역 배지 상태 + 유량 균형"을 섞고 있어 이름이 애매(배지 도메인인데 supply_balance_index는 유량). supply_balance(구역합/메인 유량 = 누수 탐지)는 유량 본질이라 hydraulic 소속이 맞다. 옮기면 zone_drip이 순수 배지 상태가 되고, 유량 노이즈가 빠져 precision이 오를 것.
+
+### 시도
+`feature_engineering.SENSOR_MANDATORY`에서 supply_balance_index를 zone_drip → hydraulic으로 이동(model_cols·whitelist는 도메인 무관이라 불변). 분할 기준 문서 [docs/DOMAIN_DESIGN.md](../docs/DOMAIN_DESIGN.md) 신설.
+
+### 관측 (PHASE=domain-cleanup, eval)
+| EVAL cutoff≥1 | skew-fix | domain-cleanup |
+|---|---|---|
+| overall(no_nut) F1 | 0.481 | **0.504** |
+| overall precision | 0.582 | **0.647** |
+| overall FAR | 0.142 | **0.109** |
+| zone_drip F1 / P | 0.456 / 0.515 | **0.486 / 0.656** |
+| hydraulic | 0.469 | 0.469(불변) |
+cutoff≥2: F1 0.268, FAR 1.8%(운영 제약 안). zone_drip skew 8.0→4.56(배지만 남아 덜 치우침)으로 sigma 분기.
+
+### 진단 / 교훈
+supply_balance(유량)가 zone_drip(배지)에 섞여 **유량 불균형에 알람을 올려 zone_drip의 FP를 늘리고 있었다**. 제 도메인으로 보내니 zone_drip precision 0.515→0.656로 상승, 전체 F1도 개선. **도메인 경계를 물리량 본질대로 맞추면 해석성뿐 아니라 성능도 오른다**(경계 정합 = 노이즈 감소). 새 피처 배정 원칙: 한 컬럼이 두 도메인에 걸치면 물리량 본질로 귀속(DOMAIN_DESIGN §6).
+
+### 현재 수렴 상태 (threshold+feature+domain 트랙)
+overall F1 0.504(시작 0.455 대비), hydraulic P0.99 주력, zone_drip 부활·정밀화(0.03→0.49), 클린-정상 FAR 1.4%. 후속 후보: FAR 컨트롤(운영점/레벨), 피처 자료조사, 모델층(Optuna).
 
 ---
