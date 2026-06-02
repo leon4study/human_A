@@ -1,5 +1,20 @@
 # SESSION_LOG
 
+## 2026-06-02 — 평가 경로 기동 게이트 + lead-time 정직화
+
+### 달성 (Accomplished)
+1. 검증으로 결함 포착: `leadtime_eval.py`에 특이도(FAR) 리포트 추가 → 평가 경로에 기동 게이트가 없어 기동 윈도우 FAR 100%였음을 발견. 운영(inference_api)만 게이트하고 평가는 안 함.
+2. `evaluate_test_metrics.run_inference`에 운영과 동일한 기동 게이트 추가(is_startup_phase>=0.5 → 모든 *_level=0). src/ + services/ 동기화.
+3. 재검증: 기동 FAR 100%→0%. **기동 오탐 제거 후에도 막힘 6/6 100% 검출, 평균 lead-time 36.1h→29.9h** (부풀려졌던 6h가 기동 오탐분). 검출이 진짜 막힘 신호임 증명. 커밋 5fc93c7.
+
+### 재개 지점 (Resume Point)
+1. (b) 센서고장 대조군(단일센서 drift/spike/stuck) — 강사 원칙 검증(진짜고장 잡고 센서글리치 안 잡음).
+2. (a) 타 도메인 고장모드(motor 베어링·nutrient·zone_drip) 시그니처 추가.
+3. (c) 포트폴리오 정직화 — "F1 0.95"→검증된 lead-time 수치로 교체.
+4. 노트북(ipynb) 버전정리 — 폴더 구조 결정(2026-06-02 진행 중).
+
+---
+
 ## 2026-06-01 — 재현성 진범 규명·수정 (PYTHONHASHSEED re-exec)
 
 ### 달성 (Accomplished)
