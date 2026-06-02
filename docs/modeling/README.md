@@ -37,6 +37,7 @@
 | [07_training_runbook.md](07_training_runbook.md) | train.py 실행 전 체크리스트·실행 기록 양식 | 학습 돌리기 전에 무엇을 맞추고 무엇을 기록하는가 |
 | [08_domain_metrics_validation.md](08_domain_metrics_validation.md) | 도메인 운영 지표(막힘률·Cpk·OEE) 정의·측정 절차·효과 책정 | baseline 완료 후 강사 제시 제조 지표를 어떻게 측정·격상하는가 |
 | [09_feature_rationale_ledger.md](09_feature_rationale_ledger.md) | 파생 피처 근거 원장(기존+제안, 공식·물리근거·탐지·출처) | 빈약한 도메인에 어떤 컬럼을 근거 있게 추가할 수 있는가 |
+| [10_anomaly_signature_ledger.md](10_anomaly_signature_ledger.md) | 이상 시그니처 원장(고장모드별 다중센서 편차·동역학·출처) | 실제 고장이 센서에 어떻게 나타나며 데이터에 어떻게 주입하는가 |
 
 ---
 
