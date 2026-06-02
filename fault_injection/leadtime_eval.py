@@ -76,6 +76,33 @@ def main():
         for fid, res, lead in rows:
             print(f"  {fid:>5} {res:<5} {('' if lead is None else lead):>12}")
 
+    # 4) 특이도(specificity) — 정상 구간 오탐 + 기동 스파이크 영향 확인
+    #    lead-time 100%가 '진짜 막힘 감지'인지(아무 편차에나 반응 아님)를 보려면
+    #    정상 구간(고장 없음) 오탐률이 낮아야 하고, 특히 기동 구간이 오탐을 키우지 않아야 한다.
+    print("\n=== 특이도: 정상 구간 오탐(FAR) + 기동 스파이크 영향 ===")
+    al = df_agg["anomaly_label"].reindex(alarm.index).fillna(0).to_numpy()
+    normal = al == 0
+    fired = alarm.to_numpy() >= 1
+    if "is_startup_phase" in df_agg.columns:
+        su = (df_agg["is_startup_phase"].reindex(alarm.index).fillna(0).to_numpy() >= 0.5)
+    elif "minutes_since_startup" in df_agg.columns:
+        su = (df_agg["minutes_since_startup"].reindex(alarm.index).fillna(99).to_numpy() <= 5)
+    else:
+        su = np.zeros(len(alarm), dtype=bool)
+
+    def _far(mask):
+        m = normal & mask
+        return (fired[m].mean() if m.sum() else 0.0), int(m.sum())
+
+    far_all, n_all = _far(np.ones(len(alarm), dtype=bool))
+    far_su, n_su = _far(su)
+    far_nonsu, n_nonsu = _far(~su)
+    print(f"  정상 전체 FAR: {far_all:.3f} ({int((normal).sum())} 윈도우)")
+    print(f"  - 기동 구간 FAR:    {far_su:.3f} ({n_su} 윈도우)")
+    print(f"  - 비기동 구간 FAR:  {far_nonsu:.3f} ({n_nonsu} 윈도우)")
+    verdict = "양호(기동≈비기동)" if far_su <= far_nonsu + 0.02 else "기동 오탐 의심(기동>비기동)"
+    print(f"  판정: {verdict}")
+
 
 if __name__ == "__main__":
     main()

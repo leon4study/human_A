@@ -105,6 +105,15 @@ def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict]:
     if EXCLUDE_FROM_OVERALL & set(loaded):
         df["overall_alarm_level_with_nutrient"] = df[[f"{d}_level" for d in loaded]].max(axis=1)
         print(f"🚫 overall voting 제외 도메인: {sorted(EXCLUDE_FROM_OVERALL & set(loaded))}")
+
+    # 기동(startup) 게이트 — 운영(inference_api.run_inference_pipeline)과 동일하게,
+    #   펌프 기동 직후 구간은 정상 과도 응답이므로 알람을 Normal(0)로 억제한다.
+    #   평가 경로에 이 게이트가 없으면 기동 스파이크가 매번 오탐을 내, lead-time이 부풀려진다
+    #   (2026-06-02 발견: 기동 윈도우 FAR 100%). df_agg의 is_startup_phase로 게이트.
+    if "is_startup_phase" in df_agg.columns:
+        su = df_agg["is_startup_phase"].to_numpy() >= 0.5
+        level_cols = [c for c in df.columns if c.endswith("_level")]
+        df.loc[su, level_cols] = 0
     return df, loaded, thr_map
 
 
