@@ -32,21 +32,23 @@ def inject_fault(
     mode: str,
     start_idx: int,
     ramp_len: int,
+    hold_len: int = 0,
     severity_max: float = 1.0,
     shape: str = "sigmoid",
+    persist_after: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    정상 데이터 df(시간순 인덱스)에 고장 mode를 주입한다.
+    정상 데이터 df(시간순 인덱스)에 고장 mode를 '유한 에피소드'로 주입한다.
 
-    [궤적] start_idx 부터 ramp_len 동안 s(t)가 0→severity_max로 상승(누적 구간),
-           그 이후는 severity_max로 유지(고장 지속). 각 영향 센서의 값은 s에 비례해 변형.
+    [궤적] 누적(ramp_len, 0→max) → 고장 유지(hold_len, max) → 정비로 회복(이후 0).
+           persist_after=True면 회복 없이 끝까지 유지(데이터 창 내 미수리 가정).
     [고장 이벤트] signature의 failure_rule(예: 유량 < 정상의 75%)이 처음 충족되는 시점을
                  failure_time으로 마킹 — lead-time 평가의 기준점.
 
     Returns
     -------
     (df_faulty, labels)
-      labels 컬럼: degradation_severity(s), anomaly_label(누적 구간 1), fault_mode, failure_time
+      labels 컬럼: degradation_severity(s), anomaly_label(보이는 구간 1), fault_mode, failure_time
     """
     if mode not in FAULT_SIGNATURES:
         raise KeyError(f"알 수 없는 고장 모드: {mode}")
@@ -54,13 +56,17 @@ def inject_fault(
     out = df.copy()
     n = len(out)
 
-    # 1) 누적 고장강도 s(t)(잠재 상태): [start, start+ramp_len) ramp, 이후 유지
+    # 1) 누적 고장강도 s(t): ramp(0→max) → hold(max) → 이후 회복(0) 또는 유지(persist_after)
     s = np.zeros(n, dtype=float)
-    end_idx = min(start_idx + ramp_len, n)
-    seg = end_idx - start_idx
+    end_ramp = min(start_idx + ramp_len, n)
+    seg = end_ramp - start_idx
     if seg > 0:
-        s[start_idx:end_idx] = severity_ramp(seg, shape) * severity_max
-    s[end_idx:] = severity_max
+        s[start_idx:end_ramp] = severity_ramp(seg, shape) * severity_max
+    end_hold = min(end_ramp + hold_len, n)
+    s[end_ramp:end_hold] = severity_max
+    if persist_after:
+        s[end_hold:] = severity_max
+    # persist_after=False면 end_hold 이후는 0(정비 완료) — 다중 에피소드 testset용
 
     # 펌프 가동 게이트 — 정지 중엔 유량이 없어 막힘이 압력/유량에 영향을 못 준다.
     #   따라서 센서에 실제로 보이는 강도 s_eff = s × (펌프 가동 여부). 정지 구간은 정상값 유지.
@@ -93,16 +99,18 @@ def inject_fault(
             _apply(f"zone{z}_flow_l_min", how, target)
 
     # 3) 고장 이벤트 시점 마킹 (failure_rule: 특정 컬럼이 정상 baseline의 ratio_below 미만)
+    #    주의: 가동(ON) 구간에서만 판정한다. 정지 중엔 유량=0이라 무조건 임계 미만이 되어
+    #    OFF를 고장으로 오인한다(2026-06-02 발견). baseline·판정 모두 running 마스크로 게이트.
     failure_time = None
     rule = sig.get("failure_rule")
     if rule and rule["column"] in out.columns:
         col = rule["column"]
-        # 정상 baseline = 고장 시작 전 구간의 평균(없으면 전체 평균)
-        pre = df[col].to_numpy(dtype=float)[:start_idx]
-        baseline = float(np.mean(pre)) if len(pre) > 0 else float(np.mean(df[col]))
+        idx = np.arange(n)
+        pre_on = df[col].to_numpy(dtype=float)[(idx < start_idx) & running]
+        baseline = float(np.mean(pre_on)) if len(pre_on) > 0 else float(df[col].to_numpy()[running].mean())
         thresh = baseline * rule["ratio_below"]
         faulty_col = out[col].to_numpy(dtype=float)
-        crossed = np.where((np.arange(n) >= start_idx) & (faulty_col < thresh))[0]
+        crossed = np.where((idx >= start_idx) & running & (faulty_col < thresh))[0]
         if len(crossed) > 0:
             failure_time = out.index[crossed[0]]
 
