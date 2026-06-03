@@ -16,6 +16,9 @@
 4. [ANALYSIS.md](ANALYSIS.md) — 어떤 데이터로 무엇을 봤는가
 5. [MODELING.md](MODELING.md) — 어떻게 모델링했는가
 
+### 🚀 일단 돌려보고 싶다 — 로컬에서 스택 띄우기
+1. [ONBOARDING.md](ONBOARDING.md) — Docker 첫 실행 가이드(.env 설정·모델 파일 함정·헬스체크·트러블슈팅)
+
 ### 🔌 프론트엔드 작업자 — API 붙이고 화면 그려야 한다
 1. [FRONTEND_PAGES.md](FRONTEND_PAGES.md) — 어떤 페이지에 무엇을 그릴지
 2. [INFERENCE_API.md](INFERENCE_API.md) — `/predict` 요청/응답 스키마, 파생변수
@@ -37,6 +40,7 @@
 
 | 문서 | 한 줄 요약 | 주요 독자 |
 |---|---|---|
+| [ONBOARDING.md](ONBOARDING.md) | Docker 첫 실행·.env 설정·모델 파일·헬스체크·트러블슈팅 | 신규 합류자, 운영 |
 | [PROJECT_BRIEF.md](PROJECT_BRIEF.md) | 팀·일정·핵심 의사결정·실패 학습·진행 중 문제·다음 단계 | 신규 합류자, 인수인계 |
 | [DOMAIN_KNOWLEDGE.md](DOMAIN_KNOWLEDGE.md) | 양액 시스템·점적관수·CNL 핀·기동 spike·딸기 환경 권장값 | 모두 (특히 신규 합류자) |
 | [ANALYSIS.md](ANALYSIS.md) | 데이터 출처·EDA·도메인 정의·SHAP 인사이트 | DS, 신규 합류자 |

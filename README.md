@@ -110,9 +110,13 @@ human_A/
 
 ## 5. 빠른 시작
 
+> 처음 클론했다면 `.env` 설정·모델 파일 준비·헬스체크·트러블슈팅까지 단계별로 안내하는
+> [docs/ONBOARDING.md](docs/ONBOARDING.md)(첫 실행 가이드)를 먼저 보세요.
+
 ### 전체 스택 기동
 ```bash
-docker compose up -d
+cp .env.example .env   # 최초 1회: 환경변수 설정 (자세히는 docs/ONBOARDING.md)
+docker compose up -d --build
 ```
 - Frontend: http://localhost:5173
 - Backend (Swagger): http://localhost:8000/docs
