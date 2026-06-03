@@ -49,6 +49,9 @@
 | [FRONTEND_PAGES.md](FRONTEND_PAGES.md) | 도메인별 페이지 구성·차트·KPI 설계 | 프론트, 디자이너 |
 | [COLUMNS_REFERENCE.md](COLUMNS_REFERENCE.md) | Raw + 파생 컬럼 사전 (단위·정의) | 모두 |
 | [SHAP_BEESWARM_FRONTEND.md](SHAP_BEESWARM_FRONTEND.md) | SHAP beeswarm 렌더용 JSON 계약 | 프론트, ML |
+| [git-strategy.md](git-strategy.md) | 브랜치·커밋·PR 규칙 | 모든 기여자 |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | 서버 배포·운영 절차 | 운영, 인프라 |
+| [adr/](adr/) | 아키텍처 결정 기록(AE 채택·4도메인·임계값 등) | DS, 신규 합류자 |
 
 ---
 
