@@ -11,9 +11,11 @@
 3. ledger §3-5 실험 결과 기록, §5 가설을 실측으로 교정, §6 진행상태 갱신.
 
 ### 발견 (Findings)
-- 서빙 모델(services/inference/models/)이 2026-04-22 학습 구버전 → 피처 변경·zone_drip 토양 복원 미반영.
-  zone_drip 서빙 피처가 [motor_temp, air_temp, time, pump_on]뿐(퇴화). 앞선 lead-time 평가도 구모델 기반.
-  **재학습 필요**(ledger §6-4).
+- 모델이 두 곳에 갈림(2026-06-04 정정): `PROJECT_ROOT/models`(6/2, zone_drip 19피처 복원본) ↔
+  `services/inference/models`(4/22, zone_drip 6피처 퇴화 구버전). lead-time 평가(leadtime_eval→
+  src/evaluate)는 **6/2 복원본**을 썼고(정정: 앞서 "구모델"이라 한 것은 오류), sensor_fault_eval·
+  startup_strategy_eval만 4/22 구버전을 읽었다. 서빙도 4/22를 사용 중. **재학습 + 서빙 동기화 필요**.
+  체크리스트: [docs/modeling/11_retrain_checklist.md].
 
 ### 추가 작업 — 기동 regime band 구현(2026-06-04)
 - 실험: `fault_injection/startup_strategy_eval.py` — 통째게이트(현재) vs regime band 비교.
