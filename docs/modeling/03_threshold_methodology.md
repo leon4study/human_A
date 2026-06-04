@@ -92,11 +92,17 @@ A-3 교훈: NUTRIENT 하나를 수정하려다 변경하지 않은 motor 성능�
 비정상 기동을 살짝(1.1×)부터 전부 잡는다. 정상 기동 점수가 촘촘히 뭉쳐(median 0.00088, max 0.00091)
 band가 칼같이 잡히기 때문. C는 통째게이트가 왜 도입됐는지 보여주는 대조군(FAR 100%).
 
-구현 방향: 학습 시 정상상태 band와 함께 **기동용 band**(정상 기동 점수의 백분위)를 산출해 config에 저장,
-추론·평가에서 기동 윈도우는 기동용 band로 판정한다. 두 전략을 `STARTUP_MODE = gate | regime` 스위치로
-공존시키되 기본은 regime. 단서: ① 월1 기동 표본이 30개로 적어 band 추정이 거칠다(재학습 시 안정화).
-② 10분 집계가 mean이면 짧은 피크가 희석될 수 있어, 기동 윈도우에 max/p95 피처 보강을 검토한다.
-③ 본 수치는 구버전 서빙 모델 기준이며 재학습 후 갱신되나, "regime band ≫ 통째게이트" 결론은 구조적이다.
+구현(완료, 2026-06-04): 학습 시 정상상태 band와 함께 **기동용 band**(정상 기동 점수의 백분위
+p99/p99.5/p99.9)를 산출해 config의 `threshold_startup`에 저장([train.py](../../src/train.py)).
+추론([inference_api.py](../../src/inference_api.py))·평가([evaluate_test_metrics.py](../../src/evaluate_test_metrics.py))는
+환경변수 `STARTUP_MODE`(`gate` | `regime`, 기본 `regime`)로 분기한다. regime이면 기동 윈도우를
+기동용 band로 재판정하고, band가 없는 구버전 config는 자동으로 gate(통째 억제)로 폴백한다.
+실제 regime 동작은 **재학습으로 `threshold_startup`이 생성된 뒤** 활성화된다.
+
+단서: ① 월1 기동 표본이 30개로 적어 band 추정이 거칠다(재학습 시 더 많은 기동 표본으로 안정화).
+표본 <20이면 train.py가 band 산출을 생략한다. ② 10분 집계가 mean이면 짧은 피크가 희석될 수 있어,
+기동 윈도우에 max/p95 피처 보강을 검토한다. ③ 위 비교 수치는 구버전 서빙 모델 기준이며 재학습 후
+갱신되나, "regime band ≫ 통째게이트" 결론은 구조적이다.
 
 ---
 

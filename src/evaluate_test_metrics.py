@@ -77,6 +77,7 @@ def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict]:
         thr_map[dom] = {
             "mean": float(cfg.get("metrics", {}).get("final_mse_mean", float("nan"))),
             "caution": t_caut, "warning": t_warn, "critical": t_err,
+            "startup": cfg.get("threshold_startup"),   # 기동 전용 band(없으면 None)
         }
 
         X = pd.DataFrame(index=df_agg.index, columns=features, dtype=float)
@@ -106,14 +107,30 @@ def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict]:
         df["overall_alarm_level_with_nutrient"] = df[[f"{d}_level" for d in loaded]].max(axis=1)
         print(f"🚫 overall voting 제외 도메인: {sorted(EXCLUDE_FROM_OVERALL & set(loaded))}")
 
-    # 기동(startup) 게이트 — 운영(inference_api.run_inference_pipeline)과 동일하게,
-    #   펌프 기동 직후 구간은 정상 과도 응답이므로 알람을 Normal(0)로 억제한다.
-    #   평가 경로에 이 게이트가 없으면 기동 스파이크가 매번 오탐을 내, lead-time이 부풀려진다
-    #   (2026-06-02 발견: 기동 윈도우 FAR 100%). df_agg의 is_startup_phase로 게이트.
+    # 기동(startup) 처리 — STARTUP_MODE 로 두 전략을 공존시킨다(docs/modeling/03 §4-2).
+    #   gate(성능)  : 기동 윈도우 알람을 통째로 Normal(0)로 억제. 정상기동 오탐 0이나
+    #                 비정상 기동(평소보다 큰 기동 스파이크)도 놓친다.
+    #   regime(논리): 기동 윈도우는 도메인별 '기동 band'로 재판정. 정상 기동은 통과,
+    #                 비정상적으로 큰 기동만 알람. band가 없는 도메인은 gate로 폴백.
+    #   기본 regime. 실험 근거: startup_strategy_eval.py(통째게이트 비정상기동 recall 0).
+    mode = os.environ.get("STARTUP_MODE", "regime").lower()
     if "is_startup_phase" in df_agg.columns:
         su = df_agg["is_startup_phase"].to_numpy() >= 0.5
-        level_cols = [c for c in df.columns if c.endswith("_level")]
-        df.loc[su, level_cols] = 0
+        for dom in loaded:
+            band = thr_map[dom].get("startup")
+            if mode == "regime" and band:
+                sc = df[f"{dom}_score"].to_numpy()
+                relvl = np.array([
+                    get_alarm_status(float(m), band["caution"], band["warning"], band["critical"])[0]
+                    for m in sc
+                ])
+                df.loc[su, f"{dom}_level"] = relvl[su]
+            else:
+                df.loc[su, f"{dom}_level"] = 0   # gate 또는 band 부재 → 통째 억제
+        # overall 재계산(기동 윈도우 레벨이 바뀌었으므로)
+        df["overall_alarm_level"] = df[[f"{d}_level" for d in voting_domains]].max(axis=1)
+        if EXCLUDE_FROM_OVERALL & set(loaded):
+            df["overall_alarm_level_with_nutrient"] = df[[f"{d}_level" for d in loaded]].max(axis=1)
     return df, loaded, thr_map
 
 

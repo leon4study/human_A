@@ -15,9 +15,17 @@
   zone_drip 서빙 피처가 [motor_temp, air_temp, time, pump_on]뿐(퇴화). 앞선 lead-time 평가도 구모델 기반.
   **재학습 필요**(ledger §6-4).
 
+### 추가 작업 — 기동 regime band 구현(2026-06-04)
+- 실험: `fault_injection/startup_strategy_eval.py` — 통째게이트(현재) vs regime band 비교.
+  통째게이트는 비정상 기동 recall 0(사각지대), regime band는 FAR 3.3%로 1.1×부터 100% 검출. → regime 채택.
+- 발견: 기존 `is_startup_spike`(preprocessing §6)는 위치로만 분류(크기 무시)·표시용이라 "90→130"을 못 잡음.
+- 구현: train.py가 `threshold_startup`(기동 점수 백분위) 산출·저장. inference_api·evaluate가 `STARTUP_MODE`
+  (gate|regime, 기본 regime)로 분기, band 없으면 gate 폴백. 구모델 회귀 없음(lead-time 29.9h 동일).
+  실제 regime은 재학습으로 band 생성 후 활성. 문서 03 §4-2.
+
 ### 재개 지점 (Resume Point)
-1. (선택) 집중도 시각화 + 타 도메인(motor/nutrient) 단일센서 대조 확장.
-2. **재학습** — 현재 src/ 피처로 4도메인 재학습 후 lead-time·집중도 수치 갱신(리소스 작업 → 사용자 실행).
+1. **재학습** — 현재 src/ 피처로 4도메인 재학습. 이때 기동 band 생성 → regime 실활성. lead-time·집중도 갱신(리소스 작업 → 사용자 실행).
+2. 재학습 후 regime 실검증(startup_strategy_eval를 실데이터 band로 재실행) + 집중도 시각화.
 3. (c) 포트폴리오 정직화 — 재학습 후 확정 수치로 "F1 0.95" 교체.
 4. 포트 불일치(README §5 vs compose) — 사용자 확인 대기.
 

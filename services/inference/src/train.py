@@ -248,6 +248,38 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
     logger.info(f"   Warning:  {thresholds['warning']:.6f}")
     logger.info(f"   Critical: {thresholds['critical']:.6f}")
 
+    # ── 기동(startup) 전용 band — regime 인지 임계값 (docs/modeling/03 §4-2) ──────
+    # [왜] 위 thresholds는 기동을 빼고 정상상태만 본다. 추론에서 기동 윈도우를 통째로
+    #   Normal로 억제하면(STARTUP_MODE=gate), 평소보다 큰 '비정상 기동'(예: 평소 압력
+    #   90까지 튀던 게 그날 130)도 함께 놓친다(startup_strategy_eval.py 실험으로 확인).
+    #   그래서 기동 점수 분포로 별도 band를 만들어, STARTUP_MODE=regime일 때 기동 윈도우는
+    #   이 band로 판정한다(정상 기동은 통과, 비정상적으로 큰 기동만 알람).
+    # [방법] 기동 점수는 촘촘히 뭉치므로 percentile이 안전(기본 p99/p99.5/p99.9).
+    #   표본이 너무 적으면(<20) band를 생략 → 추론에서 통째 게이트로 폴백.
+    startup_scores = mse_scores[startup_row_mask]
+    startup_thresholds = None
+    if len(startup_scores) >= 20:
+        sp_c = float(os.environ.get("STARTUP_PCT_CAUTION", "99.0"))
+        sp_w = float(os.environ.get("STARTUP_PCT_WARNING", "99.5"))
+        sp_r = float(os.environ.get("STARTUP_PCT_CRITICAL", "99.9"))
+        startup_thresholds = {
+            "caution":  float(np.percentile(startup_scores, sp_c)),
+            "warning":  float(np.percentile(startup_scores, sp_w)),
+            "critical": float(np.percentile(startup_scores, sp_r)),
+            "method": "percentile",
+            "n_samples": int(len(startup_scores)),
+        }
+        logger.info(
+            f"   기동 band(n={len(startup_scores)}, percentile): "
+            f"caut={startup_thresholds['caution']:.6f} / "
+            f"warn={startup_thresholds['warning']:.6f} / "
+            f"crit={startup_thresholds['critical']:.6f}"
+        )
+    else:
+        logger.info(
+            f"   기동 표본 부족(n={len(startup_scores)}<20) → 기동 band 생략(추론 시 통째 게이트 폴백)"
+        )
+
     # 🔬 피처별 재구성오차 시그마 컷 (스케일 공간 기준, 도메인 컷과 동일 정책 2/3/6σ)
     # 도메인 MSE는 axis=1 평균으로 F차원을 압축하지만, sq_err 자체는 (N x F) 행렬이라
     # 피처별 분포가 그대로 살아있다. 열별(axis=0)로 평균·표준편차를 내면
@@ -320,6 +352,9 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
         "threshold_caution": thresholds["caution"],
         "threshold_warning": thresholds["warning"],
         "threshold_critical": thresholds["critical"],
+        # 기동(startup) 전용 band — STARTUP_MODE=regime에서 기동 윈도우 판정에 사용.
+        #   None이면 추론/평가는 통째 게이트(gate)로 폴백한다(docs/modeling/03 §4-2).
+        "threshold_startup": startup_thresholds,
         # 임계치 산정 추적: 실제 적용된 방법(auto면 skew로 분기된 결과)과 그 근거 skew값.
         "threshold_method": chosen_method,
         "threshold_skew": round(mse_skew, 4),
