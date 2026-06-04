@@ -1,5 +1,28 @@
 # SESSION_LOG
 
+## 2026-06-04 — 센서고장 대조군 실험 (강사 원칙 검증) — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. 단일 센서 고장 주입기 `fault_injection/sensor_faults.py`(drift·spike·stuck) + 판별 실험 `sensor_fault_eval.py` 구현.
+2. 실험(hydraulic, discharge_pressure 단일센서 vs faulty_testset_v1 다중 막힘):
+   - 총 MSE/알람으로는 구분 불가(단일 센서도 알람 99~100%, 진짜 막힘 69%).
+   - **집중도(per-feature concentration)가 판별 신호**: 단일 0.88~0.92 vs 다중 0.45. 강사 원칙 정량화.
+   - 한계: n_active는 큰 spike에서 오히려 증가(부적합), stuck은 집중도 0.49로 애매.
+3. ledger §3-5 실험 결과 기록, §5 가설을 실측으로 교정, §6 진행상태 갱신.
+
+### 발견 (Findings)
+- 서빙 모델(services/inference/models/)이 2026-04-22 학습 구버전 → 피처 변경·zone_drip 토양 복원 미반영.
+  zone_drip 서빙 피처가 [motor_temp, air_temp, time, pump_on]뿐(퇴화). 앞선 lead-time 평가도 구모델 기반.
+  **재학습 필요**(ledger §6-4).
+
+### 재개 지점 (Resume Point)
+1. (선택) 집중도 시각화 + 타 도메인(motor/nutrient) 단일센서 대조 확장.
+2. **재학습** — 현재 src/ 피처로 4도메인 재학습 후 lead-time·집중도 수치 갱신(리소스 작업 → 사용자 실행).
+3. (c) 포트폴리오 정직화 — 재학습 후 확정 수치로 "F1 0.95" 교체.
+4. 포트 불일치(README §5 vs compose) — 사용자 확인 대기.
+
+---
+
 ## 2026-06-02 — 평가 경로 기동 게이트 + lead-time 정직화
 
 ### 달성 (Accomplished)

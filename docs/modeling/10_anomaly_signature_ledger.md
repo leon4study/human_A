@@ -98,8 +98,38 @@
 - 관수 불균일 — zone_moisture_variance↑
 - 배지 염해 — substrate_ec↑·축적속도↑
 
-### 3-5. 단일 센서 이상 (대조군 — sensor fault)
-- 드리프트 (slow drift), 스턱(stuck-at), 스파이크(spike), 노이즈 증가 — 각 1개 센서만.
+### 3-5. 단일 센서 이상 (대조군 — sensor fault) — 실험 완료(2026-06-04)
+
+단일 센서에만 결함을 주입해(상관 없음), AE가 진짜 고장(다중 센서 동반)과 이를 구분하는지 검증한다.
+
+- 구현: [fault_injection/sensor_faults.py](../../fault_injection/sensor_faults.py)(drift·spike·stuck 단일 컬럼 주입),
+  [fault_injection/sensor_fault_eval.py](../../fault_injection/sensor_fault_eval.py)(판별 지표 계산).
+- 모드: drift(캘리브레이션 누적 오프셋), spike(지속 급변), stuck(고착 flatline). 각 1개 센서만.
+- 타깃: hydraulic 도메인, `discharge_pressure_kpa` 단일 센서. 대비군은 §3-1 실제 막힘(다중 센서) `faulty_testset_v1`.
+
+판별 지표(윈도우별, 스케일 공간 per-feature 제곱오차 행렬에서 산출):
+- `total MSE` — 알람 발생 여부(임계값 대비).
+- `concentration` = max_f e_f / Σ_f e_f. 1에 가까울수록 한 피처에 오차 집중(센서 문제), 균등(~1/F)에 가까울수록 광범위(진짜 고장).
+- `n_active` — 정상 대비(피처별 mean+3σ) 오차가 큰 피처 수.
+
+실험 결과(F=13, caution 임계값 0.00077):
+
+| 시나리오 | 알람률 | 집중도 | 활성피처 |
+|---|---|---|---|
+| clean(대조) | 0.01 | 0.49 | 0.1 |
+| sensor:drift (단일) | 0.99 | 0.88 | 8.4 |
+| sensor:spike (단일) | 1.00 | 0.92 | 11.4 |
+| sensor:stuck (단일) | 0.51 | 0.49 | 5.4 |
+| clog(진짜·다중) | 0.69 | 0.45 | 4.4 |
+
+핵심 발견(정직):
+1. **총 MSE/알람만으로는 구분 불가.** 단일 센서 drift·spike가 오히려 진짜 막힘(0.69)보다 알람을 더 자주 띄운다(0.99~1.00). 정상으로 학습한 AE는 단일 센서가 크게 벗어나도 off-manifold라 반응하기 때문. 강사 원칙의 우려가 데이터로 확인됨.
+2. **집중도(concentration)가 판별 신호.** 단일 센서 drift·spike는 0.88~0.92로 한 피처에 집중되고, 다중 동반인 막힘은 0.45로 퍼진다. "한 값만 튐=센서 문제 / 여러 값 동반=진짜 고장"을 정량화한다.
+3. **한계.** ① `n_active`는 판별자로 부적합 — 큰 spike는 AE 재구성을 전반적으로 교란해 활성 피처가 오히려 늘어난다(11.4 > 막힘 4.4). 따라서 집중도를 주 지표로 쓴다. ② `stuck`(고착)은 집중도 0.49로 애매하다 — flatline이 파생(trend) 피처로 퍼져 신호가 약하다. 고착형 센서 결함은 이 방법으로 깔끔히 분리되지 않는다(별도 규칙: 분산 0 검출 등 보완 필요).
+
+운영 함의: 도메인 알람이 떴을 때 그 윈도우의 집중도를 함께 보면, 정비팀이 "설비 고장 점검" 대 "센서 점검"을 1차 분기할 수 있다.
+
+주의: 본 실험은 현재 서빙 모델(`services/inference/models/`, 2026-04-22 학습)로 수행했다. 이후 피처 엔지니어링·zone_drip 토양센서 복원이 반영 안 된 구버전이므로, 재학습 후 수치는 갱신될 수 있다(아래 §6).
 
 ## 4. 데이터 생성기 연동 (구현 위치)
 
@@ -113,17 +143,17 @@
 
 - **lead-time(핵심)**: 각 고장 이벤트에 대해 AE 알람이 **failure_time보다 얼마나 일찍** 떴나. 평균 lead-time + 사전 감지율(고장 전 1건 이상 알람 비율).
 - AE가 **real fault(다중 상관 ramp)**에는 누적 구간에서 점점 강해지며 일찍 반응하는가(recall↑).
-- AE가 **sensor fault(단일 센서)**에는 덜 반응하는가(오탐 적음) — 원칙 성립 확인.
+- AE가 **sensor fault(단일 센서)**에 어떻게 반응하는가 — §3-5 실험 결과: 총 MSE/알람으로는 진짜 고장과 구분 불가(단일 센서도 알람 뜸). 구분은 per-feature **집중도**로 한다(단일=집중 0.88~0.92, 다중=퍼짐 0.45). stuck은 예외(애매).
 - 도메인별 진단 그림에서 ramp 구간이 임계선을 점진적으로 넘는지([06](06_visualization_logging.md)).
 - 통과 시 그때의 lead-time·F1이 "실제 고장 사전 감지력"의 정직한 지표 → portfolio reframe(A)에 사용.
 - 이게 성립하면 그때의 F1이 "실제 고장 탐지력"의 정직한 지표가 된다 → 포트폴리오 숫자 reframe(A).
 
 ## 6. 진행 단계
 
-1. 본 원장 프레임 확정(이 문서).
-2. **자료조사로 값 채우기** — 도메인별로 영향 센서·Δ·동역학·출처. 웹/논문/벤더 벤치마크 필수. hydraulic 막힘(핵심)부터.
-3. 데이터 생성기에 상관 주입 구현 + sensor fault 대조군.
-4. 재학습·평가 + 검증(§5). 통과 시 portfolio 숫자 reframe(A).
+1. 본 원장 프레임 확정(이 문서). — 완료
+2. **자료조사로 값 채우기** — 도메인별로 영향 센서·Δ·동역학·출처. hydraulic 막힘부터. — hydraulic(§3-1) 완료, motor/nutrient/zone_drip 예정.
+3. 데이터 생성기에 상관 주입 구현 + sensor fault 대조군. — 완료(hydraulic 막힘 주입 + §3-5 단일센서 대조군 실험).
+4. **재학습 + 평가 + 검증(§5).** — 미완. 현재 평가는 구버전 서빙 모델(2026-04-22)로 수행됨. 이후 피처 변경·zone_drip 복원이 반영 안 됨 → 재학습 후 lead-time·집중도 수치 갱신 필요. 통과 시 portfolio 숫자 reframe(A).
 
 ## 7. 출처 (Sources)
 
@@ -136,4 +166,4 @@
 - [S5] 임펠러 막힘 진동·전류 진단 — [Clogged impeller diagnosis using vibration and motor current analysis (ResearchGate 330663300)](https://www.researchgate.net/publication/330663300_Clogged_impeller_diagnosis_in_the_centrifugal_pump_using_the_vibration_and_motor_current_analysis), [Inlet pipe blockage level identification by deep learning (ScienceDirect S0263224121010654)](https://www.sciencedirect.com/science/article/abs/pii/S0263224121010654)
 - [S6] 펌프 곡선·throttle 시 전력/전류 거동 — [Centrifugal Pump Performance Curve (BBP Pump)](https://bbppump.com/centrifugal-pump-performance-curve-explained/), [Pump current under low-head (StreamPumps)](https://www.streampumps.com/pump-knowledge/pump-low-head-knowledge.html)
 
-> 다음 회차: §3-1b(누수·밸브·필터·캐비테이션) → §3-2 motor(베어링 ISO 10816 + MCSA) → §3-3 nutrient → §3-4 zone_drip → §3-5 단일센서 대조군 순으로 자료조사 확장.
+> 다음 회차: §3-1b(누수·밸브·필터·캐비테이션) → §3-2 motor(베어링 ISO 10816 + MCSA) → §3-3 nutrient → §3-4 zone_drip 순으로 자료조사 확장. (§3-5 단일센서 대조군은 실험 완료.)
