@@ -1,5 +1,22 @@
 # SESSION_LOG
 
+## 2026-06-05 — Phase 1: 결합 영향 모델 일반화 + baseline 측정 도구 — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. 고장을 '근본원인→s(t)→가중치 다중센서/도메인 전파' 영향 프로파일로 일반화(`fault_signatures.py`).
+   방향=data_gen_jun clog 계수, 크기·보정=ledger §3. 위치 4종: clog(광역)·bearing(motor국소)·
+   suction(흡입,토출압↓)·nutrient(국소). inject.py failure_rule에 ratio_above·below_abs 추가.
+2. `coupling_validate.py`: 데이터 ripple(propagates_to 정답지 대조) + 현재 6/2 모델 baseline 검출지도.
+3. 검증: ripple이 각 위치 propagates_to와 일치(위치 바꾸면 의도 센서가 가중치대로 움직임).
+   baseline이 약점 3개 발견 — zone_drip이 motor고장 오탐(motor_temp 누설), motor가 suction 진동 놓침,
+   nutrient 수력 부분오탐. ledger §3-6 기록.
+
+### 재개 지점 (Resume Point)
+1. **Phase 2** — baseline이 짚은 약점만 타깃: ① zone_drip에서 motor_temperature_c 제거(경계 누설)
+   ② motor 진동 민감도(vibration_per_load §3-4) ③ §3 2차 피처 선택 구현.
+2. **Phase 3** — 재학습(사용자) + 같은 coupling_validate로 재측정(attribution).
+3. 미푸시분 한 번에 푸시. 포트 불일치 확인.
+
 ## 2026-06-04 — 센서고장 대조군 실험 (강사 원칙 검증) — feat/sensor-fault-control
 
 ### 달성 (Accomplished)

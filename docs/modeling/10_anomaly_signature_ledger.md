@@ -131,6 +131,39 @@
 
 주의: 본 실험은 현재 서빙 모델(`services/inference/models/`, 2026-04-22 학습)로 수행했다. 이후 피처 엔지니어링·zone_drip 토양센서 복원이 반영 안 된 구버전이므로, 재학습 후 수치는 갱신될 수 있다(아래 §6).
 
+### 3-6. 영향 모델 일반화 + baseline 검출 지도 (Phase 1, 2026-06-05)
+
+고장을 '근본 원인 → s(t) → 가중치로 다중 센서/도메인 전파'의 **영향 프로파일**로 일반화했다
+([fault_signatures.py](../../fault_injection/fault_signatures.py)). 방향 패턴은 물리 결합 생성기
+`data_gen_jun`의 clog 계수에서, 절대 크기·일부 방향 보정(예: 하류 막힘 전류는 펌프곡선상 ~flat/↓,
+jun의 ↑를 보정)은 §3 자료조사에서 가져왔다. 위치 라이브러리 4종:
+
+- `hydraulic_clog_downstream` — 광역(4도메인 전파): 유량↓·토출압↑ 축 + 진동·drain_ec·turbidity 동반.
+- `motor_bearing_wear` — motor 국소: 진동↑↑·베어링온도↑·마찰전류↑. 수력 라인 거의 불변(대비군).
+- `hydraulic_suction_blockage` — 흡입측: 고진공+유량↓+**토출압↓**(하류와 반대)+공동 진동↑.
+- `nutrient_imbalance` — nutrient 국소: EC·pH 드리프트.
+
+검증([coupling_validate.py](../../fault_injection/coupling_validate.py)): 데이터 레벨 ripple이 각
+위치의 `propagates_to`와 일치 — 위치를 바꾸면 의도한 센서 집합이 가중치대로 움직인다(강사 원칙 구현 확인).
+
+현재 6/2 모델(`PROJECT_ROOT/models`) baseline 검출 지도 — 고장 구간 도메인별 알람률(≥Caution):
+
+| 고장 | hydraulic | motor | nutrient | zone_drip | 기대 |
+|---|---|---|---|---|---|
+| clog_downstream | 0.97 | 0.70 | 0.87 | 0.86 | 4도메인(광역) |
+| bearing_wear | 0.00 | 0.98 | 0.00 | **0.98** | motor만 |
+| suction_blockage | 0.98 | **0.08** | 0.55 | 0.64 | hydraulic+motor |
+| nutrient_imbalance | 0.00 | 0.00 | 0.98 | 0.00 | nutrient만 |
+
+드러난 약점(Phase 2 타깃):
+1. **zone_drip이 motor 베어링 고장에 오탐(0.98)** — zone_drip 피처에 `motor_temperature_c`가 들어가
+   경계 누설. 베어링이 motor_temp를 +6.5% 올리자 zone_drip AE가 반응. 도메인 경계 정리 필요.
+2. **motor가 흡입 막힘의 진동(+45%)을 놓침(0.08)** — motor 진동 민감도 부족. `vibration_per_load`(§3-4) 검토.
+3. nutrient가 수력 고장에 부분 오탐(clog 0.87/suction 0.55) — 단 nutrient는 voting 제외라 영향 제한.
+
+clog가 4도메인 모두 켜는 것은 오탐이 아니라 **실제 광역 전파(정상)**. 문제는 국소 고장(bearing·suction)이
+엉뚱한 도메인을 켜는 것. 이 baseline이 Phase 2(피처·경계 정리)·Phase 3(재학습) 변경을 재는 고정 기준이다.
+
 ## 4. 데이터 생성기 연동 (구현 위치)
 
 - 주입 지점: [data_gen_jun.py `simulate_degradation`](../../src/data_gen_jun.py), [data_gen_dabin.py](../../src/data_gen_dabin.py).

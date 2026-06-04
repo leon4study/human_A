@@ -101,6 +101,10 @@ def inject_fault(
     # 3) 고장 이벤트 시점 마킹 (failure_rule: 특정 컬럼이 정상 baseline의 ratio_below 미만)
     #    주의: 가동(ON) 구간에서만 판정한다. 정지 중엔 유량=0이라 무조건 임계 미만이 되어
     #    OFF를 고장으로 오인한다(2026-06-02 발견). baseline·판정 모두 running 마스크로 게이트.
+    #    규칙 종류(고장마다 방향이 다름):
+    #      ratio_below : faulty < baseline·r   (유량 감소형 — 하류 막힘)
+    #      ratio_above : faulty > baseline·r   (증가형 — 진동·EC)
+    #      below_abs   : faulty < 절대값        (음압 — 흡입 진공, baseline 무관)
     failure_time = None
     rule = sig.get("failure_rule")
     if rule and rule["column"] in out.columns:
@@ -108,9 +112,16 @@ def inject_fault(
         idx = np.arange(n)
         pre_on = df[col].to_numpy(dtype=float)[(idx < start_idx) & running]
         baseline = float(np.mean(pre_on)) if len(pre_on) > 0 else float(df[col].to_numpy()[running].mean())
-        thresh = baseline * rule["ratio_below"]
         faulty_col = out[col].to_numpy(dtype=float)
-        crossed = np.where((idx >= start_idx) & running & (faulty_col < thresh))[0]
+        on_after = (idx >= start_idx) & running
+        if "ratio_below" in rule:
+            crossed = np.where(on_after & (faulty_col < baseline * rule["ratio_below"]))[0]
+        elif "ratio_above" in rule:
+            crossed = np.where(on_after & (faulty_col > baseline * rule["ratio_above"]))[0]
+        elif "below_abs" in rule:
+            crossed = np.where(on_after & (faulty_col < rule["below_abs"]))[0]
+        else:
+            crossed = np.array([], dtype=int)
         if len(crossed) > 0:
             failure_time = out.index[crossed[0]]
 
