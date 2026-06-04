@@ -38,7 +38,11 @@ sys.path.insert(0, SRC)
 from preprocessing import step1_prepare_window_data          # noqa: E402
 from sensor_faults import apply_sensor_fault                 # noqa: E402
 
-MODELS_DIR = os.path.join(PROJECT, "services", "inference", "models")
+# 평가는 canonical 학습본(PROJECT_ROOT/models, src/train.py 저장 위치 = leadtime_eval과 동일)을
+# 기본으로 읽어 일관성을 맞춘다. 배포본(services/inference/models)으로 검증하려면 환경변수로 덮어쓴다:
+#   MODELS_DIR=services/inference/models python startup_strategy_eval.py
+# (docs/modeling/11 §6 — 모델 두 곳 갈림 문제 해소)
+MODELS_DIR = os.environ.get("MODELS_DIR", os.path.join(PROJECT, "models"))
 CLEAN_CSV = os.path.join(PROJECT, "data", "generated_data_from_dabin_0420.csv")
 FAULTY_CSV = os.path.join(PROJECT, "data", "faulty_testset_v1.csv")
 
