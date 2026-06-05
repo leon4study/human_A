@@ -1,6 +1,6 @@
 # 📊 ANALYSIS — 데이터 분석 및 인사이트
 
-이 문서는 **데이터 출처 → EDA → 도메인 정의 → SHAP 인사이트** 순서로 프로젝트의 데이터 분석 흐름을 정리합니다.
+이 문서는 **데이터 출처 → EDA(탐색적 데이터 분석 — 본격 모델링 전에 데이터를 그려보고 분포·관계를 살피는 단계) → 도메인 정의 → SHAP(각 입력값이 모델 판단에 얼마나 기여했는지 보여주는 기법) 인사이트** 순서로 프로젝트의 데이터 분석 흐름을 정리합니다.
 - 양액·점적관수·CNL 핀·딸기 재배 환경 등 **도메인 배경지식**: [DOMAIN_KNOWLEDGE.md](DOMAIN_KNOWLEDGE.md)
 - **모델 학습 파이프라인**: [MODELING.md](MODELING.md)
 - **컬럼 단위 정의**: [COLUMNS_REFERENCE.md](COLUMNS_REFERENCE.md)
