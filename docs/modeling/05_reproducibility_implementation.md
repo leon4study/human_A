@@ -26,7 +26,7 @@ A-3 실험에서 `random_state=42`를 설정했음에도 재학습 결과가 매
 
 | 난수원 | 무엇을 흔드는가 |
 |---|---|
-| `PYTHONHASHSEED` | set/dict의 해시 순서. **이번 비결정성의 진범.** 다중공선성 드롭·robust voting이 set 순서에 의존 |
+| `PYTHONHASHSEED` | set·dict의 해시 순서. **이번 비결정성의 진짜 원인.** 서로 겹치는 변수를 걸러내는 단계(다중공선성 드롭)와 공통으로 중요한 피처를 뽑는 단계(robust voting)가 set 순서에 의존 |
 | `random` | 파이썬 표준 random |
 | `numpy` | 샘플링·셔플 등 수치 연산 난수 |
 | `tensorflow` | AE 가중치 초기화·드롭아웃·셔플 |
@@ -54,7 +54,7 @@ inference_api는 기동 시 `models/` 폴더를 직접 스캔해 모델을 로�
 | `models/` (라이브) | 항상 최신 — 서빙이 읽는 곳, 계약 불변 |
 | `models/runs/<run_id>/` (보존본) | 학습 시점 보존 — 절대 덮어쓰지 않음 |
 
-심링크(latest symlink) 대신 복사 스냅샷과 포인터 파일(`LATEST_RUN.txt`)을 사용합니다. 심링크는 서빙이 의도치 않은 폴더를 가리킬 위험이 있어, 서빙은 그대로 두고 보존본만 추가하는 방식이 안전합니다.
+심링크(symlink — 다른 폴더를 가리키는 바로가기) 대신, 복사한 보존본과 포인터 파일(`LATEST_RUN.txt`)을 사용합니다. 심링크는 서빙이 엉뚱한 폴더를 가리킬 위험이 있습니다. 그래서 서빙이 읽는 폴더는 그대로 두고 보존본만 따로 추가하는 방식이 안전합니다.
 
 ### 2-6. run_id로 실험을 묶는 이유
 
@@ -90,5 +90,5 @@ PHASE=percentile-thr python src/train.py
 ## 5. 한계와 후속 과제
 
 - `enable_op_determinism()`이 미지원인 환경에서는 미세한 비결정성이 남을 수 있습니다. 그 경우 검증(4-1)이 통과하지 못하므로, TF 버전 확인 또는 해당 연산 격리가 필요합니다.
-- 분류 성능(P/R/F1/FAR) 기록은 evaluate_test_metrics.py가 같은 run_id로 별도 append하도록 연동해야 완성됩니다(미구현).
+- 분류 성능(P/R/F1/FAR — 정밀도·재현율·둘의 조화 평균·오탐률) 기록은 evaluate_test_metrics.py가 같은 run_id로 따로 누적(append)하도록 연동해야 완성됩니다(미구현).
 - 진단 시각화 자동 저장은 [06](06_visualization_logging.md)에서 다룹니다.
