@@ -1,12 +1,12 @@
 # 01 — 실험 프로토콜 (재현성 · 추적 · 실험 단위)
 
-모든 모델 실험이 지켜야 하는 최소 규칙입니다. 이 프로토콜을 갖추기 전에는 어떤 성능 비교도 신뢰하지 않습니다. 배경: A-3 사례(비결정성으로 인한 모델 영구 소실)는 이 프로토콜의 부재에서 비롯됐습니다 ([../../.claude/MODEL_CHANGELOG.md](../../.claude/MODEL_CHANGELOG.md) A-3).
+모든 모델 실험이 지켜야 하는 최소 규칙입니다. 이 규칙(프로토콜)을 갖추기 전에는 어떤 성능 비교도 믿지 않습니다. 배경: A-3 사례(같은 코드인데 결과가 매번 달라지는 비결정성 탓에, 좋았던 모델을 영영 잃은 일)는 바로 이 규칙이 없어서 벌어졌습니다 ([../../.claude/MODEL_CHANGELOG.md](../../.claude/MODEL_CHANGELOG.md) A-3).
 
 ---
 
 ## 1. 재현성 고정 (최우선 — 없으면 나머지가 무의미)
 
-`train.py`는 `random_state=42`임에도 재학습마다 결과가 달랐습니다. 2026-06-01 재현성 테스트로 진범을 규명했습니다: **Python 해시 무작위화(PYTHONHASHSEED 미고정)** 입니다. set/dict 순서가 매 실행 달라져 다중공선성 드롭과 robust voting이 다른 컬럼을 선택했습니다. 결정적으로, 이 환경변수는 인터프리터 시작 전에 설정돼야 효과가 있어 런타임 대입은 무효이며, 미설정 시 프로세스를 재실행(re-exec)해야 합니다. TensorFlow 시드(가중치 초기화)도 함께 잡아야 하지만 핵심 변수는 해시였습니다. 상세는 [.claude/MODEL_CHANGELOG.md](../../.claude/MODEL_CHANGELOG.md) Phase D.
+`train.py`는 `random_state=42`(난수 시드 고정)를 줬는데도 재학습할 때마다 결과가 달랐습니다. 2026-06-01 재현성 테스트로 진짜 원인을 찾았습니다: **파이썬 해시 무작위화(PYTHONHASHSEED를 고정하지 않음)** 였습니다. 이것이 고정되지 않으면 set·dict(집합·사전)의 내부 순서가 실행할 때마다 달라집니다. 그 결과, 서로 겹치는 변수를 걸러내는 단계(다중공선성 제거)와 여러 타깃에서 공통으로 중요한 피처를 뽑는 단계(robust voting)가 매번 다른 컬럼을 골랐습니다. 결정적으로 이 환경변수는 파이썬이 시작되기 전에 설정돼야 효과가 있습니다. 그래서 프로그램이 도는 도중에 값을 넣어도 소용없고, 안 잡혀 있으면 프로세스를 다시 시작(re-exec)해야 합니다. TensorFlow의 시드(신경망 초기 가중치)도 함께 잡아야 하지만, 핵심 원인은 해시였습니다. 상세는 [.claude/MODEL_CHANGELOG.md](../../.claude/MODEL_CHANGELOG.md) Phase D.
 
 모든 학습 스크립트의 최상단에서 다음을 고정합니다.
 
@@ -70,7 +70,7 @@ run_id, git_sha, date, domain, mean_mse, threshold_caution, threshold_warning, t
 
 - 매 학습 결과가 한 줄씩 쌓이면 "FAR이 가장 낮았던 run", "phase별 성능 추이"를 즉시 비교할 수 있습니다.
 - MODEL_CHANGELOG(경위)와 experiments.csv(정량)가 짝을 이룹니다. 한쪽만으로는 부족합니다.
-- 분류 성능(P/R/F1/FAR)은 라벨 평가가 필요하므로 train.py가 아니라 evaluate_test_metrics.py가 같은 run_id로 별도 기록합니다. train 측 CSV에는 학습 산물(MSE·threshold)만 기록합니다.
+- 분류 성능(P/R/F1/FAR — 정밀도·재현율·그 둘의 조화 평균·오탐률)은 정답표(라벨)가 있어야 잴 수 있습니다. 그래서 train.py가 아니라 evaluate_test_metrics.py가 같은 run_id로 따로 기록합니다. train 쪽 CSV에는 학습 산출물(MSE·threshold)만 기록합니다.
 
 ---
 

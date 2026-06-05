@@ -29,7 +29,7 @@ train.py를 실행하기 전에 통과해야 하는 게이트입니다. "코드�
 
 - TRAIN 구간 정상 순도를 확인했다 (이상 잔존 꼬리 점검, [02 §2](02_evaluation_design.md))
 - 파생 피처에 분모 발산·극단값이 없다 (`flow_drop_rate` 게이트 사례, [../MODELING.md](../MODELING.md))
-- 희소 binary를 AE 입력 VIP에 넣지 않았다 (`is_startup_phase` 50배 폭발 교훈)
+- 거의 0으로만 채워진 희소(sparse) 이진 피처를, AE에 꼭 넣는 핵심 피처(VIP)에 포함하지 않았다 (`is_startup_phase`가 임계치를 50배나 부풀렸던 교훈)
 - 집계 윈도우가 이상 신호를 희석하지 않는다 ([02 §6](02_evaluation_design.md))
 
 ---
@@ -70,7 +70,7 @@ train.py를 실행하기 전에 통과해야 하는 게이트입니다. "코드�
 | 4 | NUTRIENT threshold를 percentile/PR로 전환 실험 | [03](03_threshold_methodology.md) |
 | 5 | 단일센서 baseline 구축 | 게이트 3 + [../DEVELOPMENT_ROADMAP.md](../DEVELOPMENT_ROADMAP.md) §4 |
 | 6 | 막힘률 baseline 대비 측정 (baseline 재사용) | [08 §2](08_domain_metrics_validation.md) + [../DEVELOPMENT_ROADMAP.md](../DEVELOPMENT_ROADMAP.md) §4 |
-| 7 | Cpk 산출 (막힘 정의·규격 재사용) | [08 §3](08_domain_metrics_validation.md) |
-| 8 | OEE 산출 | [08 §4](08_domain_metrics_validation.md) |
+| 7 | Cpk 산출 (막힘 정의·규격 재사용) — Cpk는 공정능력지수, 규격 대비 공정이 얼마나 안정적인지 보는 값 | [08 §3](08_domain_metrics_validation.md) |
+| 8 | OEE 산출 — OEE는 설비종합효율, 가동률·성능·양품률을 곱한 설비 효율 지표 | [08 §4](08_domain_metrics_validation.md) |
 
 1·2·3번(인프라)이 없으면 4·5번 결과를 신뢰할 수 없습니다. 순서대로 진행합니다. 6·7·8번(도메인 운영 지표)은 5번 baseline이 선행 조건이며, 강사 제시 지표를 검증값으로 격상하는 단계입니다 ([08_domain_metrics_validation.md](08_domain_metrics_validation.md)).
