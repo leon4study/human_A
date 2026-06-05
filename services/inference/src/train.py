@@ -476,13 +476,34 @@ if __name__ == "__main__":
     }
 
     # 🌟 [수정포인트 4] For 루프를 돌면서 각각 독립적인 모델을 학습시킵니다.
+    # 도메인 격리(실험용, 기본 OFF) — DOMAIN_ISOLATION=1이면 각 도메인 피처 선택에서
+    #   '다른 도메인의 핵심 센서(SENSOR_MANDATORY)'를 후보에서 제외한다. 시간·기온 교란으로
+    #   SHAP이 타 도메인 센서를 spurious 선택해 경계가 누설되는 것을 막기 위함
+    #   (coupling_validate에서 zone_drip이 motor 고장에 오탐한 원인). A-3 위험 지대이므로
+    #   기본 OFF로 두고, 재학습 시 ON/OFF를 coupling_validate로 비교해 안전하게 도입한다.
+    #   docs/modeling/10 §3-6, 09 §4. 측정 전까지는 운영 동작을 바꾸지 않는다.
+    DOMAIN_ISOLATION = os.environ.get("DOMAIN_ISOLATION", "0") == "1"
+    if DOMAIN_ISOLATION:
+        logger.info("🧱 DOMAIN_ISOLATION=1 — 타 도메인 핵심 센서를 피처 후보에서 제외(실험)")
+
     for system_name, target_dict in subsystem_targets.items():
         logger.info(f"[{system_name.upper()} 도메인] 분석 파이프라인 시작")
+
+        # 격리 ON이면 '다른 도메인 mandatory − 내 도메인 mandatory'를 제외 목록으로.
+        exclude_cols = None
+        if DOMAIN_ISOLATION:
+            own = set(SENSOR_MANDATORY.get(system_name, []))
+            others = set()
+            for dom, sensors in SENSOR_MANDATORY.items():
+                if dom != system_name:
+                    others.update(sensors)
+            exclude_cols = sorted(others - own)
+            logger.info(f"   [{system_name}] 격리 제외 센서 {len(exclude_cols)}개: {exclude_cols}")
 
         # 1. 도메인별 피처 셀렉션
         # df_agg: target_reference_profiles 계산용(raw 센서 이름 유지 윈도우 집계본)
         robust_features, X_train_ae, df_interpret_result, _, df_agg, shap_vals_dict, X_bg_dict = run_feature_selection_experiment(
-            df_raw=df_raw, window_method="sliding", target_dict=target_dict
+            df_raw=df_raw, window_method="sliding", target_dict=target_dict, exclude_cols=exclude_cols
         )
 
         # VIP 피처 강제 주입: 시간 피처 + 운전 모드 피처 (기동/정지 맥락)

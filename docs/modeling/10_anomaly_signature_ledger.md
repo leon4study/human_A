@@ -164,6 +164,13 @@ jun의 ↑를 보정)은 §3 자료조사에서 가져왔다. 위치 라이브�
 clog가 4도메인 모두 켜는 것은 오탐이 아니라 **실제 광역 전파(정상)**. 문제는 국소 고장(bearing·suction)이
 엉뚱한 도메인을 켜는 것. 이 baseline이 Phase 2(피처·경계 정리)·Phase 3(재학습) 변경을 재는 고정 기준이다.
 
+Phase 2 #1 구현(2026-06-05): 위 약점 1(경계 누설)의 원인은 SHAP 피처 선택이 '전체 센서 풀'에서
+골라 zone_drip이 motor_temperature_c 등 타 도메인 센서를 spurious 선택한 것이다. 환경변수
+`DOMAIN_ISOLATION=1`이면 각 도메인 피처 선택에서 '다른 도메인의 핵심 센서(SENSOR_MANDATORY)'를
+후보에서 제외한다([train.py](../../src/train.py)·[feature_selection.py](../../src/feature_selection.py)).
+기본 OFF(동작 불변). A-3(피처 선택 변경이 전 도메인 F1 붕괴) 위험 지대라, 재학습 시 ON/OFF를
+coupling_validate로 비교해 회귀 없는지 확인한 뒤 도입한다. 약점 2(motor 진동 민감도)는 미구현.
+
 ## 4. 데이터 생성기 연동 (구현 위치)
 
 - 주입 지점: [data_gen_jun.py `simulate_degradation`](../../src/data_gen_jun.py), [data_gen_dabin.py](../../src/data_gen_dabin.py).

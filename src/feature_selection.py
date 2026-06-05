@@ -186,7 +186,7 @@ def get_shap_importance_scalable(
 # =====================================================================
 # 2. Multi-Target SHAP Ensemble 메인 함수
 # =====================================================================
-def run_shap_ensemble(df, target_dict, top_ratio=0.2):
+def run_shap_ensemble(df, target_dict, top_ratio=0.2, exclude_cols=None):
     """
     여러 타겟에 대해 SHAP 분석을 수행하고, 상위 피처들의 교집합/합집합을 도출합니다.
 
@@ -206,7 +206,9 @@ def run_shap_ensemble(df, target_dict, top_ratio=0.2):
         # X, y 분리 (타겟 본인 + 누수 컬럼 + 컨텍스트 피처 제외)
         # 컨텍스트(time_sin/cos, pump_on 등)는 AE 입력엔 VIP 강제 주입으로 들어가지만,
         # SHAP 기여도 리포트(beeswarm)에선 제외한다. MSE 스코어/RCA 제외 정책과 단일화.
-        cols_to_drop = [target] + leak_cols + list(DEFAULT_CONTEXT_FEATURES)
+        # exclude_cols: 도메인 격리(DOMAIN_ISOLATION) 시 '다른 도메인의 핵심 센서'를 후보에서
+        #   제외해, SHAP이 교란(시간·기온 등)으로 타 도메인 센서를 spurious 선택하는 것을 막는다.
+        cols_to_drop = [target] + leak_cols + list(DEFAULT_CONTEXT_FEATURES) + list(exclude_cols or [])
         valid_cols_to_drop = list(set(cols_to_drop).intersection(df.columns))
         X = df.drop(columns=valid_cols_to_drop)
         y = df[target]
@@ -275,13 +277,13 @@ def run_shap_ensemble(df, target_dict, top_ratio=0.2):
 # [Pipeline Step 3 & 4] SHAP 앙상블 실행 및 최종 AE 데이터 확정
 # ==============================================================================
 def step3_4_select_features_and_finalize(
-    df_clean, df_interpret, target_dict, top_ratio=0.25
+    df_clean, df_interpret, target_dict, top_ratio=0.25, exclude_cols=None
 ):
     print("\n🔍 [Step 3] 정제된 데이터로 SHAP 기반 피처 셀렉션을 시작합니다...")
 
     # 1. 앙상블 실행
     ensemble_lists, shap_results, shap_vals_dict, X_bg_dict = run_shap_ensemble(
-        df_clean, target_dict, top_ratio=top_ratio
+        df_clean, target_dict, top_ratio=top_ratio, exclude_cols=exclude_cols
     )
 
     # 2. 결과 출력 (Phase 4 기능 통합)
@@ -318,8 +320,8 @@ def step3_4_select_features_and_finalize(
 # =====================================================================
 # 4. 전체 파이프라인 총괄 (매니저 함수)
 # =====================================================================
-def run_feature_selection_experiment(df_raw, window_method, target_dict):
-    """전처리부터 피처 선정까지 원스톱 실행"""
+def run_feature_selection_experiment(df_raw, window_method, target_dict, exclude_cols=None):
+    """전처리부터 피처 선정까지 원스톱 실행. exclude_cols: 도메인 격리 시 후보에서 뺄 타 도메인 센서."""
     print(f"\n" + "=" * 60)
     print(f"🚀 [EXPERIMENT] 시작: {window_method.upper()} WINDOW 방식")
     print("=" * 60)
@@ -335,7 +337,7 @@ def run_feature_selection_experiment(df_raw, window_method, target_dict):
     )
     X_train_ae, ensemble_lists, shap_results, shap_vals_dict, X_bg_dict = (
         step3_4_select_features_and_finalize(
-            df_clean, df_interpret, target_dict, top_ratio=0.25
+            df_clean, df_interpret, target_dict, top_ratio=0.25, exclude_cols=exclude_cols
         )
     )
 

@@ -11,11 +11,19 @@
    baseline이 약점 3개 발견 — zone_drip이 motor고장 오탐(motor_temp 누설), motor가 suction 진동 놓침,
    nutrient 수력 부분오탐. ledger §3-6 기록.
 
+### 추가 (2026-06-05): Phase 2 #1 도메인 격리 플래그 + 문서 쉽게 풀기 시작
+- Phase 2 #1: `DOMAIN_ISOLATION=1`(기본 OFF) — 도메인별 피처 선택에서 타 도메인 핵심 센서
+  (SENSOR_MANDATORY) 제외. zone_drip의 motor_temperature_c 누설 차단. train.py·feature_selection.py.
+  A-3 위험 지대라 재학습 시 ON/OFF를 coupling_validate로 비교 후 도입. 약점 2(motor 진동)는 미구현.
+- 문서 쉽게 풀기: 서브에이전트는 Edit 권한 없어 실패 → 메인(내가) 직접. 가장 어려운 것부터
+  (ledger 10, modeling 03·09, SESSION_LOG) 진행 중.
+
 ### 재개 지점 (Resume Point)
-1. **Phase 2** — baseline이 짚은 약점만 타깃: ① zone_drip에서 motor_temperature_c 제거(경계 누설)
-   ② motor 진동 민감도(vibration_per_load §3-4) ③ §3 2차 피처 선택 구현.
-2. **Phase 3** — 재학습(사용자) + 같은 coupling_validate로 재측정(attribution).
-3. 미푸시분 한 번에 푸시. 포트 불일치 확인.
+1. **Phase 3** — 재학습(사용자, 체크리스트 11) `DOMAIN_ISOLATION=1` ON/OFF 둘 다 → coupling_validate로
+   "zone_drip이 motor 고장 오탐 사라졌나" 비교. + 기동 band 생성·regime 활성.
+2. Phase 2 #2 — motor 진동 민감도(vibration_per_load §3-4) 미구현.
+3. 문서 쉽게 풀기 계속(나머지 docs).
+4. 미푸시분 한 번에 푸시. 포트 불일치 확인.
 
 ## 2026-06-04 — 센서고장 대조군 실험 (강사 원칙 검증) — feat/sensor-fault-control
 
