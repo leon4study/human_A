@@ -12,7 +12,7 @@
 
 ## 0. 사전 점검 (pre-flight)
 - [ ] 현재 작업 커밋/스태시 완료. 작업 브랜치 확인(예: `feat/sensor-fault-control`).
-- [ ] 학습은 **canonical 트리** `src/train.py`로 실행한다(저장 위치가 `services/`와 다름 — §4 참고).
+- [ ] 학습은 **기준이 되는(canonical) 코드 트리**인 `src/train.py`로 실행한다(모델 저장 위치가 `services/`와 다름 — §4 참고).
 - [ ] Python 환경: `services/inference/requirements.txt` 설치된 venv 활성.
 - [ ] 학습 산출물(모델·CSV)은 git 추적 대상이 아니다(.gitignore). 재학습이 기존 `models/`를 덮어쓴다.
 
