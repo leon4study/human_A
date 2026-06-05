@@ -76,7 +76,7 @@ export PHASE=baseline-repro
 python src/train.py
 ```
 
-`python src/train.py`는 프로젝트 루트에서 실행해도 됩니다. 스크립트 디렉터리(`src/`)가 자동으로 모듈 경로에 들어가 flat import가 동작합니다.
+`python src/train.py`는 프로젝트 루트에서 실행해도 됩니다. 스크립트 폴더(`src/`)가 자동으로 모듈 경로에 추가되므로, 같은 폴더의 파일을 경로 없이 바로 불러오는 방식(flat import)이 동작합니다.
 
 ### 2-1. 재현성 검증 (첫 도입 시 1회)
 
