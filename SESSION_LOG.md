@@ -1,5 +1,22 @@
 # SESSION_LOG
 
+## 2026-06-05 — 문서 쉬운 말로 풀어쓰기 (가독성) — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+- 어려운 문서를 표현만 쉽게 재작성(사실·숫자·경로·링크·표·코드 100% 보존, 매 파일 기계 검증).
+  깊게 재작성: ledger 10, modeling 03, 08(+제목 07→08 오류 수정), MODELING.
+  용어 풀이: modeling 01·02·04·05·06·07·09·11, DOMAIN_KNOWLEDGE, ANALYSIS, INFERENCE_API, PROJECT_BRIEF.
+- 검증 방식: HEAD vs 현재의 숫자·링크·백틱코드·헤딩 멀티셋 대조로 "사라진 사실 0" 확인 후 커밋.
+- 서브에이전트 6개로 병렬 시도했으나 Edit/Write 권한 없어 실패 → 메인에서 직접 수행.
+- 남은 문서(DOMAIN_DESIGN·ONBOARDING·DEPLOYMENT·git-strategy·ADR 등)는 이미 평이,
+  COLUMNS_REFERENCE·docker-cleanup·로그는 정의·명령·로그라 풀이 대상 아님 → 사용자 결정으로 마무리.
+
+### 재개 지점 (Resume Point) — 변동 없음
+1. Phase 3 재학습(사용자): DOMAIN_ISOLATION ON/OFF + 기동 band 생성 → coupling_validate 재측정.
+2. Phase 2 #2(motor 진동 민감도), 포트폴리오 정직화(F1 0.95 교체).
+3. 미푸시분 한 번에 푸시(feat/fault-injection-eval는 푸시됨, feat/sensor-fault-control 미푸시).
+4. 포트 불일치(README §5 vs compose) 사용자 확인.
+
 ## 2026-06-05 — Phase 1: 결합 영향 모델 일반화 + baseline 측정 도구 — feat/sensor-fault-control
 
 ### 달성 (Accomplished)
