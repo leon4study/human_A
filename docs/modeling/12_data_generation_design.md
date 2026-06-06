@@ -164,3 +164,38 @@ s(t) = baseline(환경·setpoint)  +  Σ_k w_k · driver_k(t)  +  u_s(t)  +  ε_
 
 검증: 단순 상관 낮추기가 아니라 — 주입한 각 고장(fault_signatures)에서 해당 관계 피처가 실제로
 튀는지(coupling_validate에 per-feature 반응 확인)로 "판별력"을 검증한다.
+
+---
+
+## 8. 검증된 공식·출처 (자료조사 — 우리가 지어내지 않고 표준/문헌 인용)
+
+데이터 물리(Layer 2 결합)와 §7 관계 피처는 아래 검증된 공식에 근거한다. 공모전 공공데이터·문헌 근거.
+
+### 8-1. 펌프 수력 (hydraulic)
+- **시스템 곡선**: `H_system = H_static + K·Q²` (난류에서 마찰손실 ∝ 유량²). 막힘이 진행되면 K(저항계수)↑.
+  → `system_resistance = discharge_pressure / flow²`가 곧 K의 대용지표. 운전점 무관하게 막힘을 직격.
+- **상사법칙(affinity laws, 임펠러경 고정)**: `Q ∝ N`, `H ∝ N²`, `P ∝ N³` (N=회전수).
+  → 데이터 Layer 2의 rpm–유량–토출압–전력 결합을 이 비례로 맞춘다(임의 계수 대신 물리 법칙).
+- **비에너지(specific energy)**: `SEC[kWh/m³] = (H·g·ρ)/(3.6e6·η)` (η=펌프 효율). 단위 유량당 에너지.
+  → `specific_energy`(= motor_power/flow)는 SEC에 비례. 막힘·노후 시 상승.
+- 출처: [PDHonline M125 Pump Parameters & Affinity Laws](https://www.pdhonline.com/courses/m125/m125content.pdf),
+  [Pump Systems Academy — Affinity Laws](https://home.pumpsystemsacademy.com/blog/pump-affinity-laws),
+  [ScienceDirect — Affinity Law overview](https://www.sciencedirect.com/topics/engineering/affinity-law).
+
+### 8-2. 환경·증산 (irrigation demand)
+- **VPD(수증기압 결손)**: `VPD = SVP − SVP·RH/100`,  `SVP[kPa] = 0.6108·exp(17.27·T/(T+237.3))` (Tetens, 0~50℃서 0.1% 정확).
+- **증산 ∝ VPD**(광량 동반): VPD가 식물 증산=물·양분 수요의 주동인. 광량·VPD가 높을수록 관수 수요↑.
+  → `flow_demand_residual = actual_flow − 기대유량(VPD·광량 기반)`. "이 환경이면 이만큼 나가야"의 기준.
+- 출처: [Andrews Forest (OSU) — Dewpoint & VPD equations](https://andrewsforest.oregonstate.edu/sites/default/files/lter/data/studies/ms01/dewpt_vpd_calculations.pdf),
+  [Omnicalculator — VPD](https://www.omnicalculator.com/biology/vapor-pressure-deficit). 권장 VPD 0.5~1.2 kPa는 공공데이터(딸기)와 일치.
+
+### 8-3. 모터·베어링 (motor)
+- **ISO 10816 진동 존**(이미 [10 §3-1 S2]): A≤1.4 / B≤2.8 / C≤4.5 / 정지>7.1 mm/s. 베어링 마모 시 RMS↑.
+- 베어링 마모는 부하와 무관한 독립 과정 → `vibration_per_load = vibration/power`가 부하 정규화 진동으로 마모만 분리.
+- (심화: 베어링 결함주파수 BPFO/BPFI는 주파수영역 — 현재 RMS 기반이라 후속.)
+
+### 8-4. 양액 (nutrient)
+- **배액률·leaching**: 배액 EC > 공급 EC = 염류 축적, < = 양분 부족(공공데이터 명시). 배액률 20~30% 정상.
+  → `leaching_ratio = drain_ec / mix_ec` > 1 누적 = 염류 축적 신호.
+
+> 구현 시 각 §7 피처의 09 원장 행 '출처' 칸에 위 링크를 박는다.
