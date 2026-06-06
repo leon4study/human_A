@@ -256,8 +256,12 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
     discharge_pressure += np.random.normal(0, 0.5 + 3.0 * clog, n) * pump_on
     discharge_pressure = np.clip(discharge_pressure, 0, None)
 
+    # 흡입압: 이전엔 토출압과 똑같이 clog만의 함수라 corr~1.00(artifact)이었다. 흡입측은 실제로
+    #   원수 수위·흡입 스트레이너 상태 등 토출측과 무관한 고유 변동을 가진다. 그 독립 성분을 더해
+    #   토출압과의 인위적 완전상관을 깬다(목표 corr 0.6~0.8). seed_offset=1 (센서 고유 난수열).
+    suction_inlet_indep = ar1_process(n, sigma=0.11, phi=0.99, seed_offset=1)
     suction_pressure = (
-        -10.5 - 0.7 * irr_mask - 1.5 * clog
+        -10.5 - 0.7 * irr_mask - 1.5 * clog + suction_inlet_indep
     ) * pump_on + np.random.normal(0, 0.1, n) * pump_on
 
     # 전기 및 진동 (펌프 가동 여부에 연동)
@@ -276,8 +280,13 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
         0, 3, n
     ) * pump_on
 
+    # 진동: 가장 심한 artifact였다 — 이전엔 clog만의 함수라 토출압과 corr 1.00(기계 진동이 수력 압력과
+    #   완전상관일 수 없다). 실제 베어링 진동은 마모·정렬불량 등 압력과 무관한 '베어링 상태'가 서서히
+    #   변하며 결정한다. 그 독립 성분(random-walk에 가까운 AR(1))을 더해 압력과의 상관을 0.1~0.3으로
+    #   낮춘다. seed_offset=2. (clog 기여는 cavitation 동반 진동으로 남기되 비중을 낮춤.)
+    bearing_condition_indep = ar1_process(n, sigma=0.035, phi=0.99, seed_offset=2)
     bearing_vibration_rms = (
-        1.18 + 0.18 * irr_mask + 0.8 * clog + 0.9 * blocked_ratio
+        1.18 + 0.18 * irr_mask + 0.4 * clog + 0.4 * blocked_ratio + bearing_condition_indep
     ) * pump_on + np.random.normal(0, 0.02, n) * pump_on
     vibration_high_freq = (
         0.25 + 0.05 * irr_mask + 1.2 * clog
@@ -290,11 +299,17 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
 
     # 온도 및 여과기 (발열은 기온 베이스)
     air_temp_arr = env_data["air_temp_c"]
+    # 모터·베어링 온도: 이전엔 둘 다 'air_temp + 상수 + clog'라 corr 0.97(거의 복제). 실제로 둘은
+    #   열원(모터 권선 vs 베어링 마찰)과 열 시정수가 달라 독립 성분이 있다. 베어링온도에 고유 마찰열
+    #   AR(1)을 더해 모터온도와의 상관을 0.4~0.7로 낮춘다(둘 다 air_temp는 공유하므로 0은 아님).
+    #   seed_offset=3(모터)·4(베어링)로 서로 독립.
+    motor_winding_indep = ar1_process(n, sigma=0.30, phi=0.99, seed_offset=3)
+    bearing_friction_indep = ar1_process(n, sigma=0.45, phi=0.99, seed_offset=4)
     motor_temp = (
-        air_temp_arr + (13 + 2.5 * clog) * pump_on + np.random.normal(0, 0.22, n)
+        air_temp_arr + (13 + 2.5 * clog) * pump_on + motor_winding_indep + np.random.normal(0, 0.22, n)
     )
     bearing_temp = (
-        air_temp_arr + (10 + 2.0 * clog) * pump_on + np.random.normal(0, 0.18, n)
+        air_temp_arr + (10 + 2.0 * clog) * pump_on + bearing_friction_indep + np.random.normal(0, 0.18, n)
     )
 
     filter_in = (145 + 8 * irr_mask + 5 * clog) * pump_on + np.random.normal(
@@ -393,11 +408,16 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
             ),
             2,
         ),
+        # 배액 EC: 이전엔 변동이 거의 daylight뿐이라 습도(역시 daylight 구동)와 corr 0.97(우연 artifact).
+        #   실제 배액 EC는 배지 염류 축적이라는 '느리고 독립적인' 과정이 지배한다(공공데이터: 배액 EC가
+        #   공급보다 높으면 염류 축적). 그 독립 누적 성분(AR(1), seed_offset=5)을 더하고 daylight 비중을
+        #   낮춰 습도와의 인위적 상관을 깬다(목표 <0.3).
         "drain_ec_ds_m": np.round(
             2.02
-            + 0.10 * daylight
+            + 0.04 * daylight
             + 0.25 * clog
             + 0.3 * blocked_ratio
+            + ar1_process(n, sigma=0.02, phi=0.99, seed_offset=5)
             + np.random.normal(0, 0.025, n),
             3,
         ),
