@@ -133,3 +133,20 @@
 - motor: `bearing_thermal_margin`, `load_per_speed`
 
 zone-soil 복원분과 묶어 한 실험(`PHASE=feature-v2`)으로 학습→진단 그림으로 빈약 해소를 확인한다.
+
+## 6. 2차 배치 — 관계 판별 피처 (구현됨, 2026-06-07, 검증 공식)
+
+§3 제안 중 '관계 기반' 피처를 검증된 표준/문헌 공식으로 구현([preprocessing.create_modeling_features](../../src/preprocessing.py)).
+데이터 현실화(센서 독립 성분, [12](12_data_generation_design.md))가 된 뒤라야 판별력이 산다.
+
+| 피처 | 공식 | 도메인 | 잡는 고장 | 출처 |
+|---|---|---|---|---|
+| `vibration_per_load` | bearing_vibration / motor_power | motor | 베어링 마모(부하 무관 진동↑) | ISO 10816([10 §3-1 S2]), 12 §8-3 |
+| `leaching_ratio` | drain_ec / mix_ec | nutrient | 염류 축적(>1) | 공공데이터(배액>공급=축적), 12 §8-4 |
+| `transpiration_demand` | calculated_vpd_kpa × light_ppfd | hydraulic | 수요 대비 유량 부족(막힘) | VPD Tetens·증산, 12 §8-2 |
+
+- 분모 보호: vibration_per_load는 가동(power≥0.5)만, 나머지는 0(절대규칙 #5, 발산 방지).
+- 부수 정리: `mix_temp_c`(raw 존재했으나 model_cols 누락) 복원. hydraulic 유령 mandatory
+  (`hydraulic_power_kw`·`filter_delta_p_kpa`, raw 없음) 제거.
+- 검증: 단순 상관 낮추기가 아니라, 주입 고장에서 해당 피처가 실제 튀는지(coupling_validate per-feature)로
+  판별력 확인 — 재생성·재학습 후 측정([12 §6]).
