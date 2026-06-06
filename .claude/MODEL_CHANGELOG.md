@@ -643,3 +643,27 @@ supply_balance(유량)가 zone_drip(배지)에 섞여 **유량 불균형에 알�
 overall F1 0.504(시작 0.455 대비), hydraulic P0.99 주력, zone_drip 부활·정밀화(0.03→0.49), 클린-정상 FAR 1.4%. 후속 후보: FAR 컨트롤(운영점/레벨), 피처 자료조사, 모델층(Optuna).
 
 ---
+
+## Phase H — motor 진동/베어링온도 센서 누락 발견·수정 (2026-06-06)
+
+### 가설
+재학습(`retrain-regime`)으로 현재 피처·기동 band를 반영하면 4도메인 정본 모델이 나오고, 측정 도구(lead-time·막힘률·coupling_validate)로 검증 가능하다.
+
+### 시도
+`DOMAIN_ISOLATION=0`(기본)으로 `python src/train.py` 재학습. run `2026-06-06_144921__ef0128d__retrain-regime`. 기동 band(threshold_startup) 4도메인 생성(n=540).
+
+### 관측
+- 정본 측정: lead-time 6/6·평균 29.9h·정상 FAR 1.0%·기동 FAR 0.0%(regime band 정상 동작). 막힘률은 baseline·AE 둘 다 0%(심한 막힘), AE 우위는 FAR 5%→1%.
+- 학습 로그 경고: `⚠️ [MOTOR] SENSOR_MANDATORY에 있으나 df_agg에 없는 피처: ['bearing_vibration_rms_mm_s', 'bearing_temperature_c']`.
+- coupling_validate: motor가 흡입 막힘의 진동(+45%)을 또 놓침(motor 알람률 0.08). zone_drip은 motor 베어링 고장에 여전히 오탐(isolation OFF라 motor_temp 누설 유지).
+
+### 진단
+raw 데이터에 `bearing_vibration_rms_mm_s`·`bearing_temperature_c`가 있는데도 `preprocessing.model_cols` 화이트리스트에 없어 집계 전에 잘렸다. zone_drip 토양센서 누락(Phase 직전)과 **동일한 버그 클래스**. 진동은 파생 생존자도 없어 motor가 '진동'을 한 피처도 못 보고 학습 → 베어링·공동현상 등 진동 기반 고장에 구조적 깜깜이.
+
+### 수정
+`model_cols`에 `bearing_vibration_rms_mm_s`·`bearing_temperature_c` 추가(상세 주석 포함). src/+services/ 동기화. 스모크 테스트로 집계 후 df_agg에 생존 확인. **재학습 1회 필요**(다음 retrain에서 motor가 진동을 보게 됨).
+
+### 남은 과제
+- motor 재학습 후 coupling_validate로 "흡입 막힘 진동 검출됨" 확인.
+- zone_drip 경계 누설은 `DOMAIN_ISOLATION=1` 재학습으로 검증(별도).
+- hydraulic(`hydraulic_power_kw`·`filter_delta_p_kpa`)·nutrient(`mix_temp_c`) 누락도 같은 점검 필요(status 열린이슈).
