@@ -175,7 +175,11 @@ s(t) = baseline(환경·setpoint)  +  Σ_k w_k · driver_k(t)  +  u_s(t)  +  ε_
 - **시스템 곡선**: `H_system = H_static + K·Q²` (난류에서 마찰손실 ∝ 유량²). 막힘이 진행되면 K(저항계수)↑.
   → `system_resistance = discharge_pressure / flow²`가 곧 K의 대용지표. 운전점 무관하게 막힘을 직격.
 - **상사법칙(affinity laws, 임펠러경 고정)**: `Q ∝ N`, `H ∝ N²`, `P ∝ N³` (N=회전수).
-  → 데이터 Layer 2의 rpm–유량–토출압–전력 결합을 이 비례로 맞춘다(임의 계수 대신 물리 법칙).
+  → rpm–유량–압력–전력 결합의 물리적 근거. **단, 전면 도입 보류(2026-06-07)**: 실측상 이 펌프는
+    **정속 운전**(rpm 1740~1796, ±1.5%)이라 속도가 거의 안 변해 affinity 스케일링 효과가 미미하다
+    (affinity는 VFD 가변속에서 핵심). 대신 **막힘→작동점 이동**(유량↓+압력↑, 시스템 곡선에서 K↑)이
+    활성 메커니즘이며 `system_resistance`가 직접 포착한다. 함의 효율 η≈11%로 스케일 일관
+    (Q·ΔP/60000 ≈ 0.25kW vs motor 2.2kW). 면접 답: "정속 펌프라 affinity 생략, 막힘은 시스템 곡선(K↑)으로".
 - **비에너지(specific energy)**: `SEC[kWh/m³] = (H·g·ρ)/(3.6e6·η)` (η=펌프 효율). 단위 유량당 에너지.
   → `specific_energy`(= motor_power/flow)는 SEC에 비례. 막힘·노후 시 상승.
 - 출처: [PDHonline M125 Pump Parameters & Affinity Laws](https://www.pdhonline.com/courses/m125/m125content.pdf),
