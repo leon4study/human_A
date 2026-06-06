@@ -203,7 +203,16 @@ def simulate_zone_data(
 # ==========================================
 # 5. [메인] 데이터 통합 파이프라인 (총 50개 컬럼 완벽 세팅)
 # ==========================================
-def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min"):
+def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min",
+                                degradation=True):
+    """
+    degradation:
+      True(기본)  — 30일 이후 막힘(clog)이 자라는 '자연 노후' 시나리오(참고/대조용).
+      False       — clog=0 전 구간. AutoEncoder 학습용 '순수 정상 데이터'를 만든다.
+                    환경 공공데이터 앵커·센서 독립성은 그대로 유지되고, 막힘만 없다.
+                    (고장은 자연 노후가 아니라 fault_injection 프레임으로 통제 주입하므로,
+                     학습셋은 막힘 없는 정상이어야 AE가 정상 manifold만 배운다. docs/modeling/12 §6.)
+    """
     idx = pd.date_range(start=start, periods=days * 24 * 60, freq=freq)
     n = len(idx)
     minute_of_day = idx.hour * 60 + idx.minute
@@ -211,9 +220,15 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
 
     irr_mask, clean_flag = generate_schedules(n, minute_of_day, days)
     daylight, env_data = simulate_environment(n, minute_of_day)
-    clog, blocked_ratio, cleaning_boost = simulate_degradation(
-        n, day_num, irr_mask, clean_flag
-    )
+    if degradation:
+        clog, blocked_ratio, cleaning_boost = simulate_degradation(
+            n, day_num, irr_mask, clean_flag
+        )
+    else:
+        # 순수 정상: 막힘 진행 없음. 나머지 물리(환경·센서 독립성·펌프 거동)는 동일.
+        clog = np.zeros(n, dtype=float)
+        blocked_ratio = np.zeros(n, dtype=float)
+        cleaning_boost = np.zeros(n, dtype=float)
 
     # 🚨 주야간 펌프 가동 여부
     pump_on = np.clip(irr_mask + clean_flag, 0, 1)
@@ -582,6 +597,23 @@ def save_data_and_metadata():
     print(f"📊 최종 데이터 형태(Shape): {export_df.shape} (50개 컬럼 + fe_ 파생변수)")
 
 
+def save_normal_training_set(days=90):
+    """AutoEncoder 학습용 '순수 정상' 데이터셋(clog-free)을 저장한다(docs/modeling/12 §6, B1).
+
+    - 환경 공공데이터 앵커·센서 독립성은 그대로, 막힘(clog)만 0 → AE가 정상 manifold만 학습.
+    - days=90으로 기존 캐노니컬(dabin, ~90일/129,599행)과 학습 데이터량을 맞춘다.
+    - 고장은 자연 노후가 아니라 fault_injection 프레임이 통제 주입하므로 학습셋엔 막힘이 없어야 한다.
+    - 출력: data/smartfarm_normal_train_v5.csv (train.py가 읽을 새 정본 학습 데이터).
+    """
+    df = generate_smartfarm_final_v5(days=days, degradation=False)
+    df = df.drop(columns=[c for c in df.columns if c.startswith("hidden_")])
+    path = OUTPUT_DIR / "smartfarm_normal_train_v5.csv"
+    df.to_csv(path, index=False, encoding="utf-8-sig")
+    print(f"✅ 정상 학습셋(clog-free, {days}일) 저장: {path}  shape={df.shape}")
+    return path
+
+
 # 스크립트 실행
 if __name__ == "__main__":
     save_data_and_metadata()
+    save_normal_training_set(days=90)
