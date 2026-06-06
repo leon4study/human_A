@@ -20,20 +20,19 @@
 - **Phase 1 측정도구** — `coupling_validate.py` baseline 검출지도(약점 발견: zone_drip이 motor고장 오탐, motor가 suction 진동 놓침).
 - 문서 가독성 재작성(어려운 docs 18개, 사실 보존 검증).
 
-## 코드 됨 / 재학습 후 활성 (Phase 3 대기)
-- **기동 regime band** (`STARTUP_MODE=gate|regime`, 기본 regime) — 통째게이트 대신 기동전용 band. 재학습으로 `threshold_startup` 생성돼야 실활성. ([modeling/03 §4-2](docs/modeling/03_threshold_methodology.md))
-- **도메인 격리** (`DOMAIN_ISOLATION=1`, 기본 OFF) — 피처선택에서 타 도메인 핵심센서 제외(zone_drip의 motor_temp 누설 차단). 재학습 ON/OFF를 coupling_validate로 비교. ([modeling/10 §3-6](docs/modeling/10_anomaly_signature_ledger.md))
-
-## 재학습 1회 완료 (2026-06-06, run `..144921..retrain-regime`, DOMAIN_ISOLATION=0)
-- 기동 band(threshold_startup) 4도메인 생성 → regime 활성. 정본 측정: lead-time 6/6·29.9h·정상 FAR 1.0%·**기동 FAR 0.0%**(regime 정상). 막힘률 baseline·AE 둘 다 0%, AE 우위는 FAR 5%→1%.
-- **버그 발견·수정(Phase H)**: motor가 `bearing_vibration_rms_mm_s`·`bearing_temperature_c`를 못 봄(model_cols 누락, zone_drip 토양센서와 동일 버그) → 진동기반 고장 깜깜이. preprocessing.model_cols에 추가함. **재학습 1회 더 필요**(motor에 진동 반영).
-- coupling_validate: zone_drip이 motor 베어링 고장에 여전히 오탐(isolation OFF) → `DOMAIN_ISOLATION=1` 재학습으로 검증 예정.
+## 정본 모델 (2026-06-06, run `..205644..retrain-fix-iso`, DOMAIN_ISOLATION=1 + 진동 fix)
+- **regime band 활성**(threshold_startup 4도메인) + **motor 진동 fix**(Phase H) + **도메인 격리**(Phase I).
+- 측정도구가 잡은 약점 2개 수정 후 재측정 — coupling_validate로 attribution 확인:
+  - bearing_wear: zone_drip 오탐 → **motor만**(격리로 motor_temp 누설 제거).
+  - suction: motor 놓침(0.08) → **hydraulic+motor**(진동 fix로 검출 회복).
+- lead-time 6/6·**35.9h**·기동 FAR 0.0%·정상 FAR 1.4%. 막힘률 baseline·AE 둘 다 0%.
+- **정직한 포트폴리오 발화**: "막힘률 10→2%"(미지지) 대신 **"단일센서 baseline과 동일 검출(6/6)하며 오탐 FAR 5%→1.4%(~3.6배↓), 평균 35.9h 전 사전감지."**
 
 ## 바로 다음 할 일 (우선순위)
-1. **재학습 다시**(사용자) — 위 motor 진동 fix 반영. 가능하면 `DOMAIN_ISOLATION=1`도 한 번 → zone_drip 누설·motor 진동 둘 다 검증. 이후 `coupling_validate`로 attribution.
-2. **로드맵 §4 운영지표** — 막힘률 측정 도구 완성([baseline_blockage_eval.py](fault_injection/baseline_blockage_eval.py)). 발화는 "막힘률 10→2%"가 아니라 **"동일 검출에서 FAR 5%→1%"**로 정직화 필요(또는 iso-FAR·미묘막힘 추가). [modeling/08 §2](docs/modeling/08_domain_metrics_validation.md).
-3. 포트폴리오 정직화 — "F1 0.95"를 검증 수치로 교체.
-4. hydraulic·nutrient 누락 센서(`hydraulic_power_kw`·`filter_delta_p_kpa`·`mix_temp_c`)도 같은 점검.
+1. **포트폴리오 정직화** — "F1 0.95"·"막힘률 10→2%"를 위 검증 발화(FAR 3.6배↓ / 35.9h 사전감지 / 진짜고장 vs 센서글리치 집중도 판별)로 교체. docs + jun_portfolio.
+2. (선택) iso ON/OFF 정량 F1 비교(evaluate_test_metrics) — 현재는 coupling_validate 검출지도로만 확인.
+3. hydraulic·nutrient 누락 센서(`hydraulic_power_kw`·`filter_delta_p_kpa`·`mix_temp_c`)도 같은 model_cols 점검.
+4. 격리 잔여: zone_drip union의 pressure_diff·flow_diff·rpm_stability_index(타 도메인 mandatory 아니라 미포착) 검토.
 
 ## 열린 이슈
 - **포트 불일치**: README §5(inference 9977/backend 8000/frontend 5173) ↔ docker-compose(8000/8080/frontend 없음). 사용자 확인 후 한쪽으로 정합.

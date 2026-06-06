@@ -169,7 +169,21 @@ Phase 2 #1 구현(2026-06-05): 위 약점 1(경계 누설)의 원인은 SHAP 피
 `DOMAIN_ISOLATION=1`이면 각 도메인 피처 선택에서 '다른 도메인의 핵심 센서(SENSOR_MANDATORY)'를
 후보에서 제외한다([train.py](../../src/train.py)·[feature_selection.py](../../src/feature_selection.py)).
 기본 OFF(동작 불변). A-3(피처 선택 변경이 전 도메인 F1 붕괴) 위험 지대라, 재학습 시 ON/OFF를
-coupling_validate로 비교해 회귀 없는지 확인한 뒤 도입한다. 약점 2(motor 진동 민감도)는 미구현.
+coupling_validate로 비교해 회귀 없는지 확인한 뒤 도입한다.
+
+약점 2(motor 진동 못 봄)의 진짜 원인은 민감도가 아니라 **진동 센서 자체가 model_cols 누락으로 잘려
+motor 피처에 없던 것**이었다(Phase H). model_cols에 추가해 수정.
+
+수정 후 재측정(2026-06-06, `DOMAIN_ISOLATION=1` + 진동 fix, run `..205644..retrain-fix-iso`):
+
+| 고장 | 수정 전(버그) | 수정 후 | 기대 |
+|---|---|---|---|
+| bearing_wear | motor + **zone_drip 오탐** | **motor만** | motor만 |
+| suction_blockage | hydraulic+nutrient+zone (**motor 놓침 0.08**) | **hydraulic+motor** | hydraulic+motor |
+
+두 수정이 각각 예측대로 동작 확인 — 진동 fix로 motor가 흡입 진동 검출 회복, 격리로 zone_drip의
+motor_temp 누설 오탐 제거(zone_drip 피처에서 motor_temperature_c 사라짐). lead-time 29.9h→35.9h,
+기동 FAR 0%, 정상 FAR 1.4%. 상세: MODEL_CHANGELOG Phase H·I.
 
 ## 4. 데이터 생성기 연동 (구현 위치)
 

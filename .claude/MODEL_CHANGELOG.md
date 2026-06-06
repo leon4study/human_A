@@ -667,3 +667,38 @@ raw 데이터에 `bearing_vibration_rms_mm_s`·`bearing_temperature_c`가 있는
 - motor 재학습 후 coupling_validate로 "흡입 막힘 진동 검출됨" 확인.
 - zone_drip 경계 누설은 `DOMAIN_ISOLATION=1` 재학습으로 검증(별도).
 - hydraulic(`hydraulic_power_kw`·`filter_delta_p_kpa`)·nutrient(`mix_temp_c`) 누락도 같은 점검 필요(status 열린이슈).
+
+## Phase I — motor 진동 fix + 도메인 격리 재학습: attribution 확인 (2026-06-06, 성공)
+
+### 가설
+(a) motor에 진동 센서를 살리면(Phase H fix) 흡입 막힘·베어링 등 진동 기반 고장을 잡고,
+(b) DOMAIN_ISOLATION=1로 타 도메인 핵심 센서를 후보에서 빼면 zone_drip의 motor_temp 누설 오탐이 사라진다.
+
+### 시도
+`DOMAIN_ISOLATION=1 PHASE=retrain-fix-iso python src/train.py`. run `2026-06-06_205644__996f8a3__retrain-fix-iso`.
+격리 작동(motor 24·hydraulic 22·nutrient 27·zone_drip 29개 제외). motor 피처에 bearing_vibration_rms_mm_s·
+bearing_temperature_c 주입 확인(이전 run의 "df_agg에 없음" 경고 사라짐). zone_drip 피처에서 motor_temperature_c 제거 확인.
+
+### 관측 (coupling_validate 검출지도 — 고정 오라클로 before/after 대조)
+| 고장 | 이전(regime, 버그) | 지금(fix-iso) | 기대 |
+|---|---|---|---|
+| clog_downstream | hydraulic+motor+nutrient+zone | hydraulic+motor+nutrient | 광역 |
+| bearing_wear | motor + **zone_drip(오탐)** | **motor만** | motor만 |
+| suction_blockage | hydraulic+nutrient+zone (**motor 0.08 놓침**) | **hydraulic+motor** | hydraulic+motor |
+| nutrient_imbalance | nutrient | nutrient | nutrient |
+- lead-time 29.9h→**35.9h**(진동 fix로 더 일찍), 기동 FAR 0.0%, 정상 FAR 1.0%→1.4%.
+- 막힘률: baseline·AE 둘 다 0%(심한 막힘). AE FAR 1.4% vs baseline 5.0%(~3.6배 낮음), lead-time 35.9h vs 38.1h(근접).
+
+### 진단 / 교훈
+두 수정이 **각각 예측한 효과를 정확히** 냈다. 진동 fix → motor가 suction 진동(+45%) 검출 회복(0.08→발화),
+격리 → bearing_wear의 zone_drip 오탐·suction의 nutrient/zone 오탐 제거. "측정 도구(coupling_validate)를 먼저
+만들고 그 고정 오라클로 변경을 잰다"는 방법론이 결함 발견(Phase H)→수정→재측정 confirm으로 한 바퀴 돌았다.
+
+### 수정 (확정 채택)
+DOMAIN_ISOLATION=1 + 진동 fix 모델을 정본으로. 포트폴리오 발화: "막힘률 10→2%"(미지지) 대신
+"단일센서 baseline과 동일 검출(6/6)하며 오탐(FAR) 5%→1.4%(~3.6배↓), 평균 35.9h 전 사전감지."
+
+### 남은 과제
+- 격리 잔여: zone_drip union에 pressure_diff·flow_diff·rpm_stability_index 잔존(타 도메인 mandatory가 아니라 격리 미포착). 필요 시 도메인 sensor 네임스페이스로 확장.
+- hydraulic(`hydraulic_power_kw`·`filter_delta_p_kpa`)·nutrient(`mix_temp_c`) 누락 센서 점검(같은 model_cols 패턴).
+- iso ON/OFF 정량 F1 비교는 evaluate_test_metrics로 별도(현재는 coupling_validate 검출지도로 확인).
