@@ -256,12 +256,12 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
     discharge_pressure += np.random.normal(0, 0.5 + 3.0 * clog, n) * pump_on
     discharge_pressure = np.clip(discharge_pressure, 0, None)
 
-    # 흡입압: 이전엔 토출압과 똑같이 clog만의 함수라 corr~1.00(artifact)이었다. 흡입측은 실제로
-    #   원수 수위·흡입 스트레이너 상태 등 토출측과 무관한 고유 변동을 가진다. 그 독립 성분을 더해
-    #   토출압과의 인위적 완전상관을 깬다(목표 corr 0.6~0.8). seed_offset=1 (센서 고유 난수열).
-    suction_inlet_indep = ar1_process(n, sigma=0.11, phi=0.99, seed_offset=1)
+    # 흡입압: 앞서 독립 노이즈를 과하게 주입해 토출압과 corr -0.02(같은 펌프인데 무상관 = 비물리적)로
+    #   만든 것을 되돌린다. 흡입·토출은 같은 펌프가 구동하므로 물리적으로 상관돼야 정상이다.
+    #   고장 신호(흡입 막힘)는 둘의 '관계 변화(divergence)'로 잡으며, 이는 관계 판별 피처가 담당한다
+    #   (docs/modeling/12 — 상관 낮추기가 아니라 관계 피처로 구분). 따라서 원래 물리식으로 복원.
     suction_pressure = (
-        -10.5 - 0.7 * irr_mask - 1.5 * clog + suction_inlet_indep
+        -10.5 - 0.7 * irr_mask - 1.5 * clog
     ) * pump_on + np.random.normal(0, 0.1, n) * pump_on
 
     # 전기 및 진동 (펌프 가동 여부에 연동)
@@ -280,13 +280,14 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
         0, 3, n
     ) * pump_on
 
-    # 진동: 가장 심한 artifact였다 — 이전엔 clog만의 함수라 토출압과 corr 1.00(기계 진동이 수력 압력과
-    #   완전상관일 수 없다). 실제 베어링 진동은 마모·정렬불량 등 압력과 무관한 '베어링 상태'가 서서히
-    #   변하며 결정한다. 그 독립 성분(random-walk에 가까운 AR(1))을 더해 압력과의 상관을 0.1~0.3으로
-    #   낮춘다. seed_offset=2. (clog 기여는 cavitation 동반 진동으로 남기되 비중을 낮춤.)
+    # 진동: 두 성분으로 구성한다. (1) 배관 막힘과 무관한 '베어링 상태'의 독립 변동(마모·정렬불량,
+    #   AR(1)) — 이건 진짜 독립 물리라 유지한다. (2) clog/cavitation 동반 진동(원래 계수 0.8·0.9 복원).
+    #   정상 운전(clog=0)에선 독립 성분만 작용해 압력과 무상관(게이트 통과)이고, 막힘이 진행되면 압력과
+    #   '함께' 오르는데 이는 실제 물리(막힘→cavitation→진동↑)라 올바른 고장 시그니처다.
+    #   앞서 노이즈 접근으로 clog 비중을 0.4로 줄였던 것은 과교정이라 0.8·0.9로 되돌린다. seed_offset=2.
     bearing_condition_indep = ar1_process(n, sigma=0.035, phi=0.99, seed_offset=2)
     bearing_vibration_rms = (
-        1.18 + 0.18 * irr_mask + 0.4 * clog + 0.4 * blocked_ratio + bearing_condition_indep
+        1.18 + 0.18 * irr_mask + 0.8 * clog + 0.9 * blocked_ratio + bearing_condition_indep
     ) * pump_on + np.random.normal(0, 0.02, n) * pump_on
     vibration_high_freq = (
         0.25 + 0.05 * irr_mask + 1.2 * clog
