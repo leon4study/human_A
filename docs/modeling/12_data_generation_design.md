@@ -71,13 +71,22 @@ s(t) = baseline(환경·setpoint)  +  Σ_k w_k · driver_k(t)  +  u_s(t)  +  ε_
 
 ---
 
-## 3. 독립성 게이트 (데이터 품질 자동 검증)
+## 3. 데이터 품질 게이트 (목적 재정의 — 2026-06-07)
 
-생성 후 상관행렬을 검사하는 규칙. 재현성 검증처럼 **데이터에도 거는 품질 게이트**다.
+**중요 교정**: 게이트의 목적은 "상관을 0으로 낮추기"가 **아니다**. 물리적으로 엮인 센서(같은 펌프가
+미는 흡입·토출)는 엮인 채로 두고, 인위적 완전상관(데이터 생성식이 한 변수로만 만들어 생긴 ~1.00)만
+없앤다. 고장 구분력은 상관을 죽여서가 아니라 **§7 관계 판별 피처**로 확보한다.
 
-- **하드 천장**: 동어반복(파생=입력의 함수)이 아닌 **raw 센서 쌍의 |corr| ≤ 0.85**(전처리 필터 컷과 동일).
-  넘으면 artifact로 게이트 실패 → 해당 센서 고유성분 분산을 키워 재생성.
-- **쌍별 물리 목표**(천장보다 여유 있게):
+따라서 게이트는 두 조건을 본다.
+1. **인위적 완전상관 없음**: 동어반복(파생=입력의 함수)이 아닌 raw 센서 쌍의 |corr| ≤ **0.85**
+   (전처리 다중공선성 필터 컷과 동일 — 통상 0.8~0.9를 강한 상관으로 보는 통념과도 일치).
+   단, **물리적으로 타당한 상관은 억지로 0까지 끌어내리지 않는다**(과교정 금지).
+2. **도메인별 직교 판별피처 ≥ 3개**: 각 AE가 다른 센서와 중복이 아닌, 고장을 구분하는 피처를
+   최소 3개 갖는다(§7). 컬럼을 노이즈로 늘리는 게 아니라 관계 피처로 채운다.
+
+- 천장(0.85)을 넘으면 artifact로 실패 → 해당 센서에 **진짜 독립 물리**가 있으면 고유성분으로 분해,
+  아니면 그대로 두고 한쪽을 관계 피처로 대체.
+- **쌍별 물리 목표**(참고용 — 천장보다 여유 있게, 0으로 만들지 말 것):
 
 | 쌍 유형 | 예 | 목표 corr |
 |---|---|---|
@@ -123,3 +132,35 @@ s(t) = baseline(환경·setpoint)  +  Σ_k w_k · driver_k(t)  +  u_s(t)  +  ε_
 6. MODEL_CHANGELOG에 변천 기록(가설→시도→관측→진단→수정).
 
 > 검증 상태 리셋 주의: 이 작업 후 Phase I까지의 모든 수치(lead-time 35.9h 등)는 새 데이터 기준으로 재측정해야 한다.
+---
+
+## 7. 관계 판별 피처 카탈로그 (고장 구분력의 진짜 레버)
+
+원칙: 고장 신호는 raw 센서보다 **센서 간 관계**에 있다. 평소 함께 움직이던 값들이 특정 고장에서
+어긋나는(diverge) 그 패턴을 피처로 만든다. 이 피처들은 (a) 물리적 고장 메커니즘을 직격하고,
+(b) 운전점에 무관하게 정규화돼 있으며, (c) 원 센서와 직교 정보라 다중공선성 필터를 통과한다.
+
+데이터가 현실화(센서별 독립 성분)되면 이 피처들이 비로소 **판별력**을 갖는다. 예: 진동에 독립 베어링
+마모 성분이 생겼으므로 `vibration_per_load`(진동/부하)가 상수가 아니라 베어링 상태를 드러낸다.
+
+| 도메인 | 피처 | 공식 | 잡는 고장 | 상태 |
+|---|---|---|---|---|
+| hydraulic | `system_resistance` | discharge_pressure / flow² | 하류 막힘(운전점 무관) | 구현됨 |
+| hydraulic | `specific_energy` | motor_power / flow | 막힘·노후(단위유량당 전력↑) | 구현됨 |
+| hydraulic | `pressure_divergence` | discharge − suction (정상 대비) | 흡입 막힘(둘이 벌어짐) | **신규** |
+| hydraulic | `flow_demand_residual` | actual_flow − 기대유량(VPD·광량 기반) | "이 날씨면 이만큼 나가야" 대비 부족 | **신규** |
+| motor | `vibration_per_load` | bearing_vibration / motor_power | 베어링 마모(부하 무관 진동↑) | **신규(데이터 현실화로 의미 생김)** |
+| motor | `bearing_thermal_margin` | bearing_temp − motor_temp | 베어링 과열(공통 환경 제거) | 구현됨 |
+| motor | `load_per_speed` | motor_current / pump_rpm | 과부하·기계 마찰 | 구현됨 |
+| nutrient | `leaching_ratio` | drain_ec / mix_ec | 염류 축적(배액>공급, 공공데이터 근거) | **신규(drain_ec 독립화로 의미 생김)** |
+| nutrient | `ec_control_error` | mix_ec − mix_target_ec | 도징·배합 오류 | **신규** |
+| zone_drip | `zone_ec_variance`/`zone_moisture_variance` | std(zone1/2/3) | 국부 노즐 막힘(구역 편차) | 구현됨 |
+| zone_drip | `irrigation_response_eff` | Δmoisture / zone_flow | 노즐 막힘(물 줘도 수분 안 오름) | **신규** |
+| zone_drip | `substrate_ec_accum_rate` | d(zone1_substrate_ec)/dt | 염해 진행 | 구현됨 |
+
+신규 우선순위: `vibration_per_load`(베어링·공동현상 직격, 데이터 현실화 효과 검증), `leaching_ratio`,
+`flow_demand_residual`, `pressure_divergence`. 구현 위치: [preprocessing.py create_modeling_features](../../src/preprocessing.py).
+각 피처는 09 원장에 근거와 함께 기록([09](09_feature_rationale_ledger.md)).
+
+검증: 단순 상관 낮추기가 아니라 — 주입한 각 고장(fault_signatures)에서 해당 관계 피처가 실제로
+튀는지(coupling_validate에 per-feature 반응 확인)로 "판별력"을 검증한다.
