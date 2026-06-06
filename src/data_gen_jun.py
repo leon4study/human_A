@@ -9,30 +9,69 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ==========================================
-# 1. 환경 변수 시뮬레이션
+# 0. 센서 고유 독립 성분 헬퍼 (독립성 게이트 — docs/modeling/12)
+# ==========================================
+def ar1_process(n, sigma, phi=0.995, seed_offset=0):
+    """
+    센서마다 '그 센서만의 느린 독립 변동'을 만드는 1차 자기회귀(AR(1)) 과정.
+
+    [왜 필요한가] 현재 데이터는 거의 모든 센서를 막힘강도(clog) 한 변수의 결정적 함수로 만들어,
+    물리적으로 독립이어야 할 센서들(예: 진동 vs 압력)이 상관계수 ~1.00이 된다. 그러면 전처리의
+    다중공선성 필터(corr>0.85)가 "중복"으로 제거해 학습 피처가 빈약해진다. 이 함수가 만드는
+    '공유 드라이버와 무관한 고유 성분'을 각 센서에 더하면 그 인위적 상관이 깨진다(docs/modeling/12 §2-3).
+
+    [수식] u[t] = phi*u[t-1] + e[t],  e ~ N(0, sigma).
+      - phi(0~1): 1에 가까울수록 천천히 떠도는(random-walk에 가까운) 저주파 변동. 베어링 상태·센서
+        드리프트처럼 서서히 변하는 물리량을 모사한다.
+      - sigma: 고유 성분의 크기. 이 값을 키우면 다른 센서와의 상관이 내려간다(목표 상관 조절 손잡이).
+
+    [재현성] 전역 np.random.seed와 별개로 default_rng(seed_offset)로 센서마다 독립 난수열을 쓴다.
+      seed_offset을 센서별로 다르게 주어야 두 센서의 고유 성분이 서로 독립이 된다.
+    """
+    rng = np.random.default_rng(42 + seed_offset)
+    e = rng.normal(0.0, sigma, n)        # 매 시점 새로 들어오는 충격(innovation)
+    u = np.zeros(n)
+    for t in range(1, n):
+        u[t] = phi * u[t - 1] + e[t]     # 직전 값을 phi만큼 이어받아 '느린' 변동을 만든다
+    return u
+
+
+# ==========================================
+# 1. 환경 변수 시뮬레이션 (Layer 0 — 공공데이터 딸기 앵커, docs/modeling/12 §0)
 # ==========================================
 def simulate_environment(n, minute_of_day):
+    # daylight: 0(밤)~1(한낮)로 부드럽게 오르내리는 일주기. 오전 6시(360분) 기준 sin의 양수부만 사용.
     daylight = np.clip(
         np.sin(2 * np.pi * (minute_of_day - 360) / 1440), 0, None
     ).astype(float)
 
+    # 기온: 공공데이터 딸기 개화·착과기 기준 — 주간 20~25℃ / 야간 7~10℃(야간 냉각).
+    #   밤(daylight=0) ≈ 9℃, 한낮(daylight=1) ≈ 22.5℃ 가 되도록 baseline 9 + 진폭 13.5.
+    #   (이전 값 21 + 7*daylight 는 야간 21℃로 딸기 야간(7~10℃)과 크게 어긋났음 → 공공데이터로 교정.)
     air_temp_c = (
-        21
-        + 7.0 * daylight
-        + 1.2 * np.sin(2 * np.pi * minute_of_day / 1440 + 0.8)
+        9.0
+        + 13.5 * daylight
+        + 0.8 * np.sin(2 * np.pi * minute_of_day / 1440 + 0.8)
         + np.random.normal(0, 0.35, n)
     )
+    # 습도: 공공데이터 — 낮 60~70% / 밤 70~85%. 낮(daylight=1) ≈ 65%, 밤 ≈ 78%.
     relative_humidity_pct = np.clip(
         78
-        - 17 * daylight
+        - 13 * daylight
         + 2.2 * np.sin(2 * np.pi * minute_of_day / 1440 + 2.0)
         + np.random.normal(0, 1.0, n),
-        45,
-        95,
+        55,
+        90,
     )
-    co2_ppm = np.clip(760 - 80 * daylight + np.random.normal(0, 12, n), 500, 1000)
+    # CO2: 공공데이터 스마트팜 권장 800~1200 ppm. 밤엔 호흡으로 축적되어 높고(≈1150), 낮엔 광합성
+    #   소비로 낮아짐(≈870). (이전 760 baseline은 권장 하한 800에도 못 미쳤음 → 교정.)
+    co2_ppm = np.clip(
+        1150 - 280 * daylight + np.random.normal(0, 15, n), 800, 1200
+    )
+    # 광량(PPFD): 공공데이터 권장 200~400 μmol/m²/s(일조 10~14h). 한낮 피크 ≈ 360.
+    #   (이전 40 + 670*daylight 는 피크 710으로 권장(200~400)을 크게 초과 → 교정.)
     light_ppfd_umol_m2_s = np.clip(
-        40 + 670 * daylight + np.random.normal(0, 18, n), 0, None
+        360 * daylight + np.random.normal(0, 15, n), 0, 420
     )
 
     return daylight, {
