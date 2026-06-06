@@ -363,3 +363,6 @@ notion_page/
 # docs/adr ADR 문서(0001-..., 0002-...)도 동일 사유로 추적 예외
 !docs/adr/
 !docs/adr/*.md
+
+# 개인 인수인계 메모(개인 생각·작업 포함) — 추적 안 함
+handoff.md
