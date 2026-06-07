@@ -18,7 +18,7 @@ import pandas as pd
 from inject import inject_fault
 
 PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLEAN_CSV = os.path.join(PROJECT, "data", "generated_data_from_dabin_0420.csv")
+CLEAN_CSV = os.path.join(PROJECT, "data", "smartfarm_normal_train_v5.csv")
 OUT_CSV = os.path.join(PROJECT, "data", "faulty_testset_v1.csv")
 
 
@@ -27,7 +27,7 @@ def build(
     out_csv: str = OUT_CSV,
     n_faults: int = 6,
     modes: tuple = ("hydraulic_clog_downstream",),
-    baseline_rows: int = 43200,   # 월1(정상) 30일 = 깨끗한 베이스라인
+    baseline_rows: int = 43200,   # clean 90일셋(jun)의 앞 30일 = 깨끗한 베이스라인
     seed: int = 42,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)

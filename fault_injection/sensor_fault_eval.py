@@ -43,12 +43,12 @@ from sensor_faults import apply_sensor_fault                 # noqa: E402
 #   MODELS_DIR=services/inference/models python startup_strategy_eval.py
 # (docs/modeling/11 §6 — 모델 두 곳 갈림 문제 해소)
 MODELS_DIR = os.environ.get("MODELS_DIR", os.path.join(PROJECT, "models"))
-CLEAN_CSV = os.path.join(PROJECT, "data", "generated_data_from_dabin_0420.csv")
+CLEAN_CSV = os.path.join(PROJECT, "data", "smartfarm_normal_train_v5.csv")
 FAULTY_CSV = os.path.join(PROJECT, "data", "faulty_testset_v1.csv")
 
 DOMAIN = "hydraulic"                 # 실제 막힘 대비군이 있는 도메인
 TARGET_SENSOR = "discharge_pressure_kpa"   # 단일 센서 결함 타깃
-BASELINE_ROWS = 43200               # 월1(정상) 30일
+BASELINE_ROWS = 43200               # clean 90일셋의 앞 30일
 FAULT_START = 20000                 # 결함 주입 시작 행(데이터 중반, 단일 지점)
 FAULT_LEN = 1440                    # 24시간 지속(10분 윈도우 ~144개)
 

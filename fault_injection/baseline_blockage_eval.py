@@ -38,9 +38,9 @@ sys.path.insert(0, SRC)
 from preprocessing import step1_prepare_window_data          # noqa: E402  (윈도우 집계 = 학습/추론과 동일 파이프라인)
 from evaluate_test_metrics import run_inference              # noqa: E402  (AE 추론 = 운영과 동일 경로, PROJECT_ROOT/models 사용)
 
-CLEAN_CSV = os.path.join(PROJECT, "data", "generated_data_from_dabin_0420.csv")  # 정상(월1) 데이터 = baseline의 '정상 분포' 기준
+CLEAN_CSV = os.path.join(PROJECT, "data", "smartfarm_normal_train_v5.csv")  # clog-free 정상 데이터 = baseline의 '정상 분포' 기준
 FAULTY_CSV = os.path.join(PROJECT, "data", "faulty_testset_v1.csv")             # 막힘 6건이 주입된 라벨 testset
-BASELINE_ROWS = 43200   # 월1(30일×1440분) 정상 구간만 사용해 평균·표준편차 산출
+BASELINE_ROWS = 43200   # clean 90일셋의 앞 30일(30×1440분)만 사용해 평균·표준편차 산출
 Z_CUT = 3.0             # 단일 센서 baseline의 민감도: |z|>3 (정상에서 매우 드문 값)이면 이상으로 본다
 
 # 단일 센서 baseline이 감시할 '물리 센서' 목록. 시간/상태 컨텍스트나 라벨은 넣지 않는다
@@ -65,7 +65,7 @@ def window(df_raw):
 
 def main():
     # ── 1) 정상 분포(평균 mu·표준편차 sd) 학습 — baseline의 z-score 기준선 ──────────────
-    #    "정상일 때 각 센서가 보통 어느 범위인가"를 월1 정상 데이터에서 구한다.
+    #    "정상일 때 각 센서가 보통 어느 범위인가"를 clog-free 정상 데이터에서 구한다.
     clean = pd.read_csv(CLEAN_CSV, nrows=BASELINE_ROWS)
     clean["timestamp"] = pd.to_datetime(clean["timestamp"])
     clean = clean.set_index("timestamp")

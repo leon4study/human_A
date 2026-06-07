@@ -30,7 +30,7 @@ from evaluate_test_metrics import run_inference          # noqa: E402
 from inject import inject_fault                           # noqa: E402
 from fault_signatures import FAULT_SIGNATURES             # noqa: E402
 
-CLEAN_CSV = os.path.join(PROJECT, "data", "generated_data_from_dabin_0420.csv")
+CLEAN_CSV = os.path.join(PROJECT, "data", "smartfarm_normal_train_v5.csv")
 BASELINE_ROWS = 43200
 START = 20000
 RAMP = 1440      # 24h 누적
