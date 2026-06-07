@@ -250,6 +250,50 @@ mse_scores = np.mean(sq_err[:, scoring_mask], axis=1)
 
 > [train.py:101-119](../services/inference/src/train.py#L101-L119), [inference_core.DEFAULT_CONTEXT_FEATURES](../services/inference/src/inference_core.py)
 
+#### 5-2-1. 일반화 — 조건부/마스크 재구성 AE (입력은 넓게, 채점은 좁게)
+
+위 `scoring_mask`는 사실 하나의 일반 원리의 특수 사례다. 우리 AE는 **모든 입력 피처를
+받아 모두 재구성**하지만(대칭 구조, `input_dim = 전체 피처 수`), 알람을 띄우는 **이상 점수는
+선택된 일부 피처의 재구성오차 평균만으로** 낸다(`sq_err[:, scoring_mask]`). 즉 **입력은 넓게
+(인코더가 모든 상관을 활용), 채점은 좁게(그 도메인이 책임지는 신호만 알람 트리거)** 하는
+구조다. 문헌에서 말하는 조건부 이상탐지(condition 변수로 모델을 조건짓되, 채점은 지표
+변수에만)와 같은 발상이다.
+
+핵심: 어떤 피처를 채점에서 빼도 **그 피처는 인코더 입력에 그대로 남는다**. "제거"가 아니라
+"그 자체의 재구성오차로는 이 도메인 알람을 못 띄우게 채점에서만 빼는 것". 따라서 교차도메인
+상관(SHAP이 큰 영향이라 지목한 신호)을 **버리지 않고 보존**하면서, 그 피처가 노이즈로 튈 때
+헛알람만 막는다. 입력(피처 선택)을 안 바꾸므로 피처선택 재설계가 부르는 회귀 위험(A-3)도 없다.
+
+빼는 대상은 두 부류로 나뉜다.
+
+1. **시간·상태 컨텍스트** (구현됨) — `DEFAULT_CONTEXT_FEATURES`(time_sin/cos·pump_on·
+   minutes_since_startup 등). 정상 패턴을 조건짓지만 액션 불가라 채점·RCA에서 제외.
+2. **교차도메인 외래 피처** (후보, 미구현) — 다른 도메인이 소유한 신호가 SHAP으로 한 도메인에
+   섞여 들어온 경우(예: motor 입력에 들어온 수력 `pressure_diff`·`flow_diff`). 인코더엔 남겨
+   교차상관을 쓰되, 이 도메인 채점에서는 빼서 헛알람을 막는다. `actionable_feature_mask(features,
+   exclude=...)`가 도메인별 `exclude` 집합을 이미 받으므로, `exclude = 기본 컨텍스트 ∪ 그
+   도메인엔 외래인 피처`를 넘기면 된다. train이 결과를 `config["scoring_features"]`에 저장하고
+   추론이 그 목록을 읽으므로 train/serve가 자동 일치한다.
+
+**내부 선례(왜 이게 통하는지 우리 데이터로 이미 확인)**: Phase B(2026-04-20). 시간 컨텍스트를
+입력에 주입하니 정상 패턴 학습 이득은 얻었으나, MSE가 전체 피처 평균이라 `time_cos` 하나의
+복원오차(실센서의 10~50배)가 threshold를 넘겨 **실센서가 멀쩡한데 알람 + RCA Top1이 time_cos**
+인 사태가 났다. 채점 제외로 해결. motor의 `pressure_diff`(Phase J 오탐 기여 25%) 문제는 **한
+단계 위 같은 패턴**(컨텍스트가 아니라 외래 도메인 피처일 뿐)이라, 같은 처방이 그대로 적용된다.
+상세: MODEL_CHANGELOG Phase B·J.
+
+**외부 근거(개념 계보)**: 이 분리는 새 발명이 아니라 이상탐지의 표준 구분이다.
+- Song, Wu, Jermaine, Ranka, "Conditional Anomaly Detection," IEEE TKDE 2007 — 속성을
+  **environmental/contextual(조건)** 과 **indicator(채점)** 로 나누고, 컨텍스트 속성에서 이상을
+  채점하면 오탐이 는다고 본다. 우리 `scoring_mask`와 정확히 같은 골격.
+- Chandola, Banerjee, Kumar, "Anomaly Detection: A Survey," ACM Computing Surveys 2009 —
+  contextual attributes vs behavioral attributes 정식화.
+- Sohn, Lee, Yan, "Conditional VAE," NeurIPS 2015 — 재구성을 covariate로 조건짓는 생성모델.
+- (포트폴리오에 인용 시 원문 재확인 권장. 우리의 1차 증거는 Phase B 내부 A/B 측정.)
+
+**상태**: 부류 2(교차도메인 마스크)는 Phase J의 motor FAR 회귀(6.3%) 수정 후보로 검토 중이며,
+구현·재측정 전이다. 도입 시 coupling_validate(고정 오라클)로 검출·attribution 회귀 점검 필수.
+
 ### 5-3. 피처별 threshold (per-feature)
 도메인 전체 MSE와 별도로, **각 피처마다 독립 임계치**도 계산해 RCA에서 "어느 센서가 얼마나 튀었는지" 정량 판단:
 
