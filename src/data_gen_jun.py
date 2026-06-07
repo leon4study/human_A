@@ -4,7 +4,7 @@ from pathlib import Path
 
 # 난수 고정 및 출력 경로 설정
 np.random.seed(42)
-OUTPUT_DIR = Path("../data")  # 필요에 따라 경로 수정
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data"  # <project_root>/data — cwd 무관(이식성). 이전 "../data"는 실행 위치에 따라 엉뚱한 곳에 저장됐다.
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
