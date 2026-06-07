@@ -14,9 +14,9 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 # 우리가 만들어둔 '메인 셰프(파이프라인 매니저)' 모듈 불러오기
-from feature_engineering import SENSOR_MANDATORY, VIP_FEATURES, inject_vip_features
+from feature_engineering import SENSOR_MANDATORY, VIP_FEATURES, inject_vip_features, foreign_scoring_features
 from feature_selection import run_feature_selection_experiment
-from inference_core import actionable_feature_mask, build_target_reference_profiles
+from inference_core import actionable_feature_mask, build_target_reference_profiles, DEFAULT_CONTEXT_FEATURES
 from logger import get_logger
 from math_utils import calculate_sigma_thresholds
 from model_builder import build_autoencoder
@@ -140,7 +140,14 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
     # threshold를 세운다. 그래야 RCA(같은 제외 셋)와 같은 피처에 대해 판정/설명이
     # 일관된다. (inference_core.DEFAULT_CONTEXT_FEATURES 단일 소스)
     feature_cols = X_train_ae.columns.tolist()
-    scoring_mask = actionable_feature_mask(feature_cols)
+    # 채점 제외 = (시간·상태 컨텍스트) ∪ (이 도메인엔 외래인 피처: 타 도메인 소유 파생·환경 컨텍스트).
+    #   외래 피처는 인코더 입력엔 남고 채점에서만 빠진다(조건부 마스크, MODELING §5-2-1·
+    #   feature_engineering.foreign_scoring_features). 교차상관은 보존하되 헛알람만 막는다.
+    _foreign = foreign_scoring_features(model_name, feature_cols)
+    _exclude = set(DEFAULT_CONTEXT_FEATURES) | _foreign
+    scoring_mask = actionable_feature_mask(feature_cols, exclude=_exclude)
+    if _foreign:
+        logger.info(f"  ▶ 외래 피처 채점 제외({model_name}): {sorted(_foreign)}")
     if scoring_mask.sum() == 0:
         logger.warning(
             "⚠️ 모든 피처가 컨텍스트로 제외되어 scoring_mask가 비어있습니다. "

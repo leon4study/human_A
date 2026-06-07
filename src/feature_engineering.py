@@ -107,6 +107,53 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
 }
 
 
+# ── 자유 파생피처의 도메인 소유권 + 도메인별 채점 제외(조건부 마스크) ──────────
+# [배경] 각 도메인 AutoEncoder는 '입력은 넓게(인코더가 교차상관 활용), 채점은 좁게(그 도메인이
+#   책임지는 신호만 알람 트리거)' 구조다(MODELING §5-2-1, 근거: Conditional Anomaly Detection).
+#   시간·상태 컨텍스트는 inference_core.DEFAULT_CONTEXT_FEATURES로 이미 채점에서 빠진다.
+# [문제] pressure_diff·flow_diff처럼 '어느 SENSOR_MANDATORY에도 안 잡힌 자유 파생피처'는
+#   소유 도메인이 없어, SHAP이 엉뚱한 도메인(예: motor)에 배정하면 그 도메인 채점을 오염시켜
+#   헛알람(FAR↑)을 낸다. DOMAIN_ISOLATION은 mandatory 원천센서만 막아 이들을 못 막는다.
+# [해법] 자유 파생피처에 소유 도메인을 명시하고, 소유가 아닌 도메인에서는 '입력 유지 + 채점 제외'.
+#   (제거가 아니라 채점 마스크에서만 빼므로 인코더가 쓰는 교차상관 신호는 보존된다.)
+DERIVED_FEATURE_OWNER: dict[str, str] = {
+    "pressure_diff": "hydraulic",   # 토출-흡입 차압 = 수력 도메인 물리량
+    "flow_diff": "hydraulic",       # 유량 차분 = 수력 도메인 물리량
+}
+
+# 환경 컨텍스트(전 도메인 입력 전용): 계절성 외생 드리프트라 '어느 서브시스템의 고장 지표'도 아니다.
+# 입력으로 조건짓되 채점에서는 빼 헛알람을 막는다(시간·상태 컨텍스트와 같은 취급).
+ENVIRONMENT_CONTEXT: frozenset = frozenset({"air_temp_c"})
+
+
+def _feature_owner_map() -> dict:
+    """피처 -> 소유 도메인 맵. SENSOR_MANDATORY(도메인별 원천센서) ∪ DERIVED_FEATURE_OWNER(자유 파생)."""
+    owner: dict = dict(DERIVED_FEATURE_OWNER)
+    for dom, feats in SENSOR_MANDATORY.items():
+        for f in feats:
+            owner.setdefault(f, dom)
+    return owner
+
+
+def foreign_scoring_features(domain: str, features) -> set:
+    """`domain`의 피처 목록 중, 이 도메인 채점(MSE 점수)에서 빼야 할 '외래' 피처 집합을 반환.
+
+    제외 대상:
+      - 환경 컨텍스트(ENVIRONMENT_CONTEXT): 어느 도메인 채점에도 부적합한 외생 드리프트.
+      - 타 도메인 소유 피처: 소유가 명시됐는데 이 도메인이 아닌 경우(예: motor에 섞인 hydraulic pressure_diff).
+    건드리지 않는 것: 이 도메인 소유 피처, 그리고 소유가 명시되지 않은 공용 파생피처(보수적 유지).
+    반환된 피처는 '입력에는 남고 채점에서만' 빠진다(조건부 마스크).
+    """
+    owner = _feature_owner_map()
+    foreign = set()
+    for f in features:
+        if f in ENVIRONMENT_CONTEXT:
+            foreign.add(f)
+        elif owner.get(f, domain) != domain:   # 소유가 명시됐고(맵에 있고) 내 도메인이 아니면 외래
+            foreign.add(f)
+    return foreign
+
+
 def inject_vip_features(
     X_train_ae: pd.DataFrame,
     df_interpret: pd.DataFrame,
