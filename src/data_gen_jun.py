@@ -361,6 +361,35 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
         pump_on,
     )
 
+    # ── [C1 Na 축적 + C2 EC→삼투→흡수] 순환식 양액 화학 충실성 (ledger §3-3) ──────────────
+    #   C1: 닫힌 순환계에서 Na+는 식물이 물을 Na보다 빨리 흡수해 순환액에 농축된다(딸기는 Na 거의
+    #       비흡수). 단순 질량수지 = 분당 미세 누적 + 주기적 배액 교체(1~2주)로 리셋되는 톱니파.
+    #       딸기 염류 임계 1.5 mmol/L(35ppm). 출처: Neocleous 2017 J.Plant Nutr.; WUR edepot 403810.
+    #   C2: Na 축적이 EC를 올리고(이온 전도 ~0.1 dS/m per mmol/L), 높은 EC는 삼투 포텐셜을 낮춰
+    #       (Ψ=-0.036·EC, US Salinity Lab Handbook 60) 수분이 있어도 흡수를 막는다('수분 정상인데
+    #       흡수↓' 디커플). 흡수 억제는 Na>0.8 mmol/L부터, 억제분은 배지 수분↑·EC↑로 관측된다.
+    NA_REFRESH_DAYS = 12          # 순환액 배액 교체 주기(원예 관행 1~2주)
+    NA_PEAK, NA_BASE = 1.45, 0.15  # 교체 직전 도달치(임계 1.5 바로 아래) / 교체 직후 잔류
+    _na_phase = np.arange(n) % (NA_REFRESH_DAYS * 1440)           # 교체 후 경과 분
+    na_accumulation = (
+        NA_BASE + (NA_PEAK - NA_BASE) * (_na_phase / (NA_REFRESH_DAYS * 1440))
+        + np.random.normal(0, 0.01, n)
+    )
+    ec_from_na = 0.10 * (na_accumulation - NA_BASE)              # EC 상승분(dS/m)
+    uptake_suppress = np.clip(0.18 * (na_accumulation - 0.8), 0.0, 0.35)  # 0~35% 흡수 억제
+    # mix EC(Na 반영) + 삼투 포텐셜(파생). dict에서 재사용.
+    mix_ec_arr = (
+        1.80 + 0.02 * np.sin(2 * np.pi * minute_of_day / 1440)
+        + 0.025 * clog + ec_from_na + np.random.normal(0, 0.012, n)
+    )
+    osmotic_potential_mpa = -0.036 * mix_ec_arr                  # Ψ=-0.036·EC (Handbook 60)
+    # [C2] 흡수 억제를 배지에 후처리 반영(zone 함수 시그니처 불변): 흡수↓ → 물 남음·양분 축적.
+    for _z in (1, 2, 3):
+        zone_data[f"zone{_z}_substrate_moisture_pct"] = np.round(
+            zone_data[f"zone{_z}_substrate_moisture_pct"] + 6.0 * uptake_suppress, 2)
+        zone_data[f"zone{_z}_substrate_ec_ds_m"] = np.round(
+            zone_data[f"zone{_z}_substrate_ec_ds_m"] + 0.5 * uptake_suppress, 3)
+
     # 🚨 정답지(Risk Stage) 계산 - 펌프 꺼짐(유량0)에도 상태가 유지되도록 delivery_eff 사용
     risk_score = 0.35 * clog + 0.35 * blocked_ratio + 0.30 * (1.0 - delivery_eff)
     risk_stage = np.where(
@@ -411,13 +440,9 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
             1.9 + 0.22 * irr_mask + 0.5 * clog + np.random.normal(0, 0.07, n), 3
         ),
         "mix_target_ec_ds_m": np.round(np.full(n, 1.80), 2),
-        "mix_ec_ds_m": np.round(
-            1.80
-            + 0.02 * np.sin(2 * np.pi * minute_of_day / 1440)
-            + 0.025 * clog
-            + np.random.normal(0, 0.012, n),
-            3,
-        ),
+        "mix_ec_ds_m": np.round(mix_ec_arr, 3),  # [C1] Na 축적 반영
+        "na_accumulation_mmol_l": np.round(na_accumulation, 3),     # [C1] 순환액 Na 축적 상태(raw)
+        "osmotic_potential_mpa": np.round(osmotic_potential_mpa, 4),  # [C2] 삼투 포텐셜(raw, =-0.036·EC)
         "mix_target_ph": np.round(np.full(n, 5.80), 2),
         "mix_ph": np.round(
             5.80
@@ -447,6 +472,7 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
             + 0.04 * daylight
             + 0.25 * clog
             + 0.3 * blocked_ratio
+            + 1.2 * ec_from_na
             + ar1_process(n, sigma=0.02, phi=0.99, seed_offset=5)
             + np.random.normal(0, 0.025, n),
             3,
