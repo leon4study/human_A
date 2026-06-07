@@ -321,11 +321,25 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
     #   seed_offset=3(모터)·4(베어링)로 서로 독립.
     motor_winding_indep = ar1_process(n, sigma=0.30, phi=0.99, seed_offset=3)
     bearing_friction_indep = ar1_process(n, sigma=0.45, phi=0.99, seed_offset=4)
+    # [C5 열적 관성] 모터 권선·베어링은 열용량이 커서 온도가 '천천히' 쌓이고 빠진다(열 시정수 τ분).
+    #   이전엔 측정노이즈(백색)를 온도 본체에 직접 더해 관성이 없었고, 그 결과 분단위 jitter가 커서
+    #   원시 슬로프(diff)를 증폭했다(Phase L 진단의 근본 원인). 이를 물리적으로 바로잡는다:
+    #   (1) 물리 목표온도 = 열원 합(기온 + 펌프발열 + 권선/마찰 고유성분). (2) 1차 열지연 = EWM
+    #   (지수가중이동평균 = 1차 IIR 저역통과)으로 목표를 천천히 따라가게 한다. 펌프 ON 스텝도
+    #   EWM을 거치면 즉각이 아니라 τ분에 걸쳐 가열되는 현실적 거동이 된다. (3) 센서 측정노이즈는
+    #   관성이 없으므로 평활 '뒤'에 얇게(0.07~0.08°C) 별도로 더한다. → 물리온도가 매끄러워 원시
+    #   슬로프도 자연 정제(feature 레벨 robust 슬로프와 상호보완). 출처: 1차 열전달 lumped
+    #   capacitance 모델(dT/dt=(T_target−T)/τ)의 이산 IIR 근사.
+    THERMAL_TAU_MIN = 15.0   # 열 시정수(분). 소형 펌프 모터 권선 열응답 ~10~20분 범위
+    _motor_target = air_temp_arr + (13 + 2.5 * clog) * pump_on + motor_winding_indep
     motor_temp = (
-        air_temp_arr + (13 + 2.5 * clog) * pump_on + motor_winding_indep + np.random.normal(0, 0.22, n)
+        pd.Series(_motor_target).ewm(alpha=1.0 / THERMAL_TAU_MIN, adjust=False).mean().to_numpy()
+        + np.random.normal(0, 0.08, n)
     )
+    _bearing_target = air_temp_arr + (10 + 2.0 * clog) * pump_on + bearing_friction_indep
     bearing_temp = (
-        air_temp_arr + (10 + 2.0 * clog) * pump_on + bearing_friction_indep + np.random.normal(0, 0.18, n)
+        pd.Series(_bearing_target).ewm(alpha=1.0 / THERMAL_TAU_MIN, adjust=False).mean().to_numpy()
+        + np.random.normal(0, 0.07, n)
     )
 
     filter_in = (145 + 8 * irr_mask + 5 * clog) * pump_on + np.random.normal(
