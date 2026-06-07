@@ -825,3 +825,24 @@ FAR 모두 baseline(3.2%) 미만(motor 2.7·hydraulic 1.9·nutrient 0.9·zone 0.
   thermal low-pass 부재). data_gen에 1차 열지연을 주면 원시 슬로프도 자연히 매끈 — 데이터 현실화
   트랙 후보(선택). robust 슬로프와 상호보완.
 - overall 4.2% 추가 인하(예: 연속 N윈도우 디바운싱/2도메인 동시) 여부는 선택.
+
+## Phase M — 데이터 현실화 v6: Na축적·EC삼투·열지연 (2026-06-07, 데이터 변경·측정 대기)
+
+### 가설
+baseline·motor FAR이 확정됐으니(J~L) data_gen의 화학·열 충실성을 올리면 nutrient/zone 도메인이
+의미를 갖고, 슬로프 jitter의 데이터 레벨 근본도 잡힌다. 검증 공식만 사용(지어내지 않음).
+
+### 시도 (data_gen_jun 개정, 검증공식 + 출처)
+- C5 열적 관성: motor/bearing_temp를 lumped capacitance(dT/dt=(T_target−T)/τ, τ=15분) 이산 IIR(EWM)로
+  평활 + 측정노이즈 분리. → motor_temp 원시 슬로프 std 2.1e-2→3.6e-3(-83%).
+- C1 Na 축적: 순환식 질량수지 톱니(0.15→1.45 mmol/L, 딸기 임계 1.5 미만, 12일 교체). Na→mix/drain EC↑.
+  출처 Neocleous 2017·WUR 403810. 신규 raw 컬럼 na_accumulation_mmol_l.
+- C2 EC→삼투→흡수: Ψ=-0.036·EC(Handbook 60). 고EC서 흡수↓(Na>0.8서 0~35%) → 배지 수분↑·EC↑.
+  신규 raw 컬럼 osmotic_potential_mpa. na/osmotic은 raw만(EC와 collinear라 model_cols 제외).
+- 검증: na 톱니 임계 미만, osmotic=-0.036·EC 검산 일치, na↔mix_ec +0.89·na↔배지EC +0.44(디커플 작동),
+  mix↔drain +0.26(신규 collinearity 없음), bearing↔motor 0.79→0.83(<0.85). 미러 data_gen은 dead.
+
+### 관측 / 진단 / 수정 (측정 대기)
+data_gen만 바뀜 — 효과는 사용자가 정상셋 regen(`python src/data_gen_jun.py`) + faulty_testset 재생성
++ 재학습 후 측정해야 확정. 기대: nutrient/zone가 EC-삼투-배지 패턴을 학습해 의미↑, FAR·attribution
+회귀 없어야(coupling_validate로 확인). C3 pH-수온·C4 VPD는 후속.
