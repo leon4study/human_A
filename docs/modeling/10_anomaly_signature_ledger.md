@@ -104,6 +104,31 @@
 - **이온 균형(N·P·K·Ca·Mg)**: K-Ca-Mg 길항. 공공데이터 ppm 범위 기준.
 → 출처: 자료조사로 채움(논문·원예 표준). 진행은 baseline 확정 후 별도 단계.
 
+**데이터 현실화 설계 v6 — 검증 공식 + 인코딩 (2026-06-07, 구현 대기·사용자 확인 후 일괄)**
+baseline·motor FAR이 확정됐으므로(Phase J~L) 이제 nutrient/zone_drip의 화학적 충실성을 올린다.
+아래는 표준 공식과 data_gen 인코딩 스펙이다. 한 번의 data_gen 개정 + 재학습 1회로 묶는다(열지연 포함).
+
+- C1. **Na 축적 상태변수 (순환식 질량수지)** — 신규 컬럼 `na_accumulation_mmol_l`.
+  닫힌 순환계에서 Na는 식물이 물을 Na보다 빨리 흡수해 배액에 농축된다. 단순 질량수지:
+  `Na[t] = Na[t-1] + (유입 Na − 흡수 Na)/부피`. 흡수≈0(딸기 Na 거의 비흡수)로 두면 단조 증가.
+  딸기 임계 1.5 mmol/L(35 ppm) 초과 시 염 스트레스 플래그. 정상 운전엔 주기적 배액교체로 리셋.
+  → Na↑가 `mix_ec_ds_m`(+0.1 dS/m per mmol 근사)·`drain_ec_ds_m`·`leaching_ratio`를 함께 끌어올림.
+- C2. **EC → 삼투 → 수분·흡수 디커플** — 신규 컬럼 `osmotic_potential_mpa`.
+  `Ψ_osm(MPa) = -0.036 × mix_ec_ds_m`(Handbook 60). 고EC면 수분이 있어도 흡수가 막힌다 →
+  `uptake_efficiency = clip(1 − k·max(0, EC − EC_opt), …)`. 이게 "수분 정상인데 흡수↓"를 만든다.
+- C3. **pH ↔ 수온 드리프트** — `mix_ph`에 수온 의존 항. 수온↑ → CO2 용해↓·미생물 활성↑ → pH 소폭 상승.
+  선형 근사 `pH += a·(mix_temp_c − T_ref)`(a≈0.01~0.02/°C, 자료 추가조사). 딸기 적정 5.5~6.5 밴드.
+- C4. **습도 ↔ VPD ↔ 증산** — VPD는 Tetens(§8 기보유)로 산출, `transpiration_demand` 정련.
+  고습→저VPD→증산↓→양분흡수↓(C2 흡수효율과 결합). 저습→고VPD→수분 스트레스.
+- C5. **열적 관성 (motor_temp·rpm jitter 근본)** — `motor_temperature_c`를 1차 지연으로.
+  현재 백색노이즈를 온도 본체에 직접 더해(관성 부재) 분단위 jitter가 큼(Phase L 원인). 개정:
+  `target = air_temp + 13·pump_on + ar1; T = target.ewm(alpha=1/τ).mean()`(τ≈10~20분) `+ 측정노이즈(얇게)`.
+  물리 온도가 매끄러워져 원시 슬로프도 자연 정제(robust 슬로프와 상호보완).
+
+검증 게이트: 개정 후 독립성 게이트 통과 + 각 관계가 의도 방향으로 움직이는지(예: Na↑→EC↑→osmotic↓→
+uptake↓) coupling_validate류로 확인. 출처: EC-삼투 US Salinity Lab Handbook 60, Na 임계 원예 표준(딸기
+<1.5 mmol/L). 상세 공식·계수는 구현 시 §8(검증 공식)과 12 설계문서에 동기.
+
 ### 3-4. zone_drip (구역 배지)
 - 노즐 막힘 — 해당 구역 수분 반응 지연·구역 간 편차↑
 - 관수 불균일 — zone_moisture_variance↑
