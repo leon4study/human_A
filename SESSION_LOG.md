@@ -1,5 +1,35 @@
 # SESSION_LOG
 
+## 2026-06-07 — B4 재학습 측정: jun baseline 정본화 + motor FAR 회귀 발견 — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. 사용자가 jun 정상셋으로 4도메인 재학습(DOMAIN_ISOLATION=1, run ..110219..) + 서빙 동기화 완료.
+   §7 관계피처 모델 진입 확인(motor:vibration_per_load·hydraulic:transpiration_demand 강제주입,
+   nutrient:leaching_ratio SHAP 자연선정). 기동 band 정상상태 대비 6.5배 분리.
+2. 측정도구 4종 + 도메인별 FAR 분해 재실행 → 새 jun baseline 정본화(ledger §3-6, MODEL_CHANGELOG Phase J).
+3. 기동 regime band 재확인: 정상기동 FAR 1.3%, 비정상 ≥1.2배 recall 100%(양호).
+
+### 발견 (Findings) — 정직 측정
+- **motor FAR 회귀**: AE overall 정상 FAR 6.5%(> baseline 3.2%, > 5% 목표). 도메인 분해 결과
+  motor 6.3%가 주범(hydraulic 2.7·nutrient 1.1·zone_drip 1.1). Phase I(dabin)는 1.4%였음.
+- attribution: 4 root 모두 검출(O)하나 Phase I의 깨끗함 일부 후퇴 — bearing_wear에 hydraulic 0.43,
+  nutrient_imbalance에 motor 0.86 오탐. motor 과발화와 동일 뿌리.
+- 검출 유지: clog 6/6, 막힘률 0%, lead-time 47.5h(같은 데이터 baseline 45.5h).
+- 집중도 판별 비재현: clog 0.65 > drift/spike 0.40(역전). dabin 분리(0.88 vs 0.45)가 jun에서 깨짐.
+- §7 피처 vibration_per_load·transpiration_demand는 여전히 다중공선성 드롭 → 강제주입으로만 생존
+  (자연 선택 실패 = 판별력 아닌 노이즈 가능성, motor FAR 회귀의 용의자).
+
+### 절대 규칙 (Absolutes)
+- 새 측정 수치(FAR 6.5%·lead-time 47.5h)는 jun 데이터 기준. dabin Phase I(1.4%·35.9h)와 직접 비교 금지
+  (데이터셋·에피소드 배치 다름). 포트폴리오는 motor 수정·정본화 전까지 Phase I 수치 유지 + 단서.
+- 측정도구는 PROJECT_ROOT/models(학습 저장 위치)를 읽는다. 재학습 후 services 동기화 cp 필수.
+
+### 재개 지점 (Resume Point)
+1. **motor FAR 수정**(사용자 방향 결정 대기): (i) motor threshold percentile화/sigma 상향,
+   (ii) 강제주입 노이즈피처(vibration_per_load·temp_slope) 정리, (iii) 병행. → 재학습 → 재측정으로
+   Phase I 대비 회복 확인.
+2. 이후 C(화학·농학 현실화) 또는 D(포트폴리오 정직화) 중 선택.
+
 ## 2026-06-07 — 캐노니컬 데이터 전환 B (dabin → jun 정상셋 v5) — feat/sensor-fault-control
 
 ### 달성 (Accomplished)

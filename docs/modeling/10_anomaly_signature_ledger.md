@@ -196,6 +196,32 @@ motor 피처에 없던 것**이었다(Phase H). model_cols에 추가해 수정.
 motor_temp 누설 오탐 제거(zone_drip 피처에서 motor_temperature_c 사라짐). lead-time 29.9h→35.9h,
 기동 FAR 0%, 정상 FAR 1.4%. 상세: MODEL_CHANGELOG Phase H·I.
 
+캐노니컬 데이터 전환 후 재측정(2026-06-07, dabin→jun v5 정상셋, `DOMAIN_ISOLATION=1`,
+run `..110219..`): 이 baseline부터는 **jun 정상셋**(공공앵커+독립 AR(1), 인위적 ~1.0 상관 제거)
+위에서 잰다. 검출 지도(고장 구간 도메인별 알람률 ≥Caution):
+
+| 고장 | hydraulic | motor | nutrient | zone_drip | 기대 | root |
+|---|---|---|---|---|---|---|
+| clog_downstream | 1.00 | 0.86 | 0.36 | 0.00 | 광역 | O |
+| bearing_wear | **0.43** | 0.93 | 0.14 | 0.00 | motor만 | O |
+| suction_blockage | 1.00 | 0.86 | 0.14 | 0.00 | hydraulic+motor | O |
+| nutrient_imbalance | 0.29 | **0.86** | 1.00 | 0.00 | nutrient만 | O |
+
+4 root 모두 검출(O)하나 Phase I의 깨끗함이 일부 후퇴 — bearing_wear에 hydraulic 0.43 오탐 재등장,
+nutrient_imbalance에 motor 0.86 오탐. 이는 **motor 도메인의 과발화**와 같은 뿌리다:
+
+- **FAR 회귀**: AE overall 정상 FAR 6.5%(> baseline 3.2%, > 5% 목표). 도메인 분해 — motor **6.3%(주범)**,
+  hydraulic 2.7%, nutrient 1.1%, zone_drip 1.1%. Phase I(dabin)는 1.4%였다.
+- 검출 자체는 유지: clog 6/6, 막힘률 0%, AE lead-time 47.5h(같은 데이터 baseline 45.5h).
+  단 lead-time은 dabin 35.9h와 직접 비교 불가(에피소드 배치가 다른 데이터셋).
+- 집중도 판별 비재현: clog 0.65 > sensor drift/spike 0.40(역전). dabin의 '단일 0.88~0.92 vs 다중 0.45'가
+  jun에서 깨짐 — hydraulic 피처 축소(F=15) + 단일 드리프트가 파생피처로 퍼진 탓. 판별식은 피처구성 의존적.
+
+진단: 데이터 현실성이 오르며 생긴 현실적 노이즈가 motor 재구성오차 분포를 넓혀 sigma threshold가
+6.3% FAR을 낸다. motor에 강제주입된 노이즈성 비율피처(vibration_per_load·temp_slope_c_per_s) 1차 용의자.
+다음 회차: motor FAR을 5%↓로 되돌리는 수정(threshold percentile화 또는 노이즈피처 정리) 후 재측정해
+Phase I 대비 회복 확인. 상세: MODEL_CHANGELOG Phase J.
+
 ## 4. 데이터 생성기 연동 (구현 위치)
 
 - 주입 지점(이상값을 집어넣는 코드 위치): [data_gen_jun.py `simulate_degradation`](../../src/data_gen_jun.py), [data_gen_dabin.py](../../src/data_gen_dabin.py).
