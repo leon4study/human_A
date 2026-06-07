@@ -1,5 +1,45 @@
 # SESSION_LOG
 
+## 2026-06-07 — 캐노니컬 데이터 전환 B (dabin → jun 정상셋 v5) — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. 학습·평가·고장주입 파이프라인의 데이터 원천을 generated_data_from_dabin_0420.csv →
+   smartfarm_normal_train_v5.csv로 일괄 전환(B3). dabin의 월1-클린업 artifact와 센서 인위적
+   상관(~1.0, 다중공선성 필터에 도메인 피처가 깎이던 근본 원인)을 제거. 변경 7개 파일:
+   src/train.py·services/inference/src/train.py(경로 전환+절대경로 제거, 두 트리 byte-동일),
+   fault_injection 5종(build_faulty_testset·baseline_blockage·sensor_fault·startup_strategy·
+   coupling_validate — CLEAN_CSV 전환 + 'dabin 월1' 잔존 주석을 'clean 90일셋 앞 30일'로 정정).
+2. B1(직전 커밋): data_gen_jun.save_normal_training_set()로 공공앵커 기반 90일 clog-free
+   정상셋 생성(129,600행, 독립성 게이트 통과: suction↔discharge -0.03·vibration↔discharge 0.02 등).
+3. B2: faulty_testset_v1.csv를 jun 정상 base에서 재생성(하류 막힘 6건, anomaly 4.2%, 고장시점 전건 기록).
+4. 검증: §7 관계피처 3종(vibration_per_load·leaching_ratio·transpiration_demand)이 새 데이터에서
+   NaN 0으로 계산(leaching≈1.12=배액 농축·transpiration 주간↑야간0), train.py 두 트리 동일, py_compile 통과.
+
+### 남은 과제 (Pending)
+1. **B4(사용자 실행, 리소스 작업)**: jun 정상셋으로 4도메인 재학습 → 측정도구 4종 재실행 →
+   새 baseline 정본화 + 기동 band 생성·regime 실활성. (명령은 아래 재개 지점)
+2. C(화학·농학 현실화): Na 축적·pH-기온·습도-VPD-병해·EC-삼투·이온수지 관계를 data_gen에 인코딩
+   → 재학습. (ledger §3-3 agenda)
+3. D(포트폴리오 정직화): 재학습 확정 수치로 "F1 0.95"·"막힘률 10→2%" 교체.
+4. 센서 설명 .md 동기화(COLUMNS_REFERENCE·DOMAIN_KNOWLEDGE). 미푸시분 푸시. 포트 불일치(README §5 vs compose) 확인.
+
+### 절대 규칙 (Absolutes)
+- data/는 gitignore — 정상셋·faulty_testset은 스크립트+고정seed(42)로 재현. CSV를 커밋하지 않는다.
+- src/ 트리 .py는 CRLF 유지(형제 파일 일관성). Edit 후 줄바꿈 정규화로 diff가 부풀면 바이트 보존 치환으로 복구.
+- 물리적으로 결합된 센서를 인위적으로 디커플하지 않는다 — 관계피처로 고장신호를 잡고 실제 물리는 보존(사용자 교정).
+
+### 재개 지점 (Resume Point)
+1. **B4 재학습(사용자)** — 권장 명령:
+   ```bash
+   cd /Users/jun/GitStudy/human_A
+   DOMAIN_ISOLATION=1 python src/train.py      # 타 도메인 핵심센서 격리(깨끗한 귀인). 기동 band 자동 생성.
+   # 재학습 후 서빙 동기화:
+   cp models/*_model.keras models/*_scaler.pkl models/*_config.json services/inference/models/
+   ```
+2. 재학습 후 측정도구 4종 재실행(cd fault_injection && python <도구>.py): coupling_validate·
+   baseline_blockage_eval·sensor_fault_eval·startup_strategy_eval → 새 baseline 표를 ledger §3-6·08에 정본화.
+3. 그 다음 C(화학·농학) 또는 D(정직화) 중 사용자 선택.
+
 ## 2026-06-05 — 문서 쉬운 말로 풀어쓰기 (가독성) — feat/sensor-fault-control
 
 ### 달성 (Accomplished)
