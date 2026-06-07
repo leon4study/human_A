@@ -282,14 +282,20 @@ mse_scores = np.mean(sq_err[:, scoring_mask], axis=1)
 단계 위 같은 패턴**(컨텍스트가 아니라 외래 도메인 피처일 뿐)이라, 같은 처방이 그대로 적용된다.
 상세: MODEL_CHANGELOG Phase B·J.
 
-**외부 근거(개념 계보)**: 이 분리는 새 발명이 아니라 이상탐지의 표준 구분이다.
-- Song, Wu, Jermaine, Ranka, "Conditional Anomaly Detection," IEEE TKDE 2007 — 속성을
-  **environmental/contextual(조건)** 과 **indicator(채점)** 로 나누고, 컨텍스트 속성에서 이상을
-  채점하면 오탐이 는다고 본다. 우리 `scoring_mask`와 정확히 같은 골격.
-- Chandola, Banerjee, Kumar, "Anomaly Detection: A Survey," ACM Computing Surveys 2009 —
-  contextual attributes vs behavioral attributes 정식화.
-- Sohn, Lee, Yan, "Conditional VAE," NeurIPS 2015 — 재구성을 covariate로 조건짓는 생성모델.
-- (포트폴리오에 인용 시 원문 재확인 권장. 우리의 1차 증거는 Phase B 내부 A/B 측정.)
+**외부 근거(개념 계보)**: 이 "조건 변수와 채점 변수를 나눈다"는 분리는 새 발명이 아니라
+이상탐지에서 정립된 표준 구분이다. 아래는 그 계보의 핵심 문헌과, 각각이 우리 `scoring_mask`에
+어떻게 대응되는지다.
+
+| 문헌 | 핵심 주장 | 우리 대응 |
+|---|---|---|
+| Song, Wu, Jermaine, Ranka, "Conditional Anomaly Detection," *IEEE TKDE* 19(5), 2007 | 데이터 속성을 **environmental/contextual(조건)** 와 **indicator(채점)** 로 분리. 컨텍스트 속성 자체에서 이상을 채점하면 오탐이 늘므로, 컨텍스트로 *조건짓되* 지표 속성만 채점하라. | `scoring_mask`의 이론적 골격 그 자체. time/state·외래도메인 피처 = environmental, 도메인 자기 센서 = indicator. |
+| Chandola, Banerjee, Kumar, "Anomaly Detection: A Survey," *ACM Computing Surveys* 41(3), 2009 | 이상탐지 랜드마크 서베이. **contextual attributes vs behavioral attributes** 를 정식화 — 같은 값도 맥락에 따라 정상/이상이 갈린다. | 기동 overshoot가 기동 맥락에선 정상(컨텍스트 조건), 정상상태 맥락에선 이상. 기동 band·컨텍스트 제외의 근거. |
+| Sohn, Lee, Yan, "Learning Structured Output Representation using Deep Conditional Generative Models" (Conditional VAE), *NeurIPS* 2015 | 생성/재구성을 covariate(조건 변수)로 **조건짓는** 심층 생성모델. 입력 일부를 조건으로 받아 나머지를 생성. | "입력은 넓게(조건 포함), 재구성/채점은 좁게"의 딥러닝판 형식화. |
+| Pang, Shen, Cao, van den Hengel, "Deep Learning for Anomaly Detection: A Review," *ACM Computing Surveys* 54(2), 2021 | 재구성기반 심층 이상탐지 리뷰. 무관·노이즈 피처가 재구성오차 점수를 오염시켜 탐지력을 떨어뜨림을 지적, 피처 적합성의 중요성을 정리. | motor 채점에 섞인 외래 `pressure_diff`(오탐 25%)가 점수를 오염시킨 현상의 일반 진술. |
+
+원리 한 줄: **무관·노이즈성 피처를 재구성 점수에 넣으면 오탐이 는다 → 조건으로만 쓰고
+채점에서 빼라.** (포트폴리오 인용 시 권/호·페이지 등 서지정보는 원문 재확인 권장. 우리의 1차
+증거는 어디까지나 Phase B 내부 A/B 측정이다.)
 
 **상태**: 부류 2(교차도메인 마스크)는 Phase J의 motor FAR 회귀(6.3%) 수정 후보로 검토 중이며,
 구현·재측정 전이다. 도입 시 coupling_validate(고정 오라클)로 검출·attribution 회귀 점검 필수.
