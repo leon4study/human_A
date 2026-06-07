@@ -222,6 +222,23 @@ nutrient_imbalance에 motor 0.86 오탐. 이는 **motor 도메인의 과발화**
 다음 회차: motor FAR을 5%↓로 되돌리는 수정(threshold percentile화 또는 노이즈피처 정리) 후 재측정해
 Phase I 대비 회복 확인. 상세: MODEL_CHANGELOG Phase J.
 
+조건부 마스크 수정 후 재측정(2026-06-07, run `..205502..`): 자유 파생피처 pressure_diff·flow_diff가
+어느 도메인 mandatory에도 없어 SHAP이 엉뚱한 도메인에 배정 → motor 등 채점을 오염시킨 게 FAR
+상승·attribution 오탐의 공통 뿌리였다. 이들을 '입력 유지 + 채점 제외'(조건부 마스크,
+[feature_engineering.foreign_scoring_features](../../src/feature_engineering.py))하니 둘 다 풀렸다.
+
+| 고장 | Phase J(누설) | Phase K(채점제외) | 기대 |
+|---|---|---|---|
+| clog_downstream | hydraulic+motor+nutrient | hydraulic+nutrient (motor 0.29) | 광역 |
+| bearing_wear | motor + **hydraulic 0.43(오탐)** | **motor만**(hydraulic 0.07) | motor만 |
+| suction_blockage | hydraulic+motor | hydraulic+motor | hydraulic+motor |
+| nutrient_imbalance | nutrient + **motor 0.86(오탐)** | **nutrient만**(motor 0.21) | nutrient만 |
+
+- FAR(정합 eval): motor 6.0→5.1%, nutrient 2.1→0.9%, zone_drip 2.7→0.3%, overall 6.2→5.4%.
+- 검출 유지: clog 6/6, 막힘률 0%, lead-time 47.3h. 4 root 모두 검출 O.
+- 잔여: motor 5.1%(목표 경계·baseline 3.2% 초과) — 유지 선택한 노이즈 슬로프(rpm_slope·temp_slope).
+  옵션은 motor threshold percentile화. 상세: MODEL_CHANGELOG Phase K, MODELING §5-2-1.
+
 ## 4. 데이터 생성기 연동 (구현 위치)
 
 - 주입 지점(이상값을 집어넣는 코드 위치): [data_gen_jun.py `simulate_degradation`](../../src/data_gen_jun.py), [data_gen_dabin.py](../../src/data_gen_dabin.py).

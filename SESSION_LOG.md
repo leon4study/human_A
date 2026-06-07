@@ -1,5 +1,29 @@
 # SESSION_LOG
 
+## 2026-06-07 — 조건부 마스크(외래 피처 채점 제외): motor FAR·attribution 회복 — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. eval==serve 정합 버그 수정(evaluate_test_metrics를 scoring_features 기반으로) — 이게 선결조건.
+2. 교차도메인 외래 피처 채점 제외 구현(foreign_scoring_features: pressure_diff·flow_diff→hydraulic,
+   air_temp_c=환경컨텍스트). 입력 유지·채점만 제외(조건부 마스크). 재학습 run ..205502...
+3. 결과(정합 eval): motor FAR 6.0→5.1%, nutrient 2.1→0.9%, zone_drip 2.7→0.3%, overall 6.2→5.4%.
+   attribution 회복 — bearing_wear motor만(hydraulic 0.43→0.07), nutrient_imb nutrient만(motor 0.86→0.21).
+   검출 유지(clog 6/6, lead-time 47.3h). MODEL_CHANGELOG Phase K, ledger §3-6.
+4. MODELING §5-2-1 조건부AE 일반화 + 근거문헌(Conditional Anomaly Detection 등) 명문화.
+
+### 남은 과제 (Pending)
+1. motor FAR 5.1%(목표 경계·baseline 3.2% 초과): 옵션 — motor threshold percentile화('둘 다'의 (나)). 사용자 선택.
+2. air_temp_c 채점 제외 유지 여부(현재 제외) — 사용자 최종 확인.
+3. 이후 C(화학·농학) 또는 D(정직화).
+
+### 절대 규칙 (Absolutes)
+- 측정도구는 서빙과 같은 점수식(scoring_features)을 써야 한다. eval==serve가 깨지면 수정이 측정에 안 잡힌다.
+- 도메인 경계는 '입력'이 아니라 '채점'에서 지킨다(조건부 마스크). 외래 피처를 제거하지 말고 채점에서만 빼 교차상관은 보존.
+
+### 재개 지점 (Resume Point)
+1. motor 5.1% 추가 인하 여부 결정 → 필요시 motor threshold 조정 후 재학습.
+2. 그 다음 C 또는 D.
+
 ## 2026-06-07 — B4 재학습 측정: jun baseline 정본화 + motor FAR 회귀 발견 — feat/sensor-fault-control
 
 ### 달성 (Accomplished)

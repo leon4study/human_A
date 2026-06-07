@@ -744,3 +744,44 @@ motor FAR을 5%↓로 되돌리는 게 선결. 후보: (i) motor threshold를 pe
 - motor FAR 회귀 수정 → 재학습 → coupling_validate·baseline_blockage 재측정으로 Phase I 대비 회복 확인.
 - §7 관계피처 판별력 검증 또는 재설계(C 화학·농학 트랙과 통합 검토).
 - 집중도 판별을 포트폴리오에서 쓸지 재검토(jun에서 비재현).
+
+## Phase K — 교차도메인 외래 피처 채점 제외(조건부 마스크): FAR·attribution 동시 회복 (2026-06-07, 성공)
+
+### 가설
+Phase J의 motor 과발화(FAR 6.0%·attribution 오탐)의 뿌리는, 어느 SENSOR_MANDATORY에도 없는
+자유 파생피처 pressure_diff·flow_diff가 SHAP으로 motor 등에 섞여 채점을 오염시킨 것이다.
+이들을 '입력 유지 + 채점 제외'(조건부 마스크)하면 FAR과 attribution 오탐이 함께 풀린다.
+
+### 시도
+(1) eval==serve 정합 선결: evaluate_test_metrics가 전체 피처로 MSE를 내던 것을 scoring_features
+기반으로 수정(이게 없으면 채점 제외가 측정에 안 잡힘). (2) feature_engineering.foreign_scoring_features
+(DERIVED_FEATURE_OWNER: pressure_diff·flow_diff→hydraulic, ENVIRONMENT_CONTEXT: air_temp_c) +
+train.py 연동. (3) DOMAIN_ISOLATION=1 재학습 run `..205502..`. 채점 제외 로그 확인: motor
+[flow_diff,pressure_diff] 11/17, nutrient [air_temp_c,pressure_diff] 9/15, zone_drip [pressure_diff] 5/10.
+
+### 관측 (정합 eval 기준, faulty_testset 정상 윈도우)
+| 지표 | Phase J(누설) | Phase K(채점제외) |
+|---|---|---|
+| motor FAR | 6.0% | **5.1%** |
+| nutrient FAR | 2.1% | **0.9%** |
+| zone_drip FAR | 2.7% | **0.3%** |
+| overall FAR | 6.2% | **5.4%** |
+| bearing_wear 귀인 | motor + hydraulic 0.43(오탐) | **motor만**(hydraulic 0.07) |
+| nutrient_imb 귀인 | nutrient + motor 0.86(오탐) | **nutrient만**(motor 0.21) |
+- 검출 유지: clog 6/6, 막힘률 0%, AE lead-time 47.3h(같은 데이터 baseline 45.5h). 4 root 모두 검출 O.
+
+### 진단 / 교훈
+자유 파생피처 누설이 **FAR 상승과 attribution 오탐의 공통 뿌리**였음이 확정됐다 — 채점에서만
+빼니(입력·교차상관은 보존) 둘 다 해소. DOMAIN_ISOLATION(mandatory만 격리)의 사각지대를 조건부
+마스크가 메웠다. 'eval==serve 정합'이 선결조건이었다(없으면 수정이 측정에 안 잡힘) — 측정도구가
+서빙과 같은 점수식을 써야 변경을 정직하게 잰다(Phase B 컨텍스트 제외의 한 단계 위 일반화).
+
+### 수정 (확정 채택)
+조건부 마스크(foreign_scoring_features) + eval 정합을 정본으로. 포트폴리오 논거: '도메인 경계를
+입력이 아니라 채점에서 지켜(조건부 AE) 헛알람·오귀인을 동시에 줄였다'(근거: Conditional Anomaly
+Detection, MODELING §5-2-1).
+
+### 남은 과제
+- motor FAR 5.1%: 목표(≤5%) 경계이나 baseline(3.2%) 초과. 잔여는 유지 선택한 노이즈 슬로프
+  (rpm_slope·temp_slope). 옵션: motor만 threshold percentile화(사용자 '둘 다'의 (나) 단계) — 선택 대기.
+- jun 데이터는 현실적 노이즈라 dabin Phase I(FAR 1.4%) 수준 복귀는 구조적으로 어려움(정직 서술).
