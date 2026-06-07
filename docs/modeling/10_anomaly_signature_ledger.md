@@ -239,6 +239,14 @@ Phase I 대비 회복 확인. 상세: MODEL_CHANGELOG Phase J.
 - 잔여: motor 5.1%(목표 경계·baseline 3.2% 초과) — 유지 선택한 노이즈 슬로프(rpm_slope·temp_slope).
   옵션은 motor threshold percentile화. 상세: MODEL_CHANGELOG Phase K, MODELING §5-2-1.
 
+robust 슬로프 수정 후 재측정(2026-06-07, run `..212812..`): rpm_slope·temp_slope의 원시 1차 차분이
+분 단위 센서 jitter를 증폭한 게 motor 5.1% 잔여의 원인. 트레일링 이동평균 기반 robust 슬로프로 교체
+(잔차노이즈 temp -72%·rpm -55%, 과열 ramp 보존)하니 **motor FAR 5.1→2.7%(baseline 3.2% 미만)**,
+overall 5.4→4.2%. 검출 6/6·lead-time 45.4h 유지(robust 평활로 47.3→45.4h). 부수효과로 motor skew
+8.30이 cutoff(8.0)를 넘겨 threshold가 percentile로 자동 전환. attribution 유지(4 root O, nutrient_imb의
+motor만 경계 0.3 잔존). 도메인별 FAR 모두 baseline 미만(motor 2.7·hydraulic 1.9·nutrient 0.9·zone 0.3);
+overall 4.2%는 4도메인 OR이라 baseline(3.2%)보다 약간 높음. 상세: MODEL_CHANGELOG Phase L.
+
 ## 4. 데이터 생성기 연동 (구현 위치)
 
 - 주입 지점(이상값을 집어넣는 코드 위치): [data_gen_jun.py `simulate_degradation`](../../src/data_gen_jun.py), [data_gen_dabin.py](../../src/data_gen_dabin.py).

@@ -1,5 +1,26 @@
 # SESSION_LOG
 
+## 2026-06-07 — robust 슬로프: motor FAR 회귀 종결(6.0→2.7%) — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. rpm_slope·temp_slope를 원시 1차 차분 → 트레일링 이동평균 기반 robust 슬로프로 교체(preprocessing).
+   잔차노이즈 temp -72%·rpm -55%, 과열 ramp 보존 검증 후 재학습 run ..212812...
+2. 결과: motor FAR 5.1→2.7%(baseline 3.2% 미만), overall 5.4→4.2%, 검출 6/6, lead-time 47.3→45.4h.
+   motor skew 8.30으로 threshold 자동 percentile 전환. attribution 유지(4 root O). MODEL_CHANGELOG Phase L.
+3. motor FAR 회귀(Phase J 6.0%) 종결. 도메인별 FAR 모두 baseline 미만.
+
+### 남은 과제 (Pending)
+1. (선택) 데이터 현실화: motor_temp에 1차 열지연(thermal inertia) — 원시 슬로프 jitter의 근본.
+2. (선택) overall 4.2% 추가 인하(디바운싱/2도메인 동시).
+3. 다음 트랙: C(화학·농학) 또는 D(정직화).
+
+### 절대 규칙 (Absolutes)
+- 원시 1차 차분 피처는 노이즈를 증폭한다 — 추세 피처는 평활(robust) 형태를 기본으로.
+- 도메인 FAR은 각각 baseline 미만이나 overall은 4개 OR이라 약간 높음 — 정직 서술(이점=귀인+lead-time).
+
+### 재개 지점 (Resume Point)
+1. motor FAR 회귀 종결. 다음은 C(화학·농학) 또는 D(정직화) 중 선택, 또는 데이터 열지연 현실화.
+
 ## 2026-06-07 — 조건부 마스크(외래 피처 채점 제외): motor FAR·attribution 회복 — feat/sensor-fault-control
 
 ### 달성 (Accomplished)

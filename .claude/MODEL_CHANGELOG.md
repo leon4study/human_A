@@ -785,3 +785,43 @@ Detection, MODELING §5-2-1).
 - motor FAR 5.1%: 목표(≤5%) 경계이나 baseline(3.2%) 초과. 잔여는 유지 선택한 노이즈 슬로프
   (rpm_slope·temp_slope). 옵션: motor만 threshold percentile화(사용자 '둘 다'의 (나) 단계) — 선택 대기.
 - jun 데이터는 현실적 노이즈라 dabin Phase I(FAR 1.4%) 수준 복귀는 구조적으로 어려움(정직 서술).
+
+## Phase L — robust 슬로프(rpm_slope·temp_slope): motor FAR 회귀 종결 (2026-06-07, 성공)
+
+### 가설
+Phase K 잔여 motor FAR 5.1%의 주범은 유지 선택한 노이즈 슬로프다. 두 슬로프가 원시 1차
+차분(x.diff()/dt)이라 끝점 2개만 써서 분 단위 센서 jitter를 증폭한다. 트레일링 이동평균으로
+다듬은 뒤 변화율을 내면(robust 슬로프) 추세는 보존하며 노이즈만 줄여 FAR이 더 내려간다.
+
+### 시도
+preprocessing의 temp_slope_c_per_s·rpm_slope를 `x.rolling(5,min_periods=1).mean().diff()/dt`로
+교체(인과적 5분 평활). 재학습 전 검증: 시간대 구조 제거 후 잔차(랜덤)노이즈 std temp -72%·rpm -55%,
+60분 +6°C 과열 모사에서 평균 슬로프 보존(원시 2.53e-3≈robust 2.55e-3). 재학습 run `..212812..`.
+
+### 관측 (정합 eval)
+| 지표 | Phase K | Phase L |
+|---|---|---|
+| motor FAR | 5.1% | **2.7%**(baseline 3.2% 미만) |
+| overall FAR | 5.4% | **4.2%** |
+| 검출/막힘률 | 6/6·0% | 6/6·0% |
+| lead-time | 47.3h | 45.4h(-1.9h) |
+- 부수효과: 슬로프 평활로 motor 점수 분포 skew 7.42→8.30(cutoff 8.0 초과) → threshold method가
+  sigma→**percentile**로 자동 전환(목표 분위 직접 타게팅). 사용자 '둘 다'의 (나)가 자동 충족된 셈.
+- attribution 유지(4 root 모두 O). 단 nutrient_imbalance에서 motor 경계(~0.3) 잔존(사소).
+
+### 진단 / 교훈
+원시 1차 차분은 어떤 신호든 고주파 노이즈를 증폭한다(수학적). robust 슬로프로 잔차노이즈를
+72%/55% 줄이니 motor FAR이 절반 가까이(5.1→2.7%) 떨어지고 baseline 아래로 내려갔다. 평활 대가로
+lead-time 1.9h 감소(45.4h)는 허용 범위. '증상(threshold)이 아니라 원인(피처 노이즈)을 고친다'가
+감지력을 거의 안 깎고 FAR을 더 낮췄다.
+
+### 수정 (확정 채택)
+robust 슬로프를 정본으로. motor FAR 회귀(Phase J 6.0%→Phase L 2.7%) 종결. 포트폴리오: 도메인
+FAR 모두 baseline(3.2%) 미만(motor 2.7·hydraulic 1.9·nutrient 0.9·zone 0.3), overall 4.2%는
+4개 도메인 OR이라 baseline(13센서 OR 3.2%)보다 약간 높음 — 정직 서술(이점은 도메인 귀인+lead-time).
+
+### 남은 과제
+- 데이터 현실성(근본): motor_temp가 실제 열적 관성보다 분단위 jitter가 큼(AR(1) 독립노이즈에
+  thermal low-pass 부재). data_gen에 1차 열지연을 주면 원시 슬로프도 자연히 매끈 — 데이터 현실화
+  트랙 후보(선택). robust 슬로프와 상호보완.
+- overall 4.2% 추가 인하(예: 연속 N윈도우 디바운싱/2도메인 동시) 여부는 선택.
