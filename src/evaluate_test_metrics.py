@@ -23,7 +23,7 @@ import tensorflow as tf
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
 from preprocessing import step1_prepare_window_data
-from inference_core import get_alarm_status
+from inference_core import get_alarm_status, actionable_feature_mask
 from repro import latest_run_dir
 
 # [진단 시각화] matplotlib 부재 시에도 평가 자체는 진행되도록 import 실패를 흡수.
@@ -86,7 +86,20 @@ def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict]:
 
         X_scaled = scaler.transform(X)
         preds = model.predict(X_scaled, batch_size=512, verbose=0)
-        mse = np.mean((X_scaled - preds) ** 2, axis=1)
+        # 알람 점수는 train.py·inference_api와 '동일한 피처 셋'(scoring_features)으로 낸다.
+        #   config에 scoring_features가 있으면 그 목록, 없으면 컨텍스트 제외 마스크로 폴백.
+        #   [왜 중요] evaluate가 전체 피처 평균을 쓰면, 서빙이 제외하는 컨텍스트/외래 피처가
+        #   점수에 섞여 측정 FAR이 서빙과 달라지고, scoring_features 변경(외래피처 채점 제외 등)이
+        #   측정에 안 잡힌다. eval==serve를 맞춰야 측정도구가 서빙 모델을 정직하게 잰다.
+        sq_err = (X_scaled - preds) ** 2
+        _scoring = cfg.get("scoring_features")
+        if _scoring:
+            _mask = np.array([fc in set(_scoring) for fc in features], dtype=bool)
+        else:
+            _mask = actionable_feature_mask(features)
+        if _mask.sum() == 0:
+            _mask = np.ones(len(features), dtype=bool)
+        mse = np.mean(sq_err[:, _mask], axis=1)
 
         levels = np.array(
             [get_alarm_status(float(m), t_caut, t_warn, t_err)[0] for m in mse]
