@@ -846,3 +846,14 @@ baseline·motor FAR이 확정됐으니(J~L) data_gen의 화학·열 충실성을
 data_gen만 바뀜 — 효과는 사용자가 정상셋 regen(`python src/data_gen_jun.py`) + faulty_testset 재생성
 + 재학습 후 측정해야 확정. 기대: nutrient/zone가 EC-삼투-배지 패턴을 학습해 의미↑, FAR·attribution
 회귀 없어야(coupling_validate로 확인). C3 pH-수온·C4 VPD는 후속.
+
+### Phase M 측정 (2026-06-08, run ..223926..)
+- C 성공(목표 달성): nutrient SHAP에 salt_accumulation_delta·leaching_ratio, zone에 substrate_moisture
+  등장 → 양액·구역 도메인이 의미를 얻음(C1/C2 신호 생존). motor FAR 2.7→1.5%(C5 추가 개선).
+  검출 6/6·막힘률 0%·lead-time 47.3h, attribution 4 root 모두 O.
+- 회귀: hydraulic FAR 1.9→4.1%, overall 4.2→5.0%(목표 5% 경계, baseline 3.4% 초과). 원인 = C가
+  SHAP 선택을 흔들어 hydraulic이 과적합(val_loss 1e-4)→threshold 0.0008→0.00035 타이트→eval서 초과.
+  오탐 70%가 pressure_trend_10·flow_trend_10(이미 롤평균-diff인데 정상엔 거의 0+노이즈).
+- 진단: J~M 내내 FAR이 도메인을 옮겨가며 재발(motor→hydraulic) = sigma threshold가 도메인 fit
+  타이트함에 FAR을 묶어 '통제 불가'. 근본 해결은 threshold를 목표-FAR 분위(percentile)로 통제하거나,
+  realistic 데이터의 overall ~5%를 정직 수용(이점=귀인+lead-time). 사용자 결정 대기.
