@@ -1,5 +1,24 @@
 # SESSION_LOG
 
+## 2026-06-08 — percentile 임계 기본값: FAR whack-a-mole 종결(overall 2.3%<baseline) — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. threshold를 sigma→percentile(목표-FAR 통제)로. train.py 기본값 percentile@99(method·PCT_CAUTION 95→99·WARNING→99.6).
+2. 결과(run ..140317..): per-domain FAR hydraulic 4.1→1.8·motor 1.5→0.5·nutrient 0.7→0.4·zone 0.6→0.0,
+   overall 5.0→2.3%(< baseline 3.4%). 검출 6/6·막힘률 0%·lead-time 43.9h. attribution 가장 깨끗. MODEL_CHANGELOG Phase N.
+3. 현재 모델이 이미 percentile@99라 재학습 불필요. FAR 작업(J~N) 종결.
+
+### 남은 과제 (Pending)
+1. D 포트폴리오 정직화(맨 마지막): 확정 수치(FAR 2.3%<baseline·검출 6/6·lead-time 43.9h·깨끗한 귀인)로 'F1 0.95'·'막힘률 10→2%' 교체.
+2. (후속) C3 pH-수온·C4 VPD-증산. (선택) overall 디바운싱.
+
+### 절대 규칙 (Absolutes)
+- threshold는 목표-FAR 분위(percentile)로 통제 — sigma는 fit 타이트함에 FAR이 좌우돼 도메인별 whack-a-mole.
+- lead-time↔FAR 트레이드오프: PCT_CAUTION↓면 조기경보↑·FAR↑. 기본 99는 baseline 이하 FAR 우선.
+
+### 재개 지점 (Resume Point)
+1. D 정직화 착수(확정 수치 SSOT). 또는 C3/C4 데이터 현실화 추가.
+
 ## 2026-06-07 — robust 슬로프: motor FAR 회귀 종결(6.0→2.7%) — feat/sensor-fault-control
 
 ### 달성 (Accomplished)

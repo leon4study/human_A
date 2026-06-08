@@ -272,6 +272,13 @@ overall 5.4→4.2%. 검출 6/6·lead-time 45.4h 유지(robust 평활로 47.3→4
 motor만 경계 0.3 잔존). 도메인별 FAR 모두 baseline 미만(motor 2.7·hydraulic 1.9·nutrient 0.9·zone 0.3);
 overall 4.2%는 4도메인 OR이라 baseline(3.2%)보다 약간 높음. 상세: MODEL_CHANGELOG Phase L.
 
+threshold 목표-FAR 통제 후 정본화(2026-06-08, Phase N): C v6(Phase M)에서 FAR이 도메인을 옮겨다니며
+재발(motor 해결→hydraulic 4.1%)한 근본은 sigma가 도메인 fit 타이트함에 FAR을 묶은 것. threshold를
+percentile(정상 상위 1%=PCT_CAUTION 99)로 고정하니 per-domain FAR이 hydraulic 4.1→1.8·motor 1.5→0.5·
+nutrient 0.7→0.4·zone 0.6→0.0, **overall 5.0→2.3%(baseline 3.4% 미만)** 로 통제됐다. 검출 6/6·막힘률 0%,
+lead-time 47.3→43.9h(완화 비용), attribution 가장 깨끗(clog→hydraulic만 등). train.py 기본값을 percentile@99로
+전환(method auto→percentile). FAR 작업(J~N) 종결. 상세: MODEL_CHANGELOG Phase N.
+
 ## 4. 데이터 생성기 연동 (구현 위치)
 
 - 주입 지점(이상값을 집어넣는 코드 위치): [data_gen_jun.py `simulate_degradation`](../../src/data_gen_jun.py), [data_gen_dabin.py](../../src/data_gen_dabin.py).

@@ -857,3 +857,36 @@ data_gen만 바뀜 — 효과는 사용자가 정상셋 regen(`python src/data_g
 - 진단: J~M 내내 FAR이 도메인을 옮겨가며 재발(motor→hydraulic) = sigma threshold가 도메인 fit
   타이트함에 FAR을 묶어 '통제 불가'. 근본 해결은 threshold를 목표-FAR 분위(percentile)로 통제하거나,
   realistic 데이터의 overall ~5%를 정직 수용(이점=귀인+lead-time). 사용자 결정 대기.
+
+## Phase N — threshold 목표-FAR 통제(percentile 기본값): FAR whack-a-mole 종결 (2026-06-08, 성공)
+
+### 가설
+J~M 내내 FAR이 도메인을 옮겨다니며 재발(motor→hydraulic)한 근본은 sigma(μ+kσ)가 도메인의 학습셋
+fit 타이트함에 FAR을 묶어 '통제 불가'인 것. 분위(percentile)로 '정상의 상위 X%'를 알람선으로 고정하면
+fit과 무관하게 FAR이 통제돼 whack-a-mole이 끝난다.
+
+### 시도
+`THRESHOLD_METHOD=percentile PCT_CAUTION=99 PCT_WARNING=99.6 PCT_CRITICAL=99.9` 재학습(run ..140317..)
++ train.py 기본값을 percentile@99로 전환(method auto→percentile, PCT_CAUTION 95→99, WARNING→99.6).
+per-domain caution을 정상 상위 1%로 고정 → voting OR해도 overall≈baseline 이하 설계.
+
+### 관측 (정합 eval)
+| 도메인 | sigma(Phase M) | percentile(N) |
+|---|---|---|
+| hydraulic | 4.1% | **1.8%** |
+| motor | 1.5% | **0.5%** |
+| nutrient | 0.7% | 0.4% |
+| zone_drip | 0.6% | **0.0%** |
+| **overall** | 5.0% | **2.3%** (< baseline 3.4%) |
+- baseline_blockage: AE FAR 2.3% < baseline 3.4%(AE 헛알람이 더 적음). 검출 6/6·막힘률 0%.
+- lead-time 47.3→43.9h(-3.4h): 완화로 인한 FAR↔조기경보 트레이드오프(허용 범위).
+- attribution 가장 깨끗: clog→hydraulic만, bearing→motor만, suction→hydraulic+motor, nutrient_imb→nutrient만.
+
+### 진단 / 교훈
+percentile이 fit-tightness와 무관하게 FAR을 분위로 고정 → whack-a-mole 종결. 도메인 OR(overall)도
+per-domain을 1%로 낮춰 baseline 이하로 통제. '목표 오탐률로 임계 설정'은 표준·방어가능한 설계라
+포트폴리오 서사도 강해진다(F1·막힘률 대신 검증된 FAR 2.3%<baseline·lead-time 43.9h·깨끗한 귀인).
+
+### 수정 (확정 채택)
+percentile@99를 train.py 정본 기본값으로. 현재 모델이 이미 이 구성이라 재학습 불필요. env로 미세조정
+여지(PCT_CAUTION↓하면 lead-time↑·FAR↑). FAR 작업(J~N) 종결 — 이제 D(포트폴리오 정직화)의 확정 수치 확보.

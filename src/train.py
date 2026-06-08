@@ -224,7 +224,7 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
 
     # (2) 방법 결정 — auto면 skew로 분기, 아니면 환경변수가 지정한 방법으로 강제.
     SKEW_CUTOFF = float(os.environ.get("SKEW_CUTOFF", "8.0"))
-    method_opt = os.environ.get("THRESHOLD_METHOD", "auto").lower()
+    method_opt = os.environ.get("THRESHOLD_METHOD", "percentile").lower()
     if method_opt == "auto":
         chosen_method = "percentile" if mse_skew > SKEW_CUTOFF else "sigma"
     else:
@@ -232,10 +232,12 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
 
     # (3) 선택된 방법으로 3단계 임계치 산정.
     if chosen_method == "percentile":
-        # P95≈정상의 상위 5%(주의)·P99≈1%(경고)·P99.9≈0.1%(치명).
-        # 운영 제약(FAR)과 직결되며, 레벨은 환경변수로 미세조정 가능.
-        p_caut = float(os.environ.get("PCT_CAUTION", "95.0"))
-        p_warn = float(os.environ.get("PCT_WARNING", "99.0"))
+        # [기본 percentile, Phase N] 목표-FAR을 직접 통제한다. sigma(μ+kσ)는 도메인이 학습셋에
+        # 얼마나 타이트하게 맞느냐에 따라 FAR이 들쭉날쭉(한 도메인 고치면 다음 재학습서 다른 도메인이
+        # 튀는 whack-a-mole)이라, 분위로 '정상의 상위 X%'를 알람선으로 고정한다.
+        # 기본 P99(caution)=정상 상위 1% → voting 도메인 OR해도 overall≈baseline 이하. 레벨은 env로 미세조정.
+        p_caut = float(os.environ.get("PCT_CAUTION", "99.0"))
+        p_warn = float(os.environ.get("PCT_WARNING", "99.6"))
         p_crit = float(os.environ.get("PCT_CRITICAL", "99.9"))
         thresholds = {
             "mean":     _mu,
