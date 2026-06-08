@@ -3,7 +3,8 @@ import numpy as np
 from pathlib import Path
 
 # 난수 고정 및 출력 경로 설정
-np.random.seed(42)
+MASTER_SEED = 42  # 데이터 생성 마스터 시드. 학습셋=42, held-out 테스트셋은 다른 값으로 독립 노이즈열을 쓴다.
+np.random.seed(MASTER_SEED)
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data"  # <project_root>/data — cwd 무관(이식성). 이전 "../data"는 실행 위치에 따라 엉뚱한 곳에 저장됐다.
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -28,7 +29,7 @@ def ar1_process(n, sigma, phi=0.995, seed_offset=0):
     [재현성] 전역 np.random.seed와 별개로 default_rng(seed_offset)로 센서마다 독립 난수열을 쓴다.
       seed_offset을 센서별로 다르게 주어야 두 센서의 고유 성분이 서로 독립이 된다.
     """
-    rng = np.random.default_rng(42 + seed_offset)
+    rng = np.random.default_rng(MASTER_SEED + seed_offset)
     e = rng.normal(0.0, sigma, n)        # 매 시점 새로 들어오는 충격(innovation)
     u = np.zeros(n)
     for t in range(1, n):
@@ -204,7 +205,7 @@ def simulate_zone_data(
 # 5. [메인] 데이터 통합 파이프라인 (총 50개 컬럼 완벽 세팅)
 # ==========================================
 def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min",
-                                degradation=True):
+                                degradation=True, seed=None):
     """
     degradation:
       True(기본)  — 30일 이후 막힘(clog)이 자라는 '자연 노후' 시나리오(참고/대조용).
@@ -213,6 +214,12 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
                     (고장은 자연 노후가 아니라 fault_injection 프레임으로 통제 주입하므로,
                      학습셋은 막힘 없는 정상이어야 AE가 정상 manifold만 배운다. docs/modeling/12 §6.)
     """
+    # [재현성·held-out] seed가 주어지면 마스터 시드를 바꿔 '학습과 겹치지 않는' 독립 노이즈열을 만든다.
+    #   학습셋(seed=None)은 모듈 로드 시 고정된 42를 그대로 쓰고, 테스트셋은 다른 seed로 독립 정상 노이즈를 얻는다.
+    global MASTER_SEED
+    if seed is not None:
+        MASTER_SEED = seed
+        np.random.seed(seed)
     idx = pd.date_range(start=start, periods=days * 24 * 60, freq=freq)
     n = len(idx)
     minute_of_day = idx.hour * 60 + idx.minute
