@@ -62,6 +62,8 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         "load_per_speed",
         # §7 관계 피처(12 §7·§8) — 부하 정규화 진동, 베어링 마모 직격(ISO 10816 기반)
         "vibration_per_load",
+        # crest factor = peak/RMS. 베어링 초기 결함 조기 지표(ISO 13373). 충격성이라 RMS보다 먼저↑.
+        "crest_factor",
     ],
     "hydraulic": [
         "flow_rate_l_min",
