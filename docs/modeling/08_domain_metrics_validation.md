@@ -48,6 +48,29 @@
 - 두 정책에 동일 시나리오·동일 episode 정의를 적용했는가
 - 막힘 사건 카운팅이 chattering으로 부풀려지지 않았는가
 
+### 측정 결과 (잠정, 2026-06-06) — [fault_injection/baseline_blockage_eval.py](../../fault_injection/baseline_blockage_eval.py)
+
+현재 모델(PROJECT_ROOT/models 6/2)로 `faulty_testset_v1`(현실적 하류 막힘 6건)에서 측정한 잠정치입니다.
+
+| 탐지기 | 막힘 사전감지 | 막힘률(놓침) | 평균 lead-time | FAR |
+|---|---|---|---|---|
+| 단일센서 baseline(z>3) | 6/6 | 0% | 38.1h | 0.050 |
+| AE(4도메인, retrain-regime) | 6/6 | 0% | 29.9h | 0.010 |
+| AE(4도메인, **정본** retrain-fix-iso) | 6/6 | 0% | 35.9h | 0.014 |
+
+(정본 = 진동 fix + DOMAIN_ISOLATION 모델, run `..205644..retrain-fix-iso`. 2026-06-06.)
+
+**정직한 발견**: 심한 막힘(유량 65%까지 하락)은 단일센서 baseline도 전부 잡습니다(막힘률 0% 동일).
+따라서 **"단일센서 대비 막힘률 10%→2%" 발화는 이 테스트로는 지지되지 않습니다.** 실측된 AE의 우위는
+막힘률이 아니라 **동일 검출에서 FAR(오탐) 5배 감소(5%→1%)** 입니다. baseline의 더 긴 lead-time(38h)은
+baseline이 더 자주 트립(오탐 5%)하기 때문이라, 우위로 보기 어렵습니다.
+
+**그래서 발화를 다음 중 하나로 정직화해야 합니다**:
+1. (지금 지지됨) "단일센서 baseline 대비 동일 막힘 검출에서 오탐률(FAR)을 5%→1%로 5배 낮췄다."
+2. (추가 근거 필요) 막힘률 차이를 보이려면 ⓐ iso-FAR 비교(baseline을 AE와 같은 FAR로 맞춘 뒤 검출/lead-time 비교),
+   또는 ⓑ 초기·미묘한 막힘(낮은 severity) 에피소드 추가로 단일센서가 놓치는 구간을 만들어야 한다.
+3. 재학습(DOMAIN_ISOLATION·기동 band) 후 정본 수치로 재측정.
+
 ---
 
 ## 3. Cpk 공정능력지수 (2순위 — 막힘 정의·규격 확정 후)

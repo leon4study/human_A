@@ -56,6 +56,10 @@
       docker/추론 API가 읽는 곳이며 현재 2026-04-22 구버전이다. 안 하면 배포 API는 옛 모델을 계속 쓴다.
       `cp models/*.keras models/*_config.json models/*_scaler.pkl models/*_shap.json services/inference/models/`
 - [ ] 평가 재실행: `fault_injection/leadtime_eval.py`(PROJECT_ROOT/models를 읽음) — lead-time 갱신.
+- [ ] **디스크 정리(매 재학습)**: 새 run이 검증되면 superseded(낡은) run 스냅샷을 삭제해 용량을 아낀다.
+      지표 이력은 `logs/experiment_board.csv` + MODEL_CHANGELOG에 이미 보존되므로, 모델 바이너리만
+      지워도 수치는 안 사라진다. 보통 **최신 run 1개만 유지**(필요 시 known-best 1개 추가).
+      `ls models/runs/` 로 확인 후 옛 폴더 `rm -rf models/runs/<old_run_id>` (서빙 라이브 `models/`는 건드리지 말 것).
 - [ ] regime 실검증: 동기화 후 `STARTUP_MODE=regime python fault_injection/startup_strategy_eval.py`,
       `sensor_fault_eval.py` 재실행(두 스크립트는 현재 `services/inference/models`를 읽음 — §6 참고).
 - [ ] 재현성: 2회 실행 시 config 동일.

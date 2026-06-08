@@ -385,6 +385,14 @@ def create_modeling_features(df, extra_cols=None):
         "zone_ec_variance", "zone_moisture_variance", "substrate_ec_accum_rate",
         "system_resistance", "specific_energy",
         "bearing_thermal_margin", "load_per_speed",
+        # motor 베어링 센서 — zone_drip 토양센서와 같은 버그였음(2026-06-06 재학습 로그로 발견).
+        #   이 둘이 model_cols에 없어 집계 전에 잘려, motor 도메인이 '진동'을 한 피처도 못 보고
+        #   학습됐다. 그 결과 베어링 마모·공동현상(cavitation) 같은 '진동 기반 고장'에 깜깜이가 됐고,
+        #   coupling_validate에서 motor가 흡입 막힘의 진동(+45%)을 놓치는 것으로 확인됨.
+        #   진동(bearing_vibration_rms_mm_s)은 파생 생존자도 없어 정보가 완전히 사라졌다.
+        #   (bearing_temperature_c는 bearing_thermal_margin 계산엔 쓰이나 raw 자체는 잘렸음.)
+        #   SENSOR_MANDATORY[motor]가 요구하는 센서이므로 화이트리스트에 추가해 집계까지 보존한다.
+        "bearing_vibration_rms_mm_s", "bearing_temperature_c",
     ]
 
     # extra_cols: SHAP 타겟처럼 반드시 보존해야 하는 컬럼들
