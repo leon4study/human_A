@@ -181,11 +181,19 @@ def create_modeling_features(df, extra_cols=None):
     # 2. 온도 & 진동 동특성 지표
     # =====================================================================
     # 초당 모터 온도 변화율 (Temperature Slope)
-    df_feat["temp_slope_c_per_s"] = df_feat["motor_temperature_c"].diff() / dt_seconds
+    # [robust slope] 원시 1차 차분(diff)은 끝점 2개만 써서 분 단위 센서 jitter를 증폭한다
+    #   (Phase K 잔여 motor FAR 5.1%의 원인). 트레일링 이동평균으로 먼저 다듬은 뒤 변화율을
+    #   내면 노이즈는 줄고 추세(베어링 과열·증속 ramp)는 보존된다. 순간 스파이크는 level 피처가 잡음.
+    _SLOPE_SMOOTH_W = 5   # 트레일링 5분 평활(인과적, 미래 미참조)
+    df_feat["temp_slope_c_per_s"] = (
+        df_feat["motor_temperature_c"].rolling(_SLOPE_SMOOTH_W, min_periods=1).mean().diff() / dt_seconds
+    )
 
     # 유량/RPM 변화율 및 가속도
     df_feat["flow_diff"] = df_feat["flow_rate_l_min"].diff().fillna(0)
-    df_feat["rpm_slope"] = df_feat["pump_rpm"].diff() / dt_seconds
+    df_feat["rpm_slope"] = (
+        df_feat["pump_rpm"].rolling(_SLOPE_SMOOTH_W, min_periods=1).mean().diff() / dt_seconds
+    )
     df_feat["rpm_acc"] = df_feat["rpm_slope"].diff().fillna(0)
 
     # RPM 안정성 지수 (RPM Stability Index)
@@ -370,6 +378,15 @@ def create_modeling_features(df, extra_cols=None):
         (df_feat["pump_on"] == 1) & (_power >= 0.5), 0.0
     )
 
+    # crest_factor = 진동 peak / RMS. 베어링 초기 결함의 표준 '조기' 지표(ISO 13373 진동 상태감시).
+    #   베어링 손상은 충격성(impulsive)이라 peak가 RMS보다 '먼저' 오른다 → crest factor가 FFT·RMS보다
+    #   앞서 상승(가장 이른 전조). 건강한 정현파면 약 1.414, 결함이면 상승. RMS(크기)는 늦게 온다.
+    #   정지/저진동 구간은 분모 발산 방지로 0. 출처: ISO 13373; crest factor 조기 베어링 진단 표준.
+    _crest = df_feat["vibration_peak_mm_s"] / (df_feat["bearing_vibration_rms_mm_s"] + eps)
+    df_feat["crest_factor"] = _crest.where(
+        (df_feat["pump_on"] == 1) & (df_feat["bearing_vibration_rms_mm_s"] >= 0.5), 0.0
+    )
+
     # leaching_ratio = 배액 EC / 공급 EC. 공공데이터: 배액 EC가 공급보다 '높으면 염류 축적'(>1),
     #   낮으면 양분 부족. 즉 1을 기준으로 양액 상태를 직격하는 비율(12 §8-4). mix_ec는 1.5~1.8이라 0 위험 없음.
     df_feat["leaching_ratio"] = df_feat["drain_ec_ds_m"] / (
@@ -420,7 +437,7 @@ def create_modeling_features(df, extra_cols=None):
         #   진동(bearing_vibration_rms_mm_s)은 파생 생존자도 없어 정보가 완전히 사라졌다.
         #   (bearing_temperature_c는 bearing_thermal_margin 계산엔 쓰이나 raw 자체는 잘렸음.)
         #   SENSOR_MANDATORY[motor]가 요구하는 센서이므로 화이트리스트에 추가해 집계까지 보존한다.
-        "bearing_vibration_rms_mm_s", "bearing_temperature_c",
+        "bearing_vibration_rms_mm_s", "bearing_temperature_c", "crest_factor",
         # §7 관계 판별 피처(검증 공식, docs/modeling/12 §7·§8). 운전점 무관·직교 정보라 고장 직격.
         "vibration_per_load", "leaching_ratio", "transpiration_demand",
         "mix_temp_c",  # raw 존재하나 누락됐던 것 복원(nutrient mandatory)

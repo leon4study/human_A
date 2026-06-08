@@ -3,8 +3,9 @@ import numpy as np
 from pathlib import Path
 
 # 난수 고정 및 출력 경로 설정
-np.random.seed(42)
-OUTPUT_DIR = Path("../data")  # 필요에 따라 경로 수정
+MASTER_SEED = 42  # 데이터 생성 마스터 시드. 학습셋=42, held-out 테스트셋은 다른 값으로 독립 노이즈열을 쓴다.
+np.random.seed(MASTER_SEED)
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data"  # <project_root>/data — cwd 무관(이식성). 이전 "../data"는 실행 위치에 따라 엉뚱한 곳에 저장됐다.
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -28,7 +29,7 @@ def ar1_process(n, sigma, phi=0.995, seed_offset=0):
     [재현성] 전역 np.random.seed와 별개로 default_rng(seed_offset)로 센서마다 독립 난수열을 쓴다.
       seed_offset을 센서별로 다르게 주어야 두 센서의 고유 성분이 서로 독립이 된다.
     """
-    rng = np.random.default_rng(42 + seed_offset)
+    rng = np.random.default_rng(MASTER_SEED + seed_offset)
     e = rng.normal(0.0, sigma, n)        # 매 시점 새로 들어오는 충격(innovation)
     u = np.zeros(n)
     for t in range(1, n):
@@ -204,7 +205,7 @@ def simulate_zone_data(
 # 5. [메인] 데이터 통합 파이프라인 (총 50개 컬럼 완벽 세팅)
 # ==========================================
 def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min",
-                                degradation=True):
+                                degradation=True, seed=None):
     """
     degradation:
       True(기본)  — 30일 이후 막힘(clog)이 자라는 '자연 노후' 시나리오(참고/대조용).
@@ -213,6 +214,12 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
                     (고장은 자연 노후가 아니라 fault_injection 프레임으로 통제 주입하므로,
                      학습셋은 막힘 없는 정상이어야 AE가 정상 manifold만 배운다. docs/modeling/12 §6.)
     """
+    # [재현성·held-out] seed가 주어지면 마스터 시드를 바꿔 '학습과 겹치지 않는' 독립 노이즈열을 만든다.
+    #   학습셋(seed=None)은 모듈 로드 시 고정된 42를 그대로 쓰고, 테스트셋은 다른 seed로 독립 정상 노이즈를 얻는다.
+    global MASTER_SEED
+    if seed is not None:
+        MASTER_SEED = seed
+        np.random.seed(seed)
     idx = pd.date_range(start=start, periods=days * 24 * 60, freq=freq)
     n = len(idx)
     minute_of_day = idx.hour * 60 + idx.minute
@@ -321,11 +328,25 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
     #   seed_offset=3(모터)·4(베어링)로 서로 독립.
     motor_winding_indep = ar1_process(n, sigma=0.30, phi=0.99, seed_offset=3)
     bearing_friction_indep = ar1_process(n, sigma=0.45, phi=0.99, seed_offset=4)
+    # [C5 열적 관성] 모터 권선·베어링은 열용량이 커서 온도가 '천천히' 쌓이고 빠진다(열 시정수 τ분).
+    #   이전엔 측정노이즈(백색)를 온도 본체에 직접 더해 관성이 없었고, 그 결과 분단위 jitter가 커서
+    #   원시 슬로프(diff)를 증폭했다(Phase L 진단의 근본 원인). 이를 물리적으로 바로잡는다:
+    #   (1) 물리 목표온도 = 열원 합(기온 + 펌프발열 + 권선/마찰 고유성분). (2) 1차 열지연 = EWM
+    #   (지수가중이동평균 = 1차 IIR 저역통과)으로 목표를 천천히 따라가게 한다. 펌프 ON 스텝도
+    #   EWM을 거치면 즉각이 아니라 τ분에 걸쳐 가열되는 현실적 거동이 된다. (3) 센서 측정노이즈는
+    #   관성이 없으므로 평활 '뒤'에 얇게(0.07~0.08°C) 별도로 더한다. → 물리온도가 매끄러워 원시
+    #   슬로프도 자연 정제(feature 레벨 robust 슬로프와 상호보완). 출처: 1차 열전달 lumped
+    #   capacitance 모델(dT/dt=(T_target−T)/τ)의 이산 IIR 근사.
+    THERMAL_TAU_MIN = 15.0   # 열 시정수(분). 소형 펌프 모터 권선 열응답 ~10~20분 범위
+    _motor_target = air_temp_arr + (13 + 2.5 * clog) * pump_on + motor_winding_indep
     motor_temp = (
-        air_temp_arr + (13 + 2.5 * clog) * pump_on + motor_winding_indep + np.random.normal(0, 0.22, n)
+        pd.Series(_motor_target).ewm(alpha=1.0 / THERMAL_TAU_MIN, adjust=False).mean().to_numpy()
+        + np.random.normal(0, 0.08, n)
     )
+    _bearing_target = air_temp_arr + (10 + 2.0 * clog) * pump_on + bearing_friction_indep
     bearing_temp = (
-        air_temp_arr + (10 + 2.0 * clog) * pump_on + bearing_friction_indep + np.random.normal(0, 0.18, n)
+        pd.Series(_bearing_target).ewm(alpha=1.0 / THERMAL_TAU_MIN, adjust=False).mean().to_numpy()
+        + np.random.normal(0, 0.07, n)
     )
 
     filter_in = (145 + 8 * irr_mask + 5 * clog) * pump_on + np.random.normal(
@@ -346,6 +367,35 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
         cleaning_boost,
         pump_on,
     )
+
+    # ── [C1 Na 축적 + C2 EC→삼투→흡수] 순환식 양액 화학 충실성 (ledger §3-3) ──────────────
+    #   C1: 닫힌 순환계에서 Na+는 식물이 물을 Na보다 빨리 흡수해 순환액에 농축된다(딸기는 Na 거의
+    #       비흡수). 단순 질량수지 = 분당 미세 누적 + 주기적 배액 교체(1~2주)로 리셋되는 톱니파.
+    #       딸기 염류 임계 1.5 mmol/L(35ppm). 출처: Neocleous 2017 J.Plant Nutr.; WUR edepot 403810.
+    #   C2: Na 축적이 EC를 올리고(이온 전도 ~0.1 dS/m per mmol/L), 높은 EC는 삼투 포텐셜을 낮춰
+    #       (Ψ=-0.036·EC, US Salinity Lab Handbook 60) 수분이 있어도 흡수를 막는다('수분 정상인데
+    #       흡수↓' 디커플). 흡수 억제는 Na>0.8 mmol/L부터, 억제분은 배지 수분↑·EC↑로 관측된다.
+    NA_REFRESH_DAYS = 12          # 순환액 배액 교체 주기(원예 관행 1~2주)
+    NA_PEAK, NA_BASE = 1.45, 0.15  # 교체 직전 도달치(임계 1.5 바로 아래) / 교체 직후 잔류
+    _na_phase = np.arange(n) % (NA_REFRESH_DAYS * 1440)           # 교체 후 경과 분
+    na_accumulation = (
+        NA_BASE + (NA_PEAK - NA_BASE) * (_na_phase / (NA_REFRESH_DAYS * 1440))
+        + np.random.normal(0, 0.01, n)
+    )
+    ec_from_na = 0.10 * (na_accumulation - NA_BASE)              # EC 상승분(dS/m)
+    uptake_suppress = np.clip(0.18 * (na_accumulation - 0.8), 0.0, 0.35)  # 0~35% 흡수 억제
+    # mix EC(Na 반영) + 삼투 포텐셜(파생). dict에서 재사용.
+    mix_ec_arr = (
+        1.80 + 0.02 * np.sin(2 * np.pi * minute_of_day / 1440)
+        + 0.025 * clog + ec_from_na + np.random.normal(0, 0.012, n)
+    )
+    osmotic_potential_mpa = -0.036 * mix_ec_arr                  # Ψ=-0.036·EC (Handbook 60)
+    # [C2] 흡수 억제를 배지에 후처리 반영(zone 함수 시그니처 불변): 흡수↓ → 물 남음·양분 축적.
+    for _z in (1, 2, 3):
+        zone_data[f"zone{_z}_substrate_moisture_pct"] = np.round(
+            zone_data[f"zone{_z}_substrate_moisture_pct"] + 6.0 * uptake_suppress, 2)
+        zone_data[f"zone{_z}_substrate_ec_ds_m"] = np.round(
+            zone_data[f"zone{_z}_substrate_ec_ds_m"] + 0.5 * uptake_suppress, 3)
 
     # 🚨 정답지(Risk Stage) 계산 - 펌프 꺼짐(유량0)에도 상태가 유지되도록 delivery_eff 사용
     risk_score = 0.35 * clog + 0.35 * blocked_ratio + 0.30 * (1.0 - delivery_eff)
@@ -397,13 +447,9 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
             1.9 + 0.22 * irr_mask + 0.5 * clog + np.random.normal(0, 0.07, n), 3
         ),
         "mix_target_ec_ds_m": np.round(np.full(n, 1.80), 2),
-        "mix_ec_ds_m": np.round(
-            1.80
-            + 0.02 * np.sin(2 * np.pi * minute_of_day / 1440)
-            + 0.025 * clog
-            + np.random.normal(0, 0.012, n),
-            3,
-        ),
+        "mix_ec_ds_m": np.round(mix_ec_arr, 3),  # [C1] Na 축적 반영
+        "na_accumulation_mmol_l": np.round(na_accumulation, 3),     # [C1] 순환액 Na 축적 상태(raw)
+        "osmotic_potential_mpa": np.round(osmotic_potential_mpa, 4),  # [C2] 삼투 포텐셜(raw, =-0.036·EC)
         "mix_target_ph": np.round(np.full(n, 5.80), 2),
         "mix_ph": np.round(
             5.80
@@ -433,6 +479,7 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
             + 0.04 * daylight
             + 0.25 * clog
             + 0.3 * blocked_ratio
+            + 1.2 * ec_from_na
             + ar1_process(n, sigma=0.02, phi=0.99, seed_offset=5)
             + np.random.normal(0, 0.025, n),
             3,

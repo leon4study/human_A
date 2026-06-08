@@ -39,7 +39,7 @@ from preprocessing import step1_prepare_window_data          # noqa: E402  (윈�
 from evaluate_test_metrics import run_inference              # noqa: E402  (AE 추론 = 운영과 동일 경로, PROJECT_ROOT/models 사용)
 
 CLEAN_CSV = os.path.join(PROJECT, "data", "smartfarm_normal_train_v5.csv")  # clog-free 정상 데이터 = baseline의 '정상 분포' 기준
-FAULTY_CSV = os.path.join(PROJECT, "data", "faulty_testset_v1.csv")             # 막힘 6건이 주입된 라벨 testset
+FAULTY_CSV = os.path.join(PROJECT, "data", "faulty_testset_v2.csv")             # held-out base에 4종 고장 16건 주입한 라벨 testset
 BASELINE_ROWS = 43200   # clean 90일셋의 앞 30일(30×1440분)만 사용해 평균·표준편차 산출
 Z_CUT = 3.0             # 단일 센서 baseline의 민감도: |z|>3 (정상에서 매우 드문 값)이면 이상으로 본다
 

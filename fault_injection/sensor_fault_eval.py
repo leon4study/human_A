@@ -44,7 +44,7 @@ from sensor_faults import apply_sensor_fault                 # noqa: E402
 # (docs/modeling/11 §6 — 모델 두 곳 갈림 문제 해소)
 MODELS_DIR = os.environ.get("MODELS_DIR", os.path.join(PROJECT, "models"))
 CLEAN_CSV = os.path.join(PROJECT, "data", "smartfarm_normal_train_v5.csv")
-FAULTY_CSV = os.path.join(PROJECT, "data", "faulty_testset_v1.csv")
+FAULTY_CSV = os.path.join(PROJECT, "data", "faulty_testset_v2.csv")
 
 DOMAIN = "hydraulic"                 # 실제 막힘 대비군이 있는 도메인
 TARGET_SENSOR = "discharge_pressure_kpa"   # 단일 센서 결함 타깃

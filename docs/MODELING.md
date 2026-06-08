@@ -250,6 +250,56 @@ mse_scores = np.mean(sq_err[:, scoring_mask], axis=1)
 
 > [train.py:101-119](../services/inference/src/train.py#L101-L119), [inference_core.DEFAULT_CONTEXT_FEATURES](../services/inference/src/inference_core.py)
 
+#### 5-2-1. 일반화 — 조건부/마스크 재구성 AE (입력은 넓게, 채점은 좁게)
+
+위 `scoring_mask`는 사실 하나의 일반 원리의 특수 사례다. 우리 AE는 **모든 입력 피처를
+받아 모두 재구성**하지만(대칭 구조, `input_dim = 전체 피처 수`), 알람을 띄우는 **이상 점수는
+선택된 일부 피처의 재구성오차 평균만으로** 낸다(`sq_err[:, scoring_mask]`). 즉 **입력은 넓게
+(인코더가 모든 상관을 활용), 채점은 좁게(그 도메인이 책임지는 신호만 알람 트리거)** 하는
+구조다. 문헌에서 말하는 조건부 이상탐지(condition 변수로 모델을 조건짓되, 채점은 지표
+변수에만)와 같은 발상이다.
+
+핵심: 어떤 피처를 채점에서 빼도 **그 피처는 인코더 입력에 그대로 남는다**. "제거"가 아니라
+"그 자체의 재구성오차로는 이 도메인 알람을 못 띄우게 채점에서만 빼는 것". 따라서 교차도메인
+상관(SHAP이 큰 영향이라 지목한 신호)을 **버리지 않고 보존**하면서, 그 피처가 노이즈로 튈 때
+헛알람만 막는다. 입력(피처 선택)을 안 바꾸므로 피처선택 재설계가 부르는 회귀 위험(A-3)도 없다.
+
+빼는 대상은 두 부류로 나뉜다.
+
+1. **시간·상태 컨텍스트** (구현됨) — `DEFAULT_CONTEXT_FEATURES`(time_sin/cos·pump_on·
+   minutes_since_startup 등). 정상 패턴을 조건짓지만 액션 불가라 채점·RCA에서 제외.
+2. **교차도메인 외래 피처** (후보, 미구현) — 다른 도메인이 소유한 신호가 SHAP으로 한 도메인에
+   섞여 들어온 경우(예: motor 입력에 들어온 수력 `pressure_diff`·`flow_diff`). 인코더엔 남겨
+   교차상관을 쓰되, 이 도메인 채점에서는 빼서 헛알람을 막는다. `actionable_feature_mask(features,
+   exclude=...)`가 도메인별 `exclude` 집합을 이미 받으므로, `exclude = 기본 컨텍스트 ∪ 그
+   도메인엔 외래인 피처`를 넘기면 된다. train이 결과를 `config["scoring_features"]`에 저장하고
+   추론이 그 목록을 읽으므로 train/serve가 자동 일치한다.
+
+**내부 선례(왜 이게 통하는지 우리 데이터로 이미 확인)**: Phase B(2026-04-20). 시간 컨텍스트를
+입력에 주입하니 정상 패턴 학습 이득은 얻었으나, MSE가 전체 피처 평균이라 `time_cos` 하나의
+복원오차(실센서의 10~50배)가 threshold를 넘겨 **실센서가 멀쩡한데 알람 + RCA Top1이 time_cos**
+인 사태가 났다. 채점 제외로 해결. motor의 `pressure_diff`(Phase J 오탐 기여 25%) 문제는 **한
+단계 위 같은 패턴**(컨텍스트가 아니라 외래 도메인 피처일 뿐)이라, 같은 처방이 그대로 적용된다.
+상세: MODEL_CHANGELOG Phase B·J.
+
+**외부 근거(개념 계보)**: 이 "조건 변수와 채점 변수를 나눈다"는 분리는 새 발명이 아니라
+이상탐지에서 정립된 표준 구분이다. 아래는 그 계보의 핵심 문헌과, 각각이 우리 `scoring_mask`에
+어떻게 대응되는지다.
+
+| 문헌 | 핵심 주장 | 우리 대응 |
+|---|---|---|
+| Song, Wu, Jermaine, Ranka, "Conditional Anomaly Detection," *IEEE TKDE* 19(5), 2007 | 데이터 속성을 **environmental/contextual(조건)** 와 **indicator(채점)** 로 분리. 컨텍스트 속성 자체에서 이상을 채점하면 오탐이 늘므로, 컨텍스트로 *조건짓되* 지표 속성만 채점하라. | `scoring_mask`의 이론적 골격 그 자체. time/state·외래도메인 피처 = environmental, 도메인 자기 센서 = indicator. |
+| Chandola, Banerjee, Kumar, "Anomaly Detection: A Survey," *ACM Computing Surveys* 41(3), 2009 | 이상탐지 랜드마크 서베이. **contextual attributes vs behavioral attributes** 를 정식화 — 같은 값도 맥락에 따라 정상/이상이 갈린다. | 기동 overshoot가 기동 맥락에선 정상(컨텍스트 조건), 정상상태 맥락에선 이상. 기동 band·컨텍스트 제외의 근거. |
+| Sohn, Lee, Yan, "Learning Structured Output Representation using Deep Conditional Generative Models" (Conditional VAE), *NeurIPS* 2015 | 생성/재구성을 covariate(조건 변수)로 **조건짓는** 심층 생성모델. 입력 일부를 조건으로 받아 나머지를 생성. | "입력은 넓게(조건 포함), 재구성/채점은 좁게"의 딥러닝판 형식화. |
+| Pang, Shen, Cao, van den Hengel, "Deep Learning for Anomaly Detection: A Review," *ACM Computing Surveys* 54(2), 2021 | 재구성기반 심층 이상탐지 리뷰. 무관·노이즈 피처가 재구성오차 점수를 오염시켜 탐지력을 떨어뜨림을 지적, 피처 적합성의 중요성을 정리. | motor 채점에 섞인 외래 `pressure_diff`(오탐 25%)가 점수를 오염시킨 현상의 일반 진술. |
+
+원리 한 줄: **무관·노이즈성 피처를 재구성 점수에 넣으면 오탐이 는다 → 조건으로만 쓰고
+채점에서 빼라.** (포트폴리오 인용 시 권/호·페이지 등 서지정보는 원문 재확인 권장. 우리의 1차
+증거는 어디까지나 Phase B 내부 A/B 측정이다.)
+
+**상태**: 부류 2(교차도메인 마스크)는 Phase J의 motor FAR 회귀(6.3%) 수정 후보로 검토 중이며,
+구현·재측정 전이다. 도입 시 coupling_validate(고정 오라클)로 검출·attribution 회귀 점검 필수.
+
 ### 5-3. 피처별 threshold (per-feature)
 도메인 전체 MSE와 별도로, **각 피처마다 독립 임계치**도 계산해 RCA에서 "어느 센서가 얼마나 튀었는지" 정량 판단:
 

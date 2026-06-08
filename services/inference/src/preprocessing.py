@@ -181,11 +181,19 @@ def create_modeling_features(df, extra_cols=None):
     # 2. 온도 & 진동 동특성 지표
     # =====================================================================
     # 초당 모터 온도 변화율 (Temperature Slope)
-    df_feat["temp_slope_c_per_s"] = df_feat["motor_temperature_c"].diff() / dt_seconds
+    # [robust slope] 원시 1차 차분(diff)은 끝점 2개만 써서 분 단위 센서 jitter를 증폭한다
+    #   (Phase K 잔여 motor FAR 5.1%의 원인). 트레일링 이동평균으로 먼저 다듬은 뒤 변화율을
+    #   내면 노이즈는 줄고 추세(베어링 과열·증속 ramp)는 보존된다. 순간 스파이크는 level 피처가 잡음.
+    _SLOPE_SMOOTH_W = 5   # 트레일링 5분 평활(인과적, 미래 미참조)
+    df_feat["temp_slope_c_per_s"] = (
+        df_feat["motor_temperature_c"].rolling(_SLOPE_SMOOTH_W, min_periods=1).mean().diff() / dt_seconds
+    )
 
     # 유량/RPM 변화율 및 가속도
     df_feat["flow_diff"] = df_feat["flow_rate_l_min"].diff().fillna(0)
-    df_feat["rpm_slope"] = df_feat["pump_rpm"].diff() / dt_seconds
+    df_feat["rpm_slope"] = (
+        df_feat["pump_rpm"].rolling(_SLOPE_SMOOTH_W, min_periods=1).mean().diff() / dt_seconds
+    )
     df_feat["rpm_acc"] = df_feat["rpm_slope"].diff().fillna(0)
 
     # RPM 안정성 지수 (RPM Stability Index)

@@ -197,9 +197,22 @@ s(t) = baseline(환경·setpoint)  +  Σ_k w_k · driver_k(t)  +  u_s(t)  +  ε_
 - **ISO 10816 진동 존**(이미 [10 §3-1 S2]): A≤1.4 / B≤2.8 / C≤4.5 / 정지>7.1 mm/s. 베어링 마모 시 RMS↑.
 - 베어링 마모는 부하와 무관한 독립 과정 → `vibration_per_load = vibration/power`가 부하 정규화 진동으로 마모만 분리.
 - (심화: 베어링 결함주파수 BPFO/BPFI는 주파수영역 — 현재 RMS 기반이라 후속.)
+- **열적 관성(thermal inertia)** [C5, 구현됨 2026-06-07]: 모터 권선은 열용량이 커 온도가 '천천히'
+  변한다(분 단위로 매끄럽다). lumped capacitance 모델 `dT/dt = (T_target − T)/τ`(τ≈15분)를 이산
+  IIR(=EWM, 지수가중이동평균)으로 근사해 물리온도를 평활하고, 센서 측정노이즈는 평활 '뒤'에 별도로
+  얇게 더한다. → 원시 슬로프(diff) jitter를 데이터 레벨에서 제거(feature 레벨 robust 슬로프와 상호보완).
 
 ### 8-4. 양액 (nutrient)
 - **배액률·leaching**: 배액 EC > 공급 EC = 염류 축적, < = 양분 부족(공공데이터 명시). 배액률 20~30% 정상.
   → `leaching_ratio = drain_ec / mix_ec` > 1 누적 = 염류 축적 신호.
+- **Na 축적(순환식 질량수지)** [C1, 구현됨 2026-06-07]: 닫힌 순환계에서 Na+는 식물이 물을 Na보다
+  빨리 흡수해 순환액에 농축된다(딸기는 Na 거의 비흡수). 딸기 염류 임계 **1.5 mmol/L(35 ppm)**.
+  주기적 배액 교체(1~2주)로 리셋되는 톱니. → Na↑가 `mix_ec`·`drain_ec`를 함께 상승시킨다.
+  출처: [Neocleous 2017, J. Plant Nutr. Soil Sci.](https://onlinelibrary.wiley.com/doi/10.1002/jpln.201600338) ·
+  [WUR edepot 403810](https://edepot.wur.nl/403810).
+- **EC → 삼투 포텐셜 → 흡수 디커플** [C2, 구현됨 2026-06-07]: **Ψ_osm(MPa) = −0.036 × EC(dS/m)**
+  (US Salinity Lab Handbook 60). 고EC → Ψ↓(삼투 스트레스) → 수분이 있어도 뿌리 흡수↓ → 배지 수분↑·
+  EC↑('수분 정상인데 흡수↓'). 출처: [Haifa — Salinity (Handbook 60 기반)](https://www.haifa-group.com/sites/default/files/Salinity.pdf).
+- (다음: C3 pH↔수온 드리프트, C4 VPD↔증산 정련 — ledger §3-3 설계 v6.)
 
 > 구현 시 각 §7 피처의 09 원장 행 '출처' 칸에 위 링크를 박는다.

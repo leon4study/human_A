@@ -744,3 +744,149 @@ motor FAR을 5%↓로 되돌리는 게 선결. 후보: (i) motor threshold를 pe
 - motor FAR 회귀 수정 → 재학습 → coupling_validate·baseline_blockage 재측정으로 Phase I 대비 회복 확인.
 - §7 관계피처 판별력 검증 또는 재설계(C 화학·농학 트랙과 통합 검토).
 - 집중도 판별을 포트폴리오에서 쓸지 재검토(jun에서 비재현).
+
+## Phase K — 교차도메인 외래 피처 채점 제외(조건부 마스크): FAR·attribution 동시 회복 (2026-06-07, 성공)
+
+### 가설
+Phase J의 motor 과발화(FAR 6.0%·attribution 오탐)의 뿌리는, 어느 SENSOR_MANDATORY에도 없는
+자유 파생피처 pressure_diff·flow_diff가 SHAP으로 motor 등에 섞여 채점을 오염시킨 것이다.
+이들을 '입력 유지 + 채점 제외'(조건부 마스크)하면 FAR과 attribution 오탐이 함께 풀린다.
+
+### 시도
+(1) eval==serve 정합 선결: evaluate_test_metrics가 전체 피처로 MSE를 내던 것을 scoring_features
+기반으로 수정(이게 없으면 채점 제외가 측정에 안 잡힘). (2) feature_engineering.foreign_scoring_features
+(DERIVED_FEATURE_OWNER: pressure_diff·flow_diff→hydraulic, ENVIRONMENT_CONTEXT: air_temp_c) +
+train.py 연동. (3) DOMAIN_ISOLATION=1 재학습 run `..205502..`. 채점 제외 로그 확인: motor
+[flow_diff,pressure_diff] 11/17, nutrient [air_temp_c,pressure_diff] 9/15, zone_drip [pressure_diff] 5/10.
+
+### 관측 (정합 eval 기준, faulty_testset 정상 윈도우)
+| 지표 | Phase J(누설) | Phase K(채점제외) |
+|---|---|---|
+| motor FAR | 6.0% | **5.1%** |
+| nutrient FAR | 2.1% | **0.9%** |
+| zone_drip FAR | 2.7% | **0.3%** |
+| overall FAR | 6.2% | **5.4%** |
+| bearing_wear 귀인 | motor + hydraulic 0.43(오탐) | **motor만**(hydraulic 0.07) |
+| nutrient_imb 귀인 | nutrient + motor 0.86(오탐) | **nutrient만**(motor 0.21) |
+- 검출 유지: clog 6/6, 막힘률 0%, AE lead-time 47.3h(같은 데이터 baseline 45.5h). 4 root 모두 검출 O.
+
+### 진단 / 교훈
+자유 파생피처 누설이 **FAR 상승과 attribution 오탐의 공통 뿌리**였음이 확정됐다 — 채점에서만
+빼니(입력·교차상관은 보존) 둘 다 해소. DOMAIN_ISOLATION(mandatory만 격리)의 사각지대를 조건부
+마스크가 메웠다. 'eval==serve 정합'이 선결조건이었다(없으면 수정이 측정에 안 잡힘) — 측정도구가
+서빙과 같은 점수식을 써야 변경을 정직하게 잰다(Phase B 컨텍스트 제외의 한 단계 위 일반화).
+
+### 수정 (확정 채택)
+조건부 마스크(foreign_scoring_features) + eval 정합을 정본으로. 포트폴리오 논거: '도메인 경계를
+입력이 아니라 채점에서 지켜(조건부 AE) 헛알람·오귀인을 동시에 줄였다'(근거: Conditional Anomaly
+Detection, MODELING §5-2-1).
+
+### 남은 과제
+- motor FAR 5.1%: 목표(≤5%) 경계이나 baseline(3.2%) 초과. 잔여는 유지 선택한 노이즈 슬로프
+  (rpm_slope·temp_slope). 옵션: motor만 threshold percentile화(사용자 '둘 다'의 (나) 단계) — 선택 대기.
+- jun 데이터는 현실적 노이즈라 dabin Phase I(FAR 1.4%) 수준 복귀는 구조적으로 어려움(정직 서술).
+
+## Phase L — robust 슬로프(rpm_slope·temp_slope): motor FAR 회귀 종결 (2026-06-07, 성공)
+
+### 가설
+Phase K 잔여 motor FAR 5.1%의 주범은 유지 선택한 노이즈 슬로프다. 두 슬로프가 원시 1차
+차분(x.diff()/dt)이라 끝점 2개만 써서 분 단위 센서 jitter를 증폭한다. 트레일링 이동평균으로
+다듬은 뒤 변화율을 내면(robust 슬로프) 추세는 보존하며 노이즈만 줄여 FAR이 더 내려간다.
+
+### 시도
+preprocessing의 temp_slope_c_per_s·rpm_slope를 `x.rolling(5,min_periods=1).mean().diff()/dt`로
+교체(인과적 5분 평활). 재학습 전 검증: 시간대 구조 제거 후 잔차(랜덤)노이즈 std temp -72%·rpm -55%,
+60분 +6°C 과열 모사에서 평균 슬로프 보존(원시 2.53e-3≈robust 2.55e-3). 재학습 run `..212812..`.
+
+### 관측 (정합 eval)
+| 지표 | Phase K | Phase L |
+|---|---|---|
+| motor FAR | 5.1% | **2.7%**(baseline 3.2% 미만) |
+| overall FAR | 5.4% | **4.2%** |
+| 검출/막힘률 | 6/6·0% | 6/6·0% |
+| lead-time | 47.3h | 45.4h(-1.9h) |
+- 부수효과: 슬로프 평활로 motor 점수 분포 skew 7.42→8.30(cutoff 8.0 초과) → threshold method가
+  sigma→**percentile**로 자동 전환(목표 분위 직접 타게팅). 사용자 '둘 다'의 (나)가 자동 충족된 셈.
+- attribution 유지(4 root 모두 O). 단 nutrient_imbalance에서 motor 경계(~0.3) 잔존(사소).
+
+### 진단 / 교훈
+원시 1차 차분은 어떤 신호든 고주파 노이즈를 증폭한다(수학적). robust 슬로프로 잔차노이즈를
+72%/55% 줄이니 motor FAR이 절반 가까이(5.1→2.7%) 떨어지고 baseline 아래로 내려갔다. 평활 대가로
+lead-time 1.9h 감소(45.4h)는 허용 범위. '증상(threshold)이 아니라 원인(피처 노이즈)을 고친다'가
+감지력을 거의 안 깎고 FAR을 더 낮췄다.
+
+### 수정 (확정 채택)
+robust 슬로프를 정본으로. motor FAR 회귀(Phase J 6.0%→Phase L 2.7%) 종결. 포트폴리오: 도메인
+FAR 모두 baseline(3.2%) 미만(motor 2.7·hydraulic 1.9·nutrient 0.9·zone 0.3), overall 4.2%는
+4개 도메인 OR이라 baseline(13센서 OR 3.2%)보다 약간 높음 — 정직 서술(이점은 도메인 귀인+lead-time).
+
+### 남은 과제
+- 데이터 현실성(근본): motor_temp가 실제 열적 관성보다 분단위 jitter가 큼(AR(1) 독립노이즈에
+  thermal low-pass 부재). data_gen에 1차 열지연을 주면 원시 슬로프도 자연히 매끈 — 데이터 현실화
+  트랙 후보(선택). robust 슬로프와 상호보완.
+- overall 4.2% 추가 인하(예: 연속 N윈도우 디바운싱/2도메인 동시) 여부는 선택.
+
+## Phase M — 데이터 현실화 v6: Na축적·EC삼투·열지연 (2026-06-07, 데이터 변경·측정 대기)
+
+### 가설
+baseline·motor FAR이 확정됐으니(J~L) data_gen의 화학·열 충실성을 올리면 nutrient/zone 도메인이
+의미를 갖고, 슬로프 jitter의 데이터 레벨 근본도 잡힌다. 검증 공식만 사용(지어내지 않음).
+
+### 시도 (data_gen_jun 개정, 검증공식 + 출처)
+- C5 열적 관성: motor/bearing_temp를 lumped capacitance(dT/dt=(T_target−T)/τ, τ=15분) 이산 IIR(EWM)로
+  평활 + 측정노이즈 분리. → motor_temp 원시 슬로프 std 2.1e-2→3.6e-3(-83%).
+- C1 Na 축적: 순환식 질량수지 톱니(0.15→1.45 mmol/L, 딸기 임계 1.5 미만, 12일 교체). Na→mix/drain EC↑.
+  출처 Neocleous 2017·WUR 403810. 신규 raw 컬럼 na_accumulation_mmol_l.
+- C2 EC→삼투→흡수: Ψ=-0.036·EC(Handbook 60). 고EC서 흡수↓(Na>0.8서 0~35%) → 배지 수분↑·EC↑.
+  신규 raw 컬럼 osmotic_potential_mpa. na/osmotic은 raw만(EC와 collinear라 model_cols 제외).
+- 검증: na 톱니 임계 미만, osmotic=-0.036·EC 검산 일치, na↔mix_ec +0.89·na↔배지EC +0.44(디커플 작동),
+  mix↔drain +0.26(신규 collinearity 없음), bearing↔motor 0.79→0.83(<0.85). 미러 data_gen은 dead.
+
+### 관측 / 진단 / 수정 (측정 대기)
+data_gen만 바뀜 — 효과는 사용자가 정상셋 regen(`python src/data_gen_jun.py`) + faulty_testset 재생성
++ 재학습 후 측정해야 확정. 기대: nutrient/zone가 EC-삼투-배지 패턴을 학습해 의미↑, FAR·attribution
+회귀 없어야(coupling_validate로 확인). C3 pH-수온·C4 VPD는 후속.
+
+### Phase M 측정 (2026-06-08, run ..223926..)
+- C 성공(목표 달성): nutrient SHAP에 salt_accumulation_delta·leaching_ratio, zone에 substrate_moisture
+  등장 → 양액·구역 도메인이 의미를 얻음(C1/C2 신호 생존). motor FAR 2.7→1.5%(C5 추가 개선).
+  검출 6/6·막힘률 0%·lead-time 47.3h, attribution 4 root 모두 O.
+- 회귀: hydraulic FAR 1.9→4.1%, overall 4.2→5.0%(목표 5% 경계, baseline 3.4% 초과). 원인 = C가
+  SHAP 선택을 흔들어 hydraulic이 과적합(val_loss 1e-4)→threshold 0.0008→0.00035 타이트→eval서 초과.
+  오탐 70%가 pressure_trend_10·flow_trend_10(이미 롤평균-diff인데 정상엔 거의 0+노이즈).
+- 진단: J~M 내내 FAR이 도메인을 옮겨가며 재발(motor→hydraulic) = sigma threshold가 도메인 fit
+  타이트함에 FAR을 묶어 '통제 불가'. 근본 해결은 threshold를 목표-FAR 분위(percentile)로 통제하거나,
+  realistic 데이터의 overall ~5%를 정직 수용(이점=귀인+lead-time). 사용자 결정 대기.
+
+## Phase N — threshold 목표-FAR 통제(percentile 기본값): FAR whack-a-mole 종결 (2026-06-08, 성공)
+
+### 가설
+J~M 내내 FAR이 도메인을 옮겨다니며 재발(motor→hydraulic)한 근본은 sigma(μ+kσ)가 도메인의 학습셋
+fit 타이트함에 FAR을 묶어 '통제 불가'인 것. 분위(percentile)로 '정상의 상위 X%'를 알람선으로 고정하면
+fit과 무관하게 FAR이 통제돼 whack-a-mole이 끝난다.
+
+### 시도
+`THRESHOLD_METHOD=percentile PCT_CAUTION=99 PCT_WARNING=99.6 PCT_CRITICAL=99.9` 재학습(run ..140317..)
++ train.py 기본값을 percentile@99로 전환(method auto→percentile, PCT_CAUTION 95→99, WARNING→99.6).
+per-domain caution을 정상 상위 1%로 고정 → voting OR해도 overall≈baseline 이하 설계.
+
+### 관측 (정합 eval)
+| 도메인 | sigma(Phase M) | percentile(N) |
+|---|---|---|
+| hydraulic | 4.1% | **1.8%** |
+| motor | 1.5% | **0.5%** |
+| nutrient | 0.7% | 0.4% |
+| zone_drip | 0.6% | **0.0%** |
+| **overall** | 5.0% | **2.3%** (< baseline 3.4%) |
+- baseline_blockage: AE FAR 2.3% < baseline 3.4%(AE 헛알람이 더 적음). 검출 6/6·막힘률 0%.
+- lead-time 47.3→43.9h(-3.4h): 완화로 인한 FAR↔조기경보 트레이드오프(허용 범위).
+- attribution 가장 깨끗: clog→hydraulic만, bearing→motor만, suction→hydraulic+motor, nutrient_imb→nutrient만.
+
+### 진단 / 교훈
+percentile이 fit-tightness와 무관하게 FAR을 분위로 고정 → whack-a-mole 종결. 도메인 OR(overall)도
+per-domain을 1%로 낮춰 baseline 이하로 통제. '목표 오탐률로 임계 설정'은 표준·방어가능한 설계라
+포트폴리오 서사도 강해진다(F1·막힘률 대신 검증된 FAR 2.3%<baseline·lead-time 43.9h·깨끗한 귀인).
+
+### 수정 (확정 채택)
+percentile@99를 train.py 정본 기본값으로. 현재 모델이 이미 이 구성이라 재학습 불필요. env로 미세조정
+여지(PCT_CAUTION↓하면 lead-time↑·FAR↑). FAR 작업(J~N) 종결 — 이제 D(포트폴리오 정직화)의 확정 수치 확보.

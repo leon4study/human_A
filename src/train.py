@@ -14,9 +14,9 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 # 우리가 만들어둔 '메인 셰프(파이프라인 매니저)' 모듈 불러오기
-from feature_engineering import SENSOR_MANDATORY, VIP_FEATURES, inject_vip_features
+from feature_engineering import SENSOR_MANDATORY, VIP_FEATURES, inject_vip_features, foreign_scoring_features
 from feature_selection import run_feature_selection_experiment
-from inference_core import actionable_feature_mask, build_target_reference_profiles
+from inference_core import actionable_feature_mask, build_target_reference_profiles, DEFAULT_CONTEXT_FEATURES
 from logger import get_logger
 from math_utils import calculate_sigma_thresholds
 from model_builder import build_autoencoder
@@ -140,7 +140,14 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
     # threshold를 세운다. 그래야 RCA(같은 제외 셋)와 같은 피처에 대해 판정/설명이
     # 일관된다. (inference_core.DEFAULT_CONTEXT_FEATURES 단일 소스)
     feature_cols = X_train_ae.columns.tolist()
-    scoring_mask = actionable_feature_mask(feature_cols)
+    # 채점 제외 = (시간·상태 컨텍스트) ∪ (이 도메인엔 외래인 피처: 타 도메인 소유 파생·환경 컨텍스트).
+    #   외래 피처는 인코더 입력엔 남고 채점에서만 빠진다(조건부 마스크, MODELING §5-2-1·
+    #   feature_engineering.foreign_scoring_features). 교차상관은 보존하되 헛알람만 막는다.
+    _foreign = foreign_scoring_features(model_name, feature_cols)
+    _exclude = set(DEFAULT_CONTEXT_FEATURES) | _foreign
+    scoring_mask = actionable_feature_mask(feature_cols, exclude=_exclude)
+    if _foreign:
+        logger.info(f"  ▶ 외래 피처 채점 제외({model_name}): {sorted(_foreign)}")
     if scoring_mask.sum() == 0:
         logger.warning(
             "⚠️ 모든 피처가 컨텍스트로 제외되어 scoring_mask가 비어있습니다. "
@@ -217,7 +224,7 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
 
     # (2) 방법 결정 — auto면 skew로 분기, 아니면 환경변수가 지정한 방법으로 강제.
     SKEW_CUTOFF = float(os.environ.get("SKEW_CUTOFF", "8.0"))
-    method_opt = os.environ.get("THRESHOLD_METHOD", "auto").lower()
+    method_opt = os.environ.get("THRESHOLD_METHOD", "percentile").lower()
     if method_opt == "auto":
         chosen_method = "percentile" if mse_skew > SKEW_CUTOFF else "sigma"
     else:
@@ -225,10 +232,12 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
 
     # (3) 선택된 방법으로 3단계 임계치 산정.
     if chosen_method == "percentile":
-        # P95≈정상의 상위 5%(주의)·P99≈1%(경고)·P99.9≈0.1%(치명).
-        # 운영 제약(FAR)과 직결되며, 레벨은 환경변수로 미세조정 가능.
-        p_caut = float(os.environ.get("PCT_CAUTION", "95.0"))
-        p_warn = float(os.environ.get("PCT_WARNING", "99.0"))
+        # [기본 percentile, Phase N] 목표-FAR을 직접 통제한다. sigma(μ+kσ)는 도메인이 학습셋에
+        # 얼마나 타이트하게 맞느냐에 따라 FAR이 들쭉날쭉(한 도메인 고치면 다음 재학습서 다른 도메인이
+        # 튀는 whack-a-mole)이라, 분위로 '정상의 상위 X%'를 알람선으로 고정한다.
+        # 기본 P99(caution)=정상 상위 1% → voting 도메인 OR해도 overall≈baseline 이하. 레벨은 env로 미세조정.
+        p_caut = float(os.environ.get("PCT_CAUTION", "99.0"))
+        p_warn = float(os.environ.get("PCT_WARNING", "99.6"))
         p_crit = float(os.environ.get("PCT_CRITICAL", "99.9"))
         thresholds = {
             "mean":     _mu,

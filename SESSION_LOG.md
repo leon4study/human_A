@@ -1,5 +1,69 @@
 # SESSION_LOG
 
+## 2026-06-08 — percentile 임계 기본값: FAR whack-a-mole 종결(overall 2.3%<baseline) — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. threshold를 sigma→percentile(목표-FAR 통제)로. train.py 기본값 percentile@99(method·PCT_CAUTION 95→99·WARNING→99.6).
+2. 결과(run ..140317..): per-domain FAR hydraulic 4.1→1.8·motor 1.5→0.5·nutrient 0.7→0.4·zone 0.6→0.0,
+   overall 5.0→2.3%(< baseline 3.4%). 검출 6/6·막힘률 0%·lead-time 43.9h. attribution 가장 깨끗. MODEL_CHANGELOG Phase N.
+3. 현재 모델이 이미 percentile@99라 재학습 불필요. FAR 작업(J~N) 종결.
+
+### 남은 과제 (Pending)
+1. D 포트폴리오 정직화(맨 마지막): 확정 수치(FAR 2.3%<baseline·검출 6/6·lead-time 43.9h·깨끗한 귀인)로 'F1 0.95'·'막힘률 10→2%' 교체.
+2. (후속) C3 pH-수온·C4 VPD-증산. (선택) overall 디바운싱.
+
+### 절대 규칙 (Absolutes)
+- threshold는 목표-FAR 분위(percentile)로 통제 — sigma는 fit 타이트함에 FAR이 좌우돼 도메인별 whack-a-mole.
+- lead-time↔FAR 트레이드오프: PCT_CAUTION↓면 조기경보↑·FAR↑. 기본 99는 baseline 이하 FAR 우선.
+
+### 재개 지점 (Resume Point)
+1. D 정직화 착수(확정 수치 SSOT). 또는 C3/C4 데이터 현실화 추가.
+
+## 2026-06-07 — robust 슬로프: motor FAR 회귀 종결(6.0→2.7%) — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. rpm_slope·temp_slope를 원시 1차 차분 → 트레일링 이동평균 기반 robust 슬로프로 교체(preprocessing).
+   잔차노이즈 temp -72%·rpm -55%, 과열 ramp 보존 검증 후 재학습 run ..212812...
+2. 결과: motor FAR 5.1→2.7%(baseline 3.2% 미만), overall 5.4→4.2%, 검출 6/6, lead-time 47.3→45.4h.
+   motor skew 8.30으로 threshold 자동 percentile 전환. attribution 유지(4 root O). MODEL_CHANGELOG Phase L.
+3. motor FAR 회귀(Phase J 6.0%) 종결. 도메인별 FAR 모두 baseline 미만.
+
+### 남은 과제 (Pending)
+1. (선택) 데이터 현실화: motor_temp에 1차 열지연(thermal inertia) — 원시 슬로프 jitter의 근본.
+2. (선택) overall 4.2% 추가 인하(디바운싱/2도메인 동시).
+3. 다음 트랙: C(화학·농학) 또는 D(정직화).
+
+### 절대 규칙 (Absolutes)
+- 원시 1차 차분 피처는 노이즈를 증폭한다 — 추세 피처는 평활(robust) 형태를 기본으로.
+- 도메인 FAR은 각각 baseline 미만이나 overall은 4개 OR이라 약간 높음 — 정직 서술(이점=귀인+lead-time).
+
+### 재개 지점 (Resume Point)
+1. motor FAR 회귀 종결. 다음은 C(화학·농학) 또는 D(정직화) 중 선택, 또는 데이터 열지연 현실화.
+
+## 2026-06-07 — 조건부 마스크(외래 피처 채점 제외): motor FAR·attribution 회복 — feat/sensor-fault-control
+
+### 달성 (Accomplished)
+1. eval==serve 정합 버그 수정(evaluate_test_metrics를 scoring_features 기반으로) — 이게 선결조건.
+2. 교차도메인 외래 피처 채점 제외 구현(foreign_scoring_features: pressure_diff·flow_diff→hydraulic,
+   air_temp_c=환경컨텍스트). 입력 유지·채점만 제외(조건부 마스크). 재학습 run ..205502...
+3. 결과(정합 eval): motor FAR 6.0→5.1%, nutrient 2.1→0.9%, zone_drip 2.7→0.3%, overall 6.2→5.4%.
+   attribution 회복 — bearing_wear motor만(hydraulic 0.43→0.07), nutrient_imb nutrient만(motor 0.86→0.21).
+   검출 유지(clog 6/6, lead-time 47.3h). MODEL_CHANGELOG Phase K, ledger §3-6.
+4. MODELING §5-2-1 조건부AE 일반화 + 근거문헌(Conditional Anomaly Detection 등) 명문화.
+
+### 남은 과제 (Pending)
+1. motor FAR 5.1%(목표 경계·baseline 3.2% 초과): 옵션 — motor threshold percentile화('둘 다'의 (나)). 사용자 선택.
+2. air_temp_c 채점 제외 유지 여부(현재 제외) — 사용자 최종 확인.
+3. 이후 C(화학·농학) 또는 D(정직화).
+
+### 절대 규칙 (Absolutes)
+- 측정도구는 서빙과 같은 점수식(scoring_features)을 써야 한다. eval==serve가 깨지면 수정이 측정에 안 잡힌다.
+- 도메인 경계는 '입력'이 아니라 '채점'에서 지킨다(조건부 마스크). 외래 피처를 제거하지 말고 채점에서만 빼 교차상관은 보존.
+
+### 재개 지점 (Resume Point)
+1. motor 5.1% 추가 인하 여부 결정 → 필요시 motor threshold 조정 후 재학습.
+2. 그 다음 C 또는 D.
+
 ## 2026-06-07 — B4 재학습 측정: jun baseline 정본화 + motor FAR 회귀 발견 — feat/sensor-fault-control
 
 ### 달성 (Accomplished)

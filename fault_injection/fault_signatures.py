@@ -57,8 +57,11 @@ FAULT_SIGNATURES = {
         "description": "베어링 마모/윤활 불량. 진동·베어링온도·마찰전류↑. 수력 라인은 거의 불변.",
         "columns": {
             "bearing_vibration_rms_mm_s": ("mul", 2.2),    # ISO Zone A(1.4)→C(4.5) 진입 [S2]
-            "vibration_peak_mm_s":        ("mul", 2.4),
-            "vibration_bandpower_high_g": ("mul", 2.0),     # 고주파 성분↑(베어링 결함 특징)
+            # 충격성(impulsive) 시그니처 — 초기 베어링 결함은 국소 충격이라 peak·고주파가 RMS보다 '크게·먼저'
+            # 오른다 → crest factor(peak/RMS)가 RMS보다 앞선 전조(ISO 13373). peak·고주파 배수를 RMS(2.2)보다
+            # 높게 둬 crest factor가 판별력(조기 검출)을 갖게 한다.
+            "vibration_peak_mm_s":        ("mul", 3.8),    # crest factor = 3.8/2.2 ≈ 1.7배 상승(전조)
+            "vibration_bandpower_high_g": ("mul", 3.5),     # 고주파 성분↑↑(베어링 결함 첨두성, ISO 13373)
             "bearing_temperature_c":      ("add", 8.0),     # 베어링 과열(jun +2.0c 확대)
             "motor_temperature_c":        ("add", 3.0),
             "motor_current_a":            ("mul", 1.06),    # 기계 마찰로 전류 소폭↑(부하 무관)

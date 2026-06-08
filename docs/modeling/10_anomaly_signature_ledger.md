@@ -104,6 +104,31 @@
 - **이온 균형(N·P·K·Ca·Mg)**: K-Ca-Mg 길항. 공공데이터 ppm 범위 기준.
 → 출처: 자료조사로 채움(논문·원예 표준). 진행은 baseline 확정 후 별도 단계.
 
+**데이터 현실화 설계 v6 — 검증 공식 + 인코딩 (2026-06-07; C1·C2·C5 구현됨, C3·C4 후속)**
+baseline·motor FAR이 확정됐으므로(Phase J~L) 이제 nutrient/zone_drip의 화학적 충실성을 올린다.
+아래는 표준 공식과 data_gen 인코딩 스펙이다. 한 번의 data_gen 개정 + 재학습 1회로 묶는다(열지연 포함).
+
+- C1. **Na 축적 상태변수 (순환식 질량수지)** — 신규 컬럼 `na_accumulation_mmol_l`.
+  닫힌 순환계에서 Na는 식물이 물을 Na보다 빨리 흡수해 배액에 농축된다. 단순 질량수지:
+  `Na[t] = Na[t-1] + (유입 Na − 흡수 Na)/부피`. 흡수≈0(딸기 Na 거의 비흡수)로 두면 단조 증가.
+  딸기 임계 1.5 mmol/L(35 ppm) 초과 시 염 스트레스 플래그. 정상 운전엔 주기적 배액교체로 리셋.
+  → Na↑가 `mix_ec_ds_m`(+0.1 dS/m per mmol 근사)·`drain_ec_ds_m`·`leaching_ratio`를 함께 끌어올림.
+- C2. **EC → 삼투 → 수분·흡수 디커플** — 신규 컬럼 `osmotic_potential_mpa`.
+  `Ψ_osm(MPa) = -0.036 × mix_ec_ds_m`(Handbook 60). 고EC면 수분이 있어도 흡수가 막힌다 →
+  `uptake_efficiency = clip(1 − k·max(0, EC − EC_opt), …)`. 이게 "수분 정상인데 흡수↓"를 만든다.
+- C3. **pH ↔ 수온 드리프트** — `mix_ph`에 수온 의존 항. 수온↑ → CO2 용해↓·미생물 활성↑ → pH 소폭 상승.
+  선형 근사 `pH += a·(mix_temp_c − T_ref)`(a≈0.01~0.02/°C, 자료 추가조사). 딸기 적정 5.5~6.5 밴드.
+- C4. **습도 ↔ VPD ↔ 증산** — VPD는 Tetens(§8 기보유)로 산출, `transpiration_demand` 정련.
+  고습→저VPD→증산↓→양분흡수↓(C2 흡수효율과 결합). 저습→고VPD→수분 스트레스.
+- C5. **열적 관성 (motor_temp·rpm jitter 근본)** — `motor_temperature_c`를 1차 지연으로.
+  현재 백색노이즈를 온도 본체에 직접 더해(관성 부재) 분단위 jitter가 큼(Phase L 원인). 개정:
+  `target = air_temp + 13·pump_on + ar1; T = target.ewm(alpha=1/τ).mean()`(τ≈10~20분) `+ 측정노이즈(얇게)`.
+  물리 온도가 매끄러워져 원시 슬로프도 자연 정제(robust 슬로프와 상호보완).
+
+검증 게이트: 개정 후 독립성 게이트 통과 + 각 관계가 의도 방향으로 움직이는지(예: Na↑→EC↑→osmotic↓→
+uptake↓) coupling_validate류로 확인. 출처: EC-삼투 US Salinity Lab Handbook 60, Na 임계 원예 표준(딸기
+<1.5 mmol/L). 상세 공식·계수는 구현 시 §8(검증 공식)과 12 설계문서에 동기.
+
 ### 3-4. zone_drip (구역 배지)
 - 노즐 막힘 — 해당 구역 수분 반응 지연·구역 간 편차↑
 - 관수 불균일 — zone_moisture_variance↑
@@ -221,6 +246,38 @@ nutrient_imbalance에 motor 0.86 오탐. 이는 **motor 도메인의 과발화**
 6.3% FAR을 낸다. motor에 강제주입된 노이즈성 비율피처(vibration_per_load·temp_slope_c_per_s) 1차 용의자.
 다음 회차: motor FAR을 5%↓로 되돌리는 수정(threshold percentile화 또는 노이즈피처 정리) 후 재측정해
 Phase I 대비 회복 확인. 상세: MODEL_CHANGELOG Phase J.
+
+조건부 마스크 수정 후 재측정(2026-06-07, run `..205502..`): 자유 파생피처 pressure_diff·flow_diff가
+어느 도메인 mandatory에도 없어 SHAP이 엉뚱한 도메인에 배정 → motor 등 채점을 오염시킨 게 FAR
+상승·attribution 오탐의 공통 뿌리였다. 이들을 '입력 유지 + 채점 제외'(조건부 마스크,
+[feature_engineering.foreign_scoring_features](../../src/feature_engineering.py))하니 둘 다 풀렸다.
+
+| 고장 | Phase J(누설) | Phase K(채점제외) | 기대 |
+|---|---|---|---|
+| clog_downstream | hydraulic+motor+nutrient | hydraulic+nutrient (motor 0.29) | 광역 |
+| bearing_wear | motor + **hydraulic 0.43(오탐)** | **motor만**(hydraulic 0.07) | motor만 |
+| suction_blockage | hydraulic+motor | hydraulic+motor | hydraulic+motor |
+| nutrient_imbalance | nutrient + **motor 0.86(오탐)** | **nutrient만**(motor 0.21) | nutrient만 |
+
+- FAR(정합 eval): motor 6.0→5.1%, nutrient 2.1→0.9%, zone_drip 2.7→0.3%, overall 6.2→5.4%.
+- 검출 유지: clog 6/6, 막힘률 0%, lead-time 47.3h. 4 root 모두 검출 O.
+- 잔여: motor 5.1%(목표 경계·baseline 3.2% 초과) — 유지 선택한 노이즈 슬로프(rpm_slope·temp_slope).
+  옵션은 motor threshold percentile화. 상세: MODEL_CHANGELOG Phase K, MODELING §5-2-1.
+
+robust 슬로프 수정 후 재측정(2026-06-07, run `..212812..`): rpm_slope·temp_slope의 원시 1차 차분이
+분 단위 센서 jitter를 증폭한 게 motor 5.1% 잔여의 원인. 트레일링 이동평균 기반 robust 슬로프로 교체
+(잔차노이즈 temp -72%·rpm -55%, 과열 ramp 보존)하니 **motor FAR 5.1→2.7%(baseline 3.2% 미만)**,
+overall 5.4→4.2%. 검출 6/6·lead-time 45.4h 유지(robust 평활로 47.3→45.4h). 부수효과로 motor skew
+8.30이 cutoff(8.0)를 넘겨 threshold가 percentile로 자동 전환. attribution 유지(4 root O, nutrient_imb의
+motor만 경계 0.3 잔존). 도메인별 FAR 모두 baseline 미만(motor 2.7·hydraulic 1.9·nutrient 0.9·zone 0.3);
+overall 4.2%는 4도메인 OR이라 baseline(3.2%)보다 약간 높음. 상세: MODEL_CHANGELOG Phase L.
+
+threshold 목표-FAR 통제 후 정본화(2026-06-08, Phase N): C v6(Phase M)에서 FAR이 도메인을 옮겨다니며
+재발(motor 해결→hydraulic 4.1%)한 근본은 sigma가 도메인 fit 타이트함에 FAR을 묶은 것. threshold를
+percentile(정상 상위 1%=PCT_CAUTION 99)로 고정하니 per-domain FAR이 hydraulic 4.1→1.8·motor 1.5→0.5·
+nutrient 0.7→0.4·zone 0.6→0.0, **overall 5.0→2.3%(baseline 3.4% 미만)** 로 통제됐다. 검출 6/6·막힘률 0%,
+lead-time 47.3→43.9h(완화 비용), attribution 가장 깨끗(clog→hydraulic만 등). train.py 기본값을 percentile@99로
+전환(method auto→percentile). FAR 작업(J~N) 종결. 상세: MODEL_CHANGELOG Phase N.
 
 ## 4. 데이터 생성기 연동 (구현 위치)
 
