@@ -528,3 +528,118 @@ feature_details = build_feature_details(
 - 구모델(Phase B)은 per_feature_thresholds 필드 없음 → inference는 graceful fallback
 
 ---
+
+## Phase D — 비결정성 진범 규명: PYTHONHASHSEED와 set 순서 (2026-06-01)
+
+### 가설
+재현성 인프라(repro.set_global_determinism: numpy/random/TF 시드 + op_determinism)를 넣고 train.py 첫 실행(baseline-repro) 성공. "이제 같은 코드·데이터면 config가 동일할 것"이라 가정하고 2회차(repro-check)로 검증.
+
+### 시도
+`train.py`를 2회 실행해 run1 vs run2의 `*_config.json`을 diff.
+
+### 관측 (재현성 테스트 실패)
+4개 도메인 config 전부 다름. 단순 가중치 차이가 아니라 **피처 선택 자체가 달라짐**:
+- motor 다중공선성 드롭: run1 13개 제거(25 남음) vs run2 10개 제거(28 남음)
+- motor SHAP robust: run1 `[pressure_trend_10]` vs run2 `[flow_rate_l_min, pressure_trend_10]`
+- zone_drip robust: run1 2개 vs run2 0개
+
+### 진단 (데이터로 확증)
+- `sys.flags.hash_randomization == 1` (해시 무작위화 ON).
+- 동일 set을 두 프로세스에서 list로 출력 → 순서가 다름(`['suction_pressure_kpa', ...]` vs `['pressure_flow_ratio', ...]`).
+- 즉 진범은 TF가 아니라 **Python 해시 무작위화**. preprocessing 다중공선성 드롭과 feature_selection robust voting이 set/dict 순서에 의존 → 매 실행 어느 컬럼을 드롭/선택하는지가 달라지고 전체 파이프라인이 어긋남.
+- 핵심 함정: `os.environ["PYTHONHASHSEED"]="42"`를 **런타임에** 대입해도 이미 실행 중인 인터프리터의 해시 시드는 바뀌지 않는다(시작 전 환경에 있어야 함). repro 1차 구현이 이 대입만 해서 무효였다.
+
+### 수정 — [repro.set_global_determinism](../src/repro.py)
+PYTHONHASHSEED가 seed로 박혀 있지 않으면 환경변수를 설정하고 `os.execv`로 프로세스를 재실행(re-exec). 재실행 후에는 해시 시드가 고정돼 set 순서가 매 실행 동일.
+- 격리 검증: 동일 스크립트 2회 실행 → set 순서 동일 확인.
+- 전체 파이프라인 검증(train.py 2회 config diff)은 사용자 재실행 대기.
+
+### 배운 원칙 (절대 규칙 #7 추가)
+7. **PYTHONHASHSEED는 런타임 대입 불가**: 해시 무작위화를 끄려면 인터프리터 시작 전 환경변수로 박거나 re-exec해야 한다. set/dict 순서에 의존하는 파이프라인(피처 드롭·voting)은 이걸 안 하면 매 실행 결과가 달라진다. 재현성은 시드 4종(hash/random/numpy/TF)을 모두 잡아야 완성된다.
+
+### 메모
+- 이전 기록·문서에서 "비결정성 직접 원인 = TF(무시드)"라 적었던 것은 오진이었다. feature_selection RF/KMeans는 random_state로 재현 가능하나, 그 위 set 순서가 흔들리고 있었다. TF 시드도 필요하지만 진범은 해시였다.
+
+---
+
+## Phase E — 빈약 도메인 보강: zone_drip 배지 복원 + 피처 1차 배치 (2026-06-02, 성공)
+
+### 가설
+재현성 확보 후 첫 실험. (1) zone_drip이 배지 센서 0개로 학습돼 퇴화(기동 spike만 반복) → 배지 센서 복원하면 실제 신호가 생긴다. (2) 중복 제거 후 도메인이 빈약 → 물리 근거 있는 파생 피처를 추가하면 막힘 직격 신호가 강해진다. (근거: [docs/modeling/09_feature_rationale_ledger.md](../docs/modeling/09_feature_rationale_ledger.md))
+
+### 시도 (PHASE=feature-v2)
+- preprocessing `model_cols`+collinearity whitelist에 zone 배지 센서(`zone1_substrate_moisture/ec`, Raw) + 공급균형 파생지표(`supply_balance_index`, 유량) 복원. 펌프 중복인 zone 압력/유량은 제외. (supply_balance_index는 이후 Phase G에서 유량 성격이라 hydraulic으로 이동)
+- 신규 파생 7개: zone(`zone_ec_variance`·`zone_moisture_variance`·`substrate_ec_accum_rate`), hydraulic(`system_resistance`·`specific_energy`), motor(`bearing_thermal_margin`·`load_per_speed`). `create_modeling_features`에 추가 + 도메인별 `SENSOR_MANDATORY` 배정.
+- 스모크 테스트로 `system_resistance` 저유량 분모 발산(4.5e7) 선제 발견 → pump_on & flow≥1.0 게이트 적용(절대규칙 #5).
+
+### 관측 (진단 그림)
+- **zone_drip**: X_train_ae 피처 5~10 → **14개**(배지·변동성 피처 전부 주입). 진단 그림이 0/0.5 이분 반복(무변동)에서 연속 변동으로 회복, skew 18.69→11.28, 후반부(월3 drift)에서 baseline 상승 관측. 기동 제외 임계치와 실선 간격 10배→약 1.3배.
+- **hydraulic**: `system_resistance`·`specific_energy`가 robust 교집합(6개)으로 선정. skew 3.44(최저), 타임라인이 정상 구간 평탄→월3 drift에서 깨끗하게 critical 돌파. 가장 명료한 막힘 응답.
+- motor/nutrient: 회귀 없음(기존 + 신규 일부 흡수). 재현성 re-exec 정상 작동.
+
+### 진단
+빈약의 근본은 "raw 센서 부족"이 아니라 "도메인 고유 신호를 담은 파생 피처 부족"이었다. 배지 변동성·시스템 저항 같은 물리 근거 피처가 들어가자 두 도메인 모두 실제 이상 구간(월3)에 반응. zone_drip은 robust voting은 여전히 0(타깃 간 공통 예측자 부재)이나 union+MANDATORY로 충분한 입력 확보.
+
+### 다음 단계
+- 정량 확인: `evaluate_test_metrics.py`로 라벨 기반 F1/FAR + 이상 음영 타임라인(월1정상→월3이상 구조에서 검출 확인).
+- threshold: skew 여전(zone 11·motor 15) → percentile/PR 전환 실험([03](../docs/modeling/03_threshold_methodology.md)).
+
+---
+
+## Phase F — Dynamic threshold 수렴: percentile 진단 → skew-adaptive → 기동마스크 수정 (2026-06-02)
+
+### 가설
+feature-v2 평가에서 zone_drip은 신호가 있는데(MSE가 이상 구간에 상승) σ 임계치가 너무 높아 recall 0.015로 막혔다. 임계치 산정을 바꾸면 풀릴 것.
+
+### 시도와 관측 (3회)
+1. **percentile(전 도메인, PHASE=pct-thr)**: zone_drip recall 0.015→0.41(F1 0.46)로 진단 적중. 그러나 hydraulic은 percentile이 안 맞아 F1 0.46→0.26으로 악화. overall FAR 1.7%→19%.
+2. **skew-adaptive(PHASE=skew-adaptive)**: 분포 skew>8이면 percentile, 아니면 sigma로 도메인별 자동 분기 구현. 자동 라우팅은 정확(hydraulic skew 3.4→sigma, zone 8.0→percentile). 그러나 hydraulic이 더 떨어짐(F1 0.21).
+3. **진단 — 기동 마스크 버그**: threshold를 "기동 제외"로 계산하는데 `minutes_since_startup<=5`가 정지(off) 구간(minutes=0)까지 잡아 데이터의 50%를 제외 → baseline 왜곡으로 hydraulic 임계치 오염. `(pump_on==1) & (minutes<=5)`로 수정(0.5%만 제외).
+
+### 결과 (PHASE=skew-fix, 최종)
+| EVAL F1 cutoff≥1 | feature-v2(σ all) | pct-thr | skew-fix |
+|---|---|---|---|
+| hydraulic | 0.462 | 0.261 | **0.469** (P0.99, FAR0.001) |
+| zone_drip | 0.029 | 0.458 | **0.456** (R0.38) |
+| overall(no_nut) | 0.455 | 0.458 | **0.481** |
+overall recall 0.31→0.41, FAR(월1 클린) 1.4%, cutoff≥2 운영 시 FAR 2.4%.
+- 마스크 수정 후 zone_drip skew 8.0→7.2로 떨어져 sigma로 분기됐고 그래도 F1 0.456 — 신호만 있으면 방법 무관.
+
+### 진단 / 교훈
+- 임계치 '방법'은 분포 모양(skew)에 종속이며 도메인마다 다르다 → 단일 방법 강제는 한 도메인을 희생. skew-adaptive로 best-of-both.
+- 기동 제외는 반드시 `pump_on==1`과 AND. minutes_since_startup 단독은 off를 오분류(절대규칙 후보).
+- percentile 레벨 조정은 '방법' 불일치를 못 고친다(hydraulic). 레벨이 아니라 방법을 분기해야 한다.
+
+### 구현
+[train.py](../src/train.py) 임계치 블록: 기동 제외(pump_on AND minutes≤5) → mse_base skew 계산 → `THRESHOLD_METHOD=auto`면 SKEW_CUTOFF(기본 8)로 sigma/percentile 분기. config에 threshold_method·threshold_skew 기록. 환경변수(SKEW_CUTOFF, PCT_*)로 튜닝.
+
+### 남은 과제
+- overall FAR(cutoff≥1) 14%는 zone_drip 주도 + 평가라벨이 펌프막힘 기준이라 배지 탐지가 FP로 계수되는 영향 혼재. 운영점(cutoff≥2)·zone 전용 보정·percentile 레벨은 후속 튜닝.
+
+---
+
+## Phase G — 도메인 경계 정리: supply_balance_index를 zone_drip→hydraulic 이동 (2026-06-02, 성공)
+
+### 가설
+zone_drip이 "구역 배지 상태 + 유량 균형"을 섞고 있어 이름이 애매(배지 도메인인데 supply_balance_index는 유량). supply_balance(구역합/메인 유량 = 누수 탐지)는 유량 본질이라 hydraulic 소속이 맞다. 옮기면 zone_drip이 순수 배지 상태가 되고, 유량 노이즈가 빠져 precision이 오를 것.
+
+### 시도
+`feature_engineering.SENSOR_MANDATORY`에서 supply_balance_index를 zone_drip → hydraulic으로 이동(model_cols·whitelist는 도메인 무관이라 불변). 분할 기준 문서 [docs/DOMAIN_DESIGN.md](../docs/DOMAIN_DESIGN.md) 신설.
+
+### 관측 (PHASE=domain-cleanup, eval)
+| EVAL cutoff≥1 | skew-fix | domain-cleanup |
+|---|---|---|
+| overall(no_nut) F1 | 0.481 | **0.504** |
+| overall precision | 0.582 | **0.647** |
+| overall FAR | 0.142 | **0.109** |
+| zone_drip F1 / P | 0.456 / 0.515 | **0.486 / 0.656** |
+| hydraulic | 0.469 | 0.469(불변) |
+cutoff≥2: F1 0.268, FAR 1.8%(운영 제약 안). zone_drip skew 8.0→4.56(배지만 남아 덜 치우침)으로 sigma 분기.
+
+### 진단 / 교훈
+supply_balance(유량)가 zone_drip(배지)에 섞여 **유량 불균형에 알람을 올려 zone_drip의 FP를 늘리고 있었다**. 제 도메인으로 보내니 zone_drip precision 0.515→0.656로 상승, 전체 F1도 개선. **도메인 경계를 물리량 본질대로 맞추면 해석성뿐 아니라 성능도 오른다**(경계 정합 = 노이즈 감소). 새 피처 배정 원칙: 한 컬럼이 두 도메인에 걸치면 물리량 본질로 귀속(DOMAIN_DESIGN §6).
+
+### 현재 수렴 상태 (threshold+feature+domain 트랙)
+overall F1 0.504(시작 0.455 대비), hydraulic P0.99 주력, zone_drip 부활·정밀화(0.03→0.49), 클린-정상 FAR 1.4%. 후속 후보: FAR 컨트롤(운영점/레벨), 피처 자료조사, 모델층(Optuna).
+
+---

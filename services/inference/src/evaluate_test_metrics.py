@@ -24,6 +24,14 @@ from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_
 
 from preprocessing import step1_prepare_window_data
 from inference_core import get_alarm_status
+from repro import latest_run_dir
+
+# [진단 시각화] matplotlib 부재 시에도 평가 자체는 진행되도록 import 실패를 흡수.
+try:
+    from viz import plot_threshold_diagnosis, build_contact_sheet
+    _VIZ_AVAILABLE = True
+except Exception:
+    _VIZ_AVAILABLE = False
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_CSV = os.path.join(PROJECT_ROOT, "data", "generated_test_data_0420.csv")
@@ -41,13 +49,14 @@ LEVEL_CUTOFFS = [1, 2, 3]  # 각각 "Caution 이상 = 이상", "Warning 이상",
 EXCLUDE_FROM_OVERALL = {"nutrient"}
 
 
-def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
-    """도메인별 배치 예측 → `{domain}_level` 컬럼 담은 DataFrame 반환."""
+def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict]:
+    """도메인별 배치 예측 → `{domain}_level`·`{domain}_score` 컬럼 DataFrame + 임계치 맵 반환."""
     config_files = glob.glob(os.path.join(MODELS_DIR, "*_config.json"))
     systems = sorted(os.path.basename(f).replace("_config.json", "") for f in config_files)
 
     rows = {dom: np.zeros(len(df_agg), dtype=int) for dom in systems}
     scores = {dom: np.zeros(len(df_agg), dtype=float) for dom in systems}
+    thr_map = {}  # 도메인별 임계치(mean/caution/warning/critical) — 시각화에서 재사용
     loaded = []
 
     for dom in systems:
@@ -65,6 +74,11 @@ def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
         t_caut = float(cfg["threshold_caution"])
         t_warn = float(cfg["threshold_warning"])
         t_err = float(cfg.get("threshold_critical", cfg.get("threshold_error")))
+        thr_map[dom] = {
+            "mean": float(cfg.get("metrics", {}).get("final_mse_mean", float("nan"))),
+            "caution": t_caut, "warning": t_warn, "critical": t_err,
+            "startup": cfg.get("threshold_startup"),   # 기동 전용 band(없으면 None)
+        }
 
         X = pd.DataFrame(index=df_agg.index, columns=features, dtype=float)
         for f in features:
@@ -92,7 +106,32 @@ def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     if EXCLUDE_FROM_OVERALL & set(loaded):
         df["overall_alarm_level_with_nutrient"] = df[[f"{d}_level" for d in loaded]].max(axis=1)
         print(f"🚫 overall voting 제외 도메인: {sorted(EXCLUDE_FROM_OVERALL & set(loaded))}")
-    return df, loaded
+
+    # 기동(startup) 처리 — STARTUP_MODE 로 두 전략을 공존시킨다(docs/modeling/03 §4-2).
+    #   gate(성능)  : 기동 윈도우 알람을 통째로 Normal(0)로 억제. 정상기동 오탐 0이나
+    #                 비정상 기동(평소보다 큰 기동 스파이크)도 놓친다.
+    #   regime(논리): 기동 윈도우는 도메인별 '기동 band'로 재판정. 정상 기동은 통과,
+    #                 비정상적으로 큰 기동만 알람. band가 없는 도메인은 gate로 폴백.
+    #   기본 regime. 실험 근거: startup_strategy_eval.py(통째게이트 비정상기동 recall 0).
+    mode = os.environ.get("STARTUP_MODE", "regime").lower()
+    if "is_startup_phase" in df_agg.columns:
+        su = df_agg["is_startup_phase"].to_numpy() >= 0.5
+        for dom in loaded:
+            band = thr_map[dom].get("startup")
+            if mode == "regime" and band:
+                sc = df[f"{dom}_score"].to_numpy()
+                relvl = np.array([
+                    get_alarm_status(float(m), band["caution"], band["warning"], band["critical"])[0]
+                    for m in sc
+                ])
+                df.loc[su, f"{dom}_level"] = relvl[su]
+            else:
+                df.loc[su, f"{dom}_level"] = 0   # gate 또는 band 부재 → 통째 억제
+        # overall 재계산(기동 윈도우 레벨이 바뀌었으므로)
+        df["overall_alarm_level"] = df[[f"{d}_level" for d in voting_domains]].max(axis=1)
+        if EXCLUDE_FROM_OVERALL & set(loaded):
+            df["overall_alarm_level_with_nutrient"] = df[[f"{d}_level" for d in loaded]].max(axis=1)
+    return df, loaded, thr_map
 
 
 def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, label: str) -> dict:
@@ -142,7 +181,7 @@ def main():
     y_true = df_agg["anomaly_label"].astype(int).values
 
     print("\n=== 도메인별 추론 실행 ===")
-    df_pred, domains = run_inference(df_agg)
+    df_pred, domains, thr_map = run_inference(df_agg)
 
     # 평가 구간 분할
     idx = df_agg.index
@@ -213,6 +252,48 @@ def main():
     print(f"  - {metrics_csv}")
     print(f"  - {os.path.join(OUT_DIR, 'fn_eval_overall.csv')}  ({int(fn_mask.sum())}건)")
     print(f"  - {os.path.join(OUT_DIR, 'fp_eval_overall.csv')}  ({int(fp_mask.sum())}건)")
+
+    # === 진단 시각화: 도메인별 MSE 타임라인 + 임계치 + 이상 라벨 음영 ===
+    # 데이터 구조상 월1(3월, 정상 학습) → 월2(4월, drift) → 월3(5월, 본격 이상)이므로,
+    # 전체 구간을 그리면 3월엔 잠잠하다가 이상 음영(빨강) 구간에서 MSE가 임계선을 넘는지가
+    # 한눈에 보인다. = "지정한 이상 구간부터 모델이 탐지하는가"의 직접 증거.
+    # 그래프는 이 모델을 만든 학습 run의 figures/에 합류시켜 학습 그래프와 한 묶음으로 둔다.
+    if _VIZ_AVAILABLE:
+        try:
+            run_dir = latest_run_dir(MODELS_DIR)
+            fig_dir = (os.path.join(run_dir, "figures") if run_dir
+                       else os.path.join(OUT_DIR, "figures"))
+
+            # 학습/평가 경계 위치(평가 시작 인덱스) — 세로선으로 "학습은 여기까지" 표시
+            boundary_pos = int((idx < pd.Timestamp(EVAL_RANGE[0])).sum())
+
+            # 기동 마스크(있으면): 평가 집계본에 운전 맥락 피처가 남아 있을 때만
+            startup_mask = None
+            if "is_startup_phase" in df_agg.columns:
+                startup_mask = (df_agg["is_startup_phase"].to_numpy() == 1)
+            elif "minutes_since_startup" in df_agg.columns:
+                startup_mask = (df_agg["minutes_since_startup"].to_numpy() <= 5)
+
+            for dom in domains:
+                plot_threshold_diagnosis(
+                    df_pred[f"{dom}_score"].to_numpy(),
+                    thr_map[dom],
+                    model_name=dom,
+                    save_path=os.path.join(fig_dir, f"{dom}__eval_timeline.png"),
+                    startup_mask=startup_mask,
+                    anomaly_mask=(y_true == 1),
+                    boundary_index=boundary_pos,
+                    boundary_label="train end (month1)",
+                    show_excl_startup=False,  # 평가 데이터엔 이상값 혼재 → 보조선 비활성
+                )
+            sheet = build_contact_sheet(fig_dir)
+            print(f"\n[viz] 평가 진단 그래프 저장: {fig_dir}")
+            if sheet:
+                print(f"   대조표: {sheet}")
+        except Exception as e:
+            print(f"[viz] 평가 시각화 실패(메트릭은 정상 저장됨): {e}")
+    else:
+        print("[viz] matplotlib 미가용으로 평가 시각화 생략")
 
 
 if __name__ == "__main__":

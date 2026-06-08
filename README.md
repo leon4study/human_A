@@ -67,9 +67,10 @@
 - One-Class SVM·Isolation Forest·GMM 등 전통 기법은 40+ 차원 비선형 데이터에 한계
 - AE는 **복원 오차를 피처별로 분해**할 수 있어 RCA(어느 센서가 이상한지) 자연스럽게 제공
 
-### 왜 EC/pH를 학습에서 제외했나
+### 왜 물리 지표를 주력으로 삼았나 (EC/pH는 nutrient로 분리)
+막힘의 가장 직접적인 신호는 양액 **EC/pH 변화**입니다. 다만 화학 센서는 미생물막·스케일·드리프트로 오감지가 잦아 단독 신뢰가 어렵습니다. 반면 **물리 센서(압력·유량·전류·진동·RPM)는 한 번 정상 범위를 벗어나면 거의 확실히 실제 고장**이라 오탐이 적습니다.
 
-화학 센서인 EC/pH는 양액에 상시 노출되어 미생물막·스케일로 오감지가 잦고 지속적인 보정이 필요합니다. **현실 시나리오에서 신뢰도가 떨어지므로 학습 입력에서 배제**하고, 더 안정적인 물리 센서(압력·유량·전류·진동·RPM·온도)로 예지보전 학습을 수행했습니다.
+그래서 막힘 탐지의 **주력은 물리 지표**로 삼고, EC/pH는 폐기하지 않되 **전용 `nutrient` 도메인으로 격리**했습니다. 공급단(mix) EC/pH는 nutrient가, 배지(substrate) EC·수분은 zone_drip가 담당해, 화학 신호의 노이즈가 물리 도메인(motor·hydraulic)의 판정을 오염시키지 않도록 분리했습니다.
 
 ### 임계치 — 6시그마 3단계 알람
 
@@ -111,10 +112,14 @@ human_A/
 
 ## 5. 빠른 시작
 
+> 처음 클론했다면 `.env` 설정·모델 파일 준비·헬스체크·트러블슈팅까지 단계별로 안내하는
+> [docs/ONBOARDING.md](docs/ONBOARDING.md)(첫 실행 가이드)를 먼저 보세요.
+
 ### 전체 스택 기동
 
 ```bash
-docker compose up -d
+cp .env.example .env   # 최초 1회: 환경변수 설정 (자세히는 docs/ONBOARDING.md)
+docker compose up -d --build
 ```
 
 - Frontend: http://localhost:5173
@@ -179,6 +184,28 @@ API 스펙은 [docs/INFERENCE_API.md](docs/INFERENCE_API.md) 참조.
 - **멀티모달 확장** — 양액펌프 + 환경/생육 데이터 결합한 복합 이상 탐지
 - **Edge AI** — 현장 장비에서 실시간 추론 가능한 경량화 모델
 - **B2B 플랫폼화** — 기존 스마트팜 제어 솔루션과 API 연동, 양액기 제조사 협업
+
+## Docker 용량 관리
+
+7개 컨테이너 이미지(mosquitto · postgres · minio + 빌드 4개)가 수 GB씩 쌓입니다.
+데이터는 Docker 볼륨이 아닌 **`./data/` 폴더에 직접 저장**되므로 `docker system df` Volumes 항목은 거의 0입니다.
+
+```bash
+# 사용량 확인
+docker system df
+du -sh ./data/db-data/ ./data/s3-bucket/
+
+# 이미지 정리 (데이터 보존)
+docker compose down && docker image prune -a -f
+
+# DB·S3 데이터까지 초기화 (완전 리셋)
+rm -rf ./data/db-data/ ./data/s3-bucket/
+docker compose up --build
+```
+
+> `inference-api`는 `platform: linux/amd64`가 compose에 이미 지정되어 buildx 불필요.
+
+상세 절차: [docs/docker-cleanup.md](docs/docker-cleanup.md)
 
 ## License
 

@@ -16,6 +16,9 @@
 4. [ANALYSIS.md](ANALYSIS.md) — 어떤 데이터로 무엇을 봤는가
 5. [MODELING.md](MODELING.md) — 어떻게 모델링했는가
 
+### 🚀 일단 돌려보고 싶다 — 로컬에서 스택 띄우기
+1. [ONBOARDING.md](ONBOARDING.md) — Docker 첫 실행 가이드(.env 설정·모델 파일 함정·헬스체크·트러블슈팅)
+
 ### 🔌 프론트엔드 작업자 — API 붙이고 화면 그려야 한다
 1. [FRONTEND_PAGES.md](FRONTEND_PAGES.md) — 어떤 페이지에 무엇을 그릴지
 2. [INFERENCE_API.md](INFERENCE_API.md) — `/predict` 요청/응답 스키마, 파생변수
@@ -37,6 +40,7 @@
 
 | 문서 | 한 줄 요약 | 주요 독자 |
 |---|---|---|
+| [ONBOARDING.md](ONBOARDING.md) | Docker 첫 실행·.env 설정·모델 파일·헬스체크·트러블슈팅 | 신규 합류자, 운영 |
 | [PROJECT_BRIEF.md](PROJECT_BRIEF.md) | 팀·일정·핵심 의사결정·실패 학습·진행 중 문제·다음 단계 | 신규 합류자, 인수인계 |
 | [DOMAIN_KNOWLEDGE.md](DOMAIN_KNOWLEDGE.md) | 양액 시스템·점적관수·CNL 핀·기동 spike·딸기 환경 권장값 | 모두 (특히 신규 합류자) |
 | [ANALYSIS.md](ANALYSIS.md) | 데이터 출처·EDA·도메인 정의·SHAP 인사이트 | DS, 신규 합류자 |
@@ -45,6 +49,9 @@
 | [FRONTEND_PAGES.md](FRONTEND_PAGES.md) | 도메인별 페이지 구성·차트·KPI 설계 | 프론트, 디자이너 |
 | [COLUMNS_REFERENCE.md](COLUMNS_REFERENCE.md) | Raw + 파생 컬럼 사전 (단위·정의) | 모두 |
 | [SHAP_BEESWARM_FRONTEND.md](SHAP_BEESWARM_FRONTEND.md) | SHAP beeswarm 렌더용 JSON 계약 | 프론트, ML |
+| [git-strategy.md](git-strategy.md) | 브랜치·커밋·PR 규칙 | 모든 기여자 |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | 서버 배포·운영 절차 | 운영, 인프라 |
+| [adr/](adr/) | 아키텍처 결정 기록(AE 채택·4도메인·임계값 등) | DS, 신규 합류자 |
 
 ---
 
@@ -65,7 +72,7 @@
 
 | 외부 자료 | 흡수된 위치 |
 |---|---|
-| 노션 — 최종 보고서 | [PROJECT_BRIEF.md](PROJECT_BRIEF.md) (전반), [MODELING.md §9 알려진 이슈](MODELING.md), [ANALYSIS.md §1-3 EC/pH 배제](ANALYSIS.md) |
+| 노션 — 최종 보고서 | [PROJECT_BRIEF.md](PROJECT_BRIEF.md) (전반), [MODELING.md §9 알려진 이슈](MODELING.md), [ANALYSIS.md §1-3 EC/pH 보조 지표 분리](ANALYSIS.md) |
 | 노션 — 데이터 분석 프로젝트 기획서 | [PROJECT_BRIEF.md §3-1 기획 단계](PROJECT_BRIEF.md), 루트 [README.md §1](../README.md) |
 | 노션 — 프로젝트 중간 보고서 | [PROJECT_BRIEF.md](PROJECT_BRIEF.md) |
 | 노션 — 프로젝트 docs (배경지식·논문·환경) | [DOMAIN_KNOWLEDGE.md](DOMAIN_KNOWLEDGE.md) |

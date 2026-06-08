@@ -353,3 +353,16 @@ services/inference/notebooks_jun/
 
 serper.py
 
+jun_portfolio/
+notion_page/
+
+# docs/modeling 방법론 문서(01_..., 08_...)는 전역 [0-9]*(OpenFOAM 결과) 규칙에 잡히므로 추적 예외
+!docs/modeling/
+!docs/modeling/*.md
+
+# docs/adr ADR 문서(0001-..., 0002-...)도 동일 사유로 추적 예외
+!docs/adr/
+!docs/adr/*.md
+
+# 개인 인수인계 메모(개인 생각·작업 포함) — 추적 안 함
+handoff.md

@@ -1,6 +1,7 @@
 # 🧠 MODELING — 모델링 파이프라인
 
-이 문서는 **전처리 → 피처 선택 → AE 학습 → 임계치 → 평가** 의 모델링 파이프라인을 코드 기준으로 정리합니다.
+이 문서는 **전처리 → 피처 선택 → AE 학습 → 임계치 → 평가** 의 모델링 파이프라인을 **코드 기준(as-built)**으로 정리합니다.
+- 🧭 **앞으로 어떻게 탄탄하게 모델링·성능테스트 할지(기획·방법론)**: [modeling/](modeling/) — 재현성·실험추적·평가설계·dynamic threshold 방법론·착수 체크리스트
 - 데이터 분석 인사이트: [ANALYSIS.md](ANALYSIS.md)
 - 도메인 배경지식 (양액·CNL 핀·기동 spike 메커니즘): [DOMAIN_KNOWLEDGE.md](DOMAIN_KNOWLEDGE.md)
 - 실패 학습·진행 중 문제·다음 단계: [PROJECT_BRIEF.md](PROJECT_BRIEF.md)
@@ -17,7 +18,7 @@
 | One-Class SVM, Isolation Forest, GMM | 비지도 가능하지만 40+ 차원 비선형 데이터에 한계 | ❌ |
 | **AutoEncoder** | 정상 manifold만 학습 + 복원 오차로 이상 판정 + 피처별 분해 가능(RCA 자연스러움) | ✅ |
 
-**핵심 아이디어**: Encoder가 입력 X를 저차원 latent code h로 압축하고, Decoder가 X′로 복원. 학습 목표는 X ≈ X′. **병목(bottleneck)이 정상 manifold만 남도록 강제**하므로, 이상 입력은 manifold에서 벗어나 복원 오차가 크게 튐.
+**핵심 아이디어**: Encoder(인코더)가 입력 X를 더 작은 차원의 압축 표현(latent code h)으로 줄이고, Decoder(디코더)가 그것을 다시 X′로 되살립니다. 학습 목표는 되살린 값이 원본과 같아지는 것(X ≈ X′)입니다. 이때 가운데를 좁게 만든 구조(병목, bottleneck) 덕분에 모델은 정상 데이터의 핵심 패턴(정상 manifold — 정상 데이터가 모여 있는 형태)만 압축해 기억합니다. 그래서 이상한 입력이 들어오면 그 패턴에서 벗어나 잘 되살리지 못하고, 복원 오차가 크게 튑니다.
 
 ## 1. 파이프라인 전체 구조
 
@@ -68,7 +69,7 @@ models/{domain}.h5 + {domain}_config.json + {domain}_scaler.pkl
 - `is_startup_phase` (기동 직후 5분)
 - `pump_start_event`
 
-→ 이게 있어야 AE가 "정상 기동 overshoot"를 이상으로 오판하지 않습니다.
+→ 이게 있어야 AE가 "정상적인 기동 시 잠깐 값이 치솟는 현상(overshoot)"을 이상으로 오판하지 않습니다.
 
 ### STEP 2 — 시계열 윈도우 집계 + Context 보존
 1분 단위 시계열을 슬라이딩 윈도우로 집계해 순간 노이즈를 줄입니다.
@@ -112,7 +113,7 @@ zone1_substrate_moisture_pct, daily_light_integral_mol_m2_d
 
 > 코드: [preprocessing.py:443-561](../services/inference/src/preprocessing.py#L443-L561) `extract_interpretation_features`
 
-**IQR 꼬리 절단을 일부러 사용하지 않은 이유** — 잘라내면 정상 기동 overshoot까지 이상으로 학습돼 매일 아침 알람이 폭주.
+**IQR 꼬리 절단을 일부러 사용하지 않은 이유**(IQR — 사분위 범위, 데이터 가운데 50% 구간을 기준으로 그 바깥의 극단값을 잘라내는 기법) — 잘라내면 정상적인 기동 시의 치솟음(overshoot)까지 이상으로 학습돼, 매일 아침 알람이 폭주합니다.
 
 ### STEP 5 — 정규화 (MinMax [0,1])
 유량·압력·전류·온도 등 단위가 다른 센서·파생 피처를 **MinMax Scaling으로 [0, 1] 구간 정렬**.
@@ -213,7 +214,7 @@ Dense(input_dim, sigmoid)          # 출력
 | Batch size | 64 |
 | Validation split | 20% |
 | EarlyStopping | `patience=10`, `restore_best_weights=True` (val_loss 기준) |
-| 하이퍼파라미터 튜닝 | **Optuna 20 trials**로 8개 하이퍼파라미터 최적화 |
+| 하이퍼파라미터 튜닝 | **Optuna 20 trials**로 8개 하이퍼파라미터 최적화 (Optuna는 하이퍼파라미터 — 학습률·층 크기 등 사람이 정하는 설정값 — 을 자동으로 탐색해 주는 도구) |
 
 > 학습 설정: [train.py:81-94](../services/inference/src/train.py#L81-L94)
 
@@ -273,7 +274,7 @@ for fname in feature_cols:
 | 디바운싱 | "N분 이상 연속" 단순 룰 | **도메인별 연속 N회 디바운싱** (Caution 3회 / Warning 5회 / Critical 7회 초안) |
 | 적용 상태 | 미구현 | 진행 중 ([PROJECT_BRIEF.md §5-4](PROJECT_BRIEF.md)) |
 
-→ 이 변경의 핵심은 **민감도(Recall) ↑** + **스파이크성 노이즈를 디바운싱으로 차단**.
+→ 이 변경의 핵심은 **민감도(Recall, 놓치지 않고 잡는 정도) ↑** + **짧게 튀는 노이즈를 디바운싱(일정 횟수 이상 연속될 때만 이상으로 인정해 순간적인 튐은 무시하는 것)으로 차단**하는 것입니다.
 
 ## 6. 평가 — F1 score
 

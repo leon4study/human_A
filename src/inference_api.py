@@ -488,12 +488,29 @@ def run_inference_pipeline(
                 label,
             )
 
-            # 2-1. 기동 직후 5분은 정상 스파이크 → 알람 억제(운영 모드 gating)
+            # 2-1. 기동(startup) 처리 — STARTUP_MODE(gate|regime, 기본 regime).
+            #   gate  : 기동 직후를 통째 Normal로 억제(정상기동 오탐 0, 단 비정상 기동도 놓침).
+            #   regime: 기동 전용 band로 재판정 — 정상 기동은 통과, 평소보다 큰 비정상 기동만
+            #           알람. band가 없는 구버전 config는 자동으로 gate 폴백.
+            #   실험 근거·방법론: docs/modeling/03 §4-2, fault_injection/startup_strategy_eval.py.
             if int(realtime_data.get("is_startup_phase", 0)) == 1:
-                logger.info(
-                    "🔄 [PIPELINE] domain=%s is_startup_phase=1 → 알람 억제", sys_name
-                )
-                alarm_level, label = 0, "Normal (startup gated)"
+                startup_band = config.get("threshold_startup")
+                startup_mode = os.environ.get("STARTUP_MODE", "regime").lower()
+                if startup_mode == "regime" and startup_band:
+                    alarm_level, label = get_alarm_status(
+                        mse_score, startup_band["caution"],
+                        startup_band["warning"], startup_band["critical"],
+                    )
+                    if alarm_level > 0:
+                        label = f"{label} (startup-regime)"
+                    logger.info(
+                        "🔄 [PIPELINE] domain=%s 기동 regime band → level=%s", sys_name, alarm_level
+                    )
+                else:
+                    logger.info(
+                        "🔄 [PIPELINE] domain=%s is_startup_phase=1 → 알람 억제(gate)", sys_name
+                    )
+                    alarm_level, label = 0, "Normal (startup gated)"
 
             # 3. [함수 사용] RCA(원인 분석) 계산
             rca = calculate_rca(sq_err, features, top_n=3)
