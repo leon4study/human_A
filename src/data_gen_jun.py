@@ -9,30 +9,69 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ==========================================
-# 1. 환경 변수 시뮬레이션
+# 0. 센서 고유 독립 성분 헬퍼 (독립성 게이트 — docs/modeling/12)
+# ==========================================
+def ar1_process(n, sigma, phi=0.995, seed_offset=0):
+    """
+    센서마다 '그 센서만의 느린 독립 변동'을 만드는 1차 자기회귀(AR(1)) 과정.
+
+    [왜 필요한가] 현재 데이터는 거의 모든 센서를 막힘강도(clog) 한 변수의 결정적 함수로 만들어,
+    물리적으로 독립이어야 할 센서들(예: 진동 vs 압력)이 상관계수 ~1.00이 된다. 그러면 전처리의
+    다중공선성 필터(corr>0.85)가 "중복"으로 제거해 학습 피처가 빈약해진다. 이 함수가 만드는
+    '공유 드라이버와 무관한 고유 성분'을 각 센서에 더하면 그 인위적 상관이 깨진다(docs/modeling/12 §2-3).
+
+    [수식] u[t] = phi*u[t-1] + e[t],  e ~ N(0, sigma).
+      - phi(0~1): 1에 가까울수록 천천히 떠도는(random-walk에 가까운) 저주파 변동. 베어링 상태·센서
+        드리프트처럼 서서히 변하는 물리량을 모사한다.
+      - sigma: 고유 성분의 크기. 이 값을 키우면 다른 센서와의 상관이 내려간다(목표 상관 조절 손잡이).
+
+    [재현성] 전역 np.random.seed와 별개로 default_rng(seed_offset)로 센서마다 독립 난수열을 쓴다.
+      seed_offset을 센서별로 다르게 주어야 두 센서의 고유 성분이 서로 독립이 된다.
+    """
+    rng = np.random.default_rng(42 + seed_offset)
+    e = rng.normal(0.0, sigma, n)        # 매 시점 새로 들어오는 충격(innovation)
+    u = np.zeros(n)
+    for t in range(1, n):
+        u[t] = phi * u[t - 1] + e[t]     # 직전 값을 phi만큼 이어받아 '느린' 변동을 만든다
+    return u
+
+
+# ==========================================
+# 1. 환경 변수 시뮬레이션 (Layer 0 — 공공데이터 딸기 앵커, docs/modeling/12 §0)
 # ==========================================
 def simulate_environment(n, minute_of_day):
+    # daylight: 0(밤)~1(한낮)로 부드럽게 오르내리는 일주기. 오전 6시(360분) 기준 sin의 양수부만 사용.
     daylight = np.clip(
         np.sin(2 * np.pi * (minute_of_day - 360) / 1440), 0, None
     ).astype(float)
 
+    # 기온: 공공데이터 딸기 개화·착과기 기준 — 주간 20~25℃ / 야간 7~10℃(야간 냉각).
+    #   밤(daylight=0) ≈ 9℃, 한낮(daylight=1) ≈ 22.5℃ 가 되도록 baseline 9 + 진폭 13.5.
+    #   (이전 값 21 + 7*daylight 는 야간 21℃로 딸기 야간(7~10℃)과 크게 어긋났음 → 공공데이터로 교정.)
     air_temp_c = (
-        21
-        + 7.0 * daylight
-        + 1.2 * np.sin(2 * np.pi * minute_of_day / 1440 + 0.8)
+        9.0
+        + 13.5 * daylight
+        + 0.8 * np.sin(2 * np.pi * minute_of_day / 1440 + 0.8)
         + np.random.normal(0, 0.35, n)
     )
+    # 습도: 공공데이터 — 낮 60~70% / 밤 70~85%. 낮(daylight=1) ≈ 65%, 밤 ≈ 78%.
     relative_humidity_pct = np.clip(
         78
-        - 17 * daylight
+        - 13 * daylight
         + 2.2 * np.sin(2 * np.pi * minute_of_day / 1440 + 2.0)
         + np.random.normal(0, 1.0, n),
-        45,
-        95,
+        55,
+        90,
     )
-    co2_ppm = np.clip(760 - 80 * daylight + np.random.normal(0, 12, n), 500, 1000)
+    # CO2: 공공데이터 스마트팜 권장 800~1200 ppm. 밤엔 호흡으로 축적되어 높고(≈1150), 낮엔 광합성
+    #   소비로 낮아짐(≈870). (이전 760 baseline은 권장 하한 800에도 못 미쳤음 → 교정.)
+    co2_ppm = np.clip(
+        1150 - 280 * daylight + np.random.normal(0, 15, n), 800, 1200
+    )
+    # 광량(PPFD): 공공데이터 권장 200~400 μmol/m²/s(일조 10~14h). 한낮 피크 ≈ 360.
+    #   (이전 40 + 670*daylight 는 피크 710으로 권장(200~400)을 크게 초과 → 교정.)
     light_ppfd_umol_m2_s = np.clip(
-        40 + 670 * daylight + np.random.normal(0, 18, n), 0, None
+        360 * daylight + np.random.normal(0, 15, n), 0, 420
     )
 
     return daylight, {
@@ -164,7 +203,16 @@ def simulate_zone_data(
 # ==========================================
 # 5. [메인] 데이터 통합 파이프라인 (총 50개 컬럼 완벽 세팅)
 # ==========================================
-def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min"):
+def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min",
+                                degradation=True):
+    """
+    degradation:
+      True(기본)  — 30일 이후 막힘(clog)이 자라는 '자연 노후' 시나리오(참고/대조용).
+      False       — clog=0 전 구간. AutoEncoder 학습용 '순수 정상 데이터'를 만든다.
+                    환경 공공데이터 앵커·센서 독립성은 그대로 유지되고, 막힘만 없다.
+                    (고장은 자연 노후가 아니라 fault_injection 프레임으로 통제 주입하므로,
+                     학습셋은 막힘 없는 정상이어야 AE가 정상 manifold만 배운다. docs/modeling/12 §6.)
+    """
     idx = pd.date_range(start=start, periods=days * 24 * 60, freq=freq)
     n = len(idx)
     minute_of_day = idx.hour * 60 + idx.minute
@@ -172,9 +220,15 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
 
     irr_mask, clean_flag = generate_schedules(n, minute_of_day, days)
     daylight, env_data = simulate_environment(n, minute_of_day)
-    clog, blocked_ratio, cleaning_boost = simulate_degradation(
-        n, day_num, irr_mask, clean_flag
-    )
+    if degradation:
+        clog, blocked_ratio, cleaning_boost = simulate_degradation(
+            n, day_num, irr_mask, clean_flag
+        )
+    else:
+        # 순수 정상: 막힘 진행 없음. 나머지 물리(환경·센서 독립성·펌프 거동)는 동일.
+        clog = np.zeros(n, dtype=float)
+        blocked_ratio = np.zeros(n, dtype=float)
+        cleaning_boost = np.zeros(n, dtype=float)
 
     # 🚨 주야간 펌프 가동 여부
     pump_on = np.clip(irr_mask + clean_flag, 0, 1)
@@ -217,6 +271,10 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
     discharge_pressure += np.random.normal(0, 0.5 + 3.0 * clog, n) * pump_on
     discharge_pressure = np.clip(discharge_pressure, 0, None)
 
+    # 흡입압: 앞서 독립 노이즈를 과하게 주입해 토출압과 corr -0.02(같은 펌프인데 무상관 = 비물리적)로
+    #   만든 것을 되돌린다. 흡입·토출은 같은 펌프가 구동하므로 물리적으로 상관돼야 정상이다.
+    #   고장 신호(흡입 막힘)는 둘의 '관계 변화(divergence)'로 잡으며, 이는 관계 판별 피처가 담당한다
+    #   (docs/modeling/12 — 상관 낮추기가 아니라 관계 피처로 구분). 따라서 원래 물리식으로 복원.
     suction_pressure = (
         -10.5 - 0.7 * irr_mask - 1.5 * clog
     ) * pump_on + np.random.normal(0, 0.1, n) * pump_on
@@ -237,8 +295,14 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
         0, 3, n
     ) * pump_on
 
+    # 진동: 두 성분으로 구성한다. (1) 배관 막힘과 무관한 '베어링 상태'의 독립 변동(마모·정렬불량,
+    #   AR(1)) — 이건 진짜 독립 물리라 유지한다. (2) clog/cavitation 동반 진동(원래 계수 0.8·0.9 복원).
+    #   정상 운전(clog=0)에선 독립 성분만 작용해 압력과 무상관(게이트 통과)이고, 막힘이 진행되면 압력과
+    #   '함께' 오르는데 이는 실제 물리(막힘→cavitation→진동↑)라 올바른 고장 시그니처다.
+    #   앞서 노이즈 접근으로 clog 비중을 0.4로 줄였던 것은 과교정이라 0.8·0.9로 되돌린다. seed_offset=2.
+    bearing_condition_indep = ar1_process(n, sigma=0.035, phi=0.99, seed_offset=2)
     bearing_vibration_rms = (
-        1.18 + 0.18 * irr_mask + 0.8 * clog + 0.9 * blocked_ratio
+        1.18 + 0.18 * irr_mask + 0.8 * clog + 0.9 * blocked_ratio + bearing_condition_indep
     ) * pump_on + np.random.normal(0, 0.02, n) * pump_on
     vibration_high_freq = (
         0.25 + 0.05 * irr_mask + 1.2 * clog
@@ -251,11 +315,17 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
 
     # 온도 및 여과기 (발열은 기온 베이스)
     air_temp_arr = env_data["air_temp_c"]
+    # 모터·베어링 온도: 이전엔 둘 다 'air_temp + 상수 + clog'라 corr 0.97(거의 복제). 실제로 둘은
+    #   열원(모터 권선 vs 베어링 마찰)과 열 시정수가 달라 독립 성분이 있다. 베어링온도에 고유 마찰열
+    #   AR(1)을 더해 모터온도와의 상관을 0.4~0.7로 낮춘다(둘 다 air_temp는 공유하므로 0은 아님).
+    #   seed_offset=3(모터)·4(베어링)로 서로 독립.
+    motor_winding_indep = ar1_process(n, sigma=0.30, phi=0.99, seed_offset=3)
+    bearing_friction_indep = ar1_process(n, sigma=0.45, phi=0.99, seed_offset=4)
     motor_temp = (
-        air_temp_arr + (13 + 2.5 * clog) * pump_on + np.random.normal(0, 0.22, n)
+        air_temp_arr + (13 + 2.5 * clog) * pump_on + motor_winding_indep + np.random.normal(0, 0.22, n)
     )
     bearing_temp = (
-        air_temp_arr + (10 + 2.0 * clog) * pump_on + np.random.normal(0, 0.18, n)
+        air_temp_arr + (10 + 2.0 * clog) * pump_on + bearing_friction_indep + np.random.normal(0, 0.18, n)
     )
 
     filter_in = (145 + 8 * irr_mask + 5 * clog) * pump_on + np.random.normal(
@@ -354,11 +424,16 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
             ),
             2,
         ),
+        # 배액 EC: 이전엔 변동이 거의 daylight뿐이라 습도(역시 daylight 구동)와 corr 0.97(우연 artifact).
+        #   실제 배액 EC는 배지 염류 축적이라는 '느리고 독립적인' 과정이 지배한다(공공데이터: 배액 EC가
+        #   공급보다 높으면 염류 축적). 그 독립 누적 성분(AR(1), seed_offset=5)을 더하고 daylight 비중을
+        #   낮춰 습도와의 인위적 상관을 깬다(목표 <0.3).
         "drain_ec_ds_m": np.round(
             2.02
-            + 0.10 * daylight
+            + 0.04 * daylight
             + 0.25 * clog
             + 0.3 * blocked_ratio
+            + ar1_process(n, sigma=0.02, phi=0.99, seed_offset=5)
             + np.random.normal(0, 0.025, n),
             3,
         ),
@@ -522,6 +597,23 @@ def save_data_and_metadata():
     print(f"📊 최종 데이터 형태(Shape): {export_df.shape} (50개 컬럼 + fe_ 파생변수)")
 
 
+def save_normal_training_set(days=90):
+    """AutoEncoder 학습용 '순수 정상' 데이터셋(clog-free)을 저장한다(docs/modeling/12 §6, B1).
+
+    - 환경 공공데이터 앵커·센서 독립성은 그대로, 막힘(clog)만 0 → AE가 정상 manifold만 학습.
+    - days=90으로 기존 캐노니컬(dabin, ~90일/129,599행)과 학습 데이터량을 맞춘다.
+    - 고장은 자연 노후가 아니라 fault_injection 프레임이 통제 주입하므로 학습셋엔 막힘이 없어야 한다.
+    - 출력: data/smartfarm_normal_train_v5.csv (train.py가 읽을 새 정본 학습 데이터).
+    """
+    df = generate_smartfarm_final_v5(days=days, degradation=False)
+    df = df.drop(columns=[c for c in df.columns if c.startswith("hidden_")])
+    path = OUTPUT_DIR / "smartfarm_normal_train_v5.csv"
+    df.to_csv(path, index=False, encoding="utf-8-sig")
+    print(f"✅ 정상 학습셋(clog-free, {days}일) 저장: {path}  shape={df.shape}")
+    return path
+
+
 # 스크립트 실행
 if __name__ == "__main__":
     save_data_and_metadata()
+    save_normal_training_set(days=90)

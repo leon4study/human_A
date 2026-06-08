@@ -60,6 +60,8 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         # 피처 1차 배치 (09 원장 §3-4)
         "bearing_thermal_margin",
         "load_per_speed",
+        # §7 관계 피처(12 §7·§8) — 부하 정규화 진동, 베어링 마모 직격(ISO 10816 기반)
+        "vibration_per_load",
     ],
     "hydraulic": [
         "flow_rate_l_min",
@@ -67,13 +69,15 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         "suction_pressure_kpa",
         "flow_drop_rate",
         "pressure_flow_ratio",
-        "hydraulic_power_kw",
-        "filter_delta_p_kpa",
         "pressure_trend_10",
         "flow_trend_10",
+        # 유령 mandatory 제거(2026-06-07): hydraulic_power_kw·filter_delta_p_kpa는 raw에 없어
+        # "df_agg에 없는 피처" 경고만 냈음. 필터는 룰기반 도메인이라 filter_delta_p 불필요.
         # 피처 1차 배치 (09 원장 §3-2) — 막힘 직격
         "system_resistance",
         "specific_energy",
+        # §7 관계 피처(12 §7·§8) — 환경 기대 수요(VPD×광량). flow와의 어긋남으로 막힘 포착
+        "transpiration_demand",
         # 도메인 경계 정리(2026-06-02): supply_balance_index는 유량 균형 지표(구역합/메인,
         # 누수 탐지)라 유량 성격 → zone_drip에서 hydraulic으로 이동. docs/DOMAIN_DESIGN.md.
         "supply_balance_index",
@@ -86,6 +90,8 @@ SENSOR_MANDATORY: dict[str, list[str]] = {
         "pid_error_ph",
         "mix_temp_c",
         "ph_trend_30",
+        # §7 관계 피처(12 §7·§8) — 배액/공급 EC 비. >1 누적 = 염류 축적(공공데이터 근거)
+        "leaching_ratio",
     ],
     "zone_drip": [
         # 구역 배지(substrate) 상태 도메인 — 말단 각 구역의 뿌리 환경(수분·EC). docs/DOMAIN_DESIGN.md.

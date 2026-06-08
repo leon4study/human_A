@@ -430,10 +430,11 @@ if __name__ == "__main__":
     #   같은 파일명으로 바로 비교된다. (docs/modeling/06_visualization_logging.md)
     run_figures_dir = os.path.join(project_root, "models", "runs", run_id, "figures")
 
-    # /Users/... 대신 project_main_folder/data 폴더를 찾아가도록 설정
-    data_filename = (
-        "/Users/jun/GitStudy/human_A/data/generated_data_from_dabin_0420.csv"
-    )
+    # 학습용 정상 데이터(clog-free). 절대경로를 박지 않고 파일명만 둬서, 어느 머신에서
+    # 체크아웃해도 <project_root>/data/ 아래에서 찾도록 한다(이식성).
+    #   - smartfarm_normal_train_v5: data_gen_jun.save_normal_training_set()가 만든
+    #     공공앵커 기반 90일 정상셋. 센서 독립성 게이트를 통과한 캐노니컬 학습본.
+    data_filename = "smartfarm_normal_train_v5.csv"
     data_path = os.path.join(project_root, "data", data_filename)
 
     logger.info(f"📂 데이터 로딩 경로: {data_path}")

@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sensor_fault_eval import load_domain, per_feature_error, window  # noqa: E402
 
 PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLEAN_CSV = os.path.join(PROJECT, "data", "generated_data_from_dabin_0420.csv")
+CLEAN_CSV = os.path.join(PROJECT, "data", "smartfarm_normal_train_v5.csv")
 DOMAIN = "hydraulic"
 BASELINE_ROWS = 43200
 # 비정상 기동: 기동 윈도우의 압력(+모터전력)을 배수로 상승. 여러 강도로 스윕.

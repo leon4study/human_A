@@ -357,6 +357,34 @@ def create_modeling_features(df, extra_cols=None):
         df_feat["pump_rpm"] + eps
     )
 
+    # --- §7 관계 판별 피처 (검증된 공식 — docs/modeling/12 §7·§8) -----------------
+    # 원칙: 고장 신호는 raw 센서보다 '센서 간 관계'에 있다. 평소 함께 움직이던 값이 특정 고장에서
+    #   어긋나는 패턴을 운전점 무관하게 잡는다. 데이터 현실화(센서별 독립 성분)가 된 뒤라야 판별력이 산다.
+
+    # vibration_per_load = 진동 / 모터전력. 베어링 마모는 '부하와 무관하게' 진동을 키운다.
+    #   부하로 정규화하면 운전 강도가 아니라 '베어링 상태'만 분리된다(ISO 10816 진동 기반, 12 §8-3).
+    #   전력이 0에 근접하는 정지 구간은 발산하므로 가동 중(power≥0.5)만 계산, 나머지는 0.
+    _power = df_feat["motor_power_kw"]
+    _vpl = df_feat["bearing_vibration_rms_mm_s"] / (_power + eps)
+    df_feat["vibration_per_load"] = _vpl.where(
+        (df_feat["pump_on"] == 1) & (_power >= 0.5), 0.0
+    )
+
+    # leaching_ratio = 배액 EC / 공급 EC. 공공데이터: 배액 EC가 공급보다 '높으면 염류 축적'(>1),
+    #   낮으면 양분 부족. 즉 1을 기준으로 양액 상태를 직격하는 비율(12 §8-4). mix_ec는 1.5~1.8이라 0 위험 없음.
+    df_feat["leaching_ratio"] = df_feat["drain_ec_ds_m"] / (
+        df_feat["mix_ec_ds_m"] + eps
+    )
+
+    # transpiration_demand = VPD × 광량. 식물 증산(=물·양분 수요)은 VPD가 주동인이고 광량에 비례한다
+    #   (Tetens VPD + 증산 이론, 12 §8-2). 이 '기대 수요'를 피처로 두면, AE가 '수요는 높은데 유량은
+    #   낮다'(=막힘)는 어긋남을 manifold 이탈로 잡는다. (명시적 기대유량 잔차는 보정상수가 필요해 보류 —
+    #   여기선 수요 지표를 제공하고 flow와의 관계 학습은 AE에 맡긴다.)
+    if "calculated_vpd_kpa" in df_feat.columns and "light_ppfd_umol_m2_s" in df_feat.columns:
+        df_feat["transpiration_demand"] = (
+            df_feat["calculated_vpd_kpa"] * df_feat["light_ppfd_umol_m2_s"]
+        ).fillna(0)
+
     # =========================================================
     # 7. 모델 입력용 / 해석용 분리
     # =========================================================
@@ -393,6 +421,9 @@ def create_modeling_features(df, extra_cols=None):
         #   (bearing_temperature_c는 bearing_thermal_margin 계산엔 쓰이나 raw 자체는 잘렸음.)
         #   SENSOR_MANDATORY[motor]가 요구하는 센서이므로 화이트리스트에 추가해 집계까지 보존한다.
         "bearing_vibration_rms_mm_s", "bearing_temperature_c",
+        # §7 관계 판별 피처(검증 공식, docs/modeling/12 §7·§8). 운전점 무관·직교 정보라 고장 직격.
+        "vibration_per_load", "leaching_ratio", "transpiration_demand",
+        "mix_temp_c",  # raw 존재하나 누락됐던 것 복원(nutrient mandatory)
     ]
 
     # extra_cols: SHAP 타겟처럼 반드시 보존해야 하는 컬럼들

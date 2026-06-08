@@ -702,3 +702,45 @@ DOMAIN_ISOLATION=1 + 진동 fix 모델을 정본으로. 포트폴리오 발화: 
 - 격리 잔여: zone_drip union에 pressure_diff·flow_diff·rpm_stability_index 잔존(타 도메인 mandatory가 아니라 격리 미포착). 필요 시 도메인 sensor 네임스페이스로 확장.
 - hydraulic(`hydraulic_power_kw`·`filter_delta_p_kpa`)·nutrient(`mix_temp_c`) 누락 센서 점검(같은 model_cols 패턴).
 - iso ON/OFF 정량 F1 비교는 evaluate_test_metrics로 별도(현재는 coupling_validate 검출지도로 확인).
+
+## Phase J — 캐노니컬 데이터 전환(dabin→jun v5) 재학습: 현실성↑·motor FAR 회귀 (2026-06-07, 정직 측정)
+
+### 가설
+dabin 정상셋은 센서가 인위적으로 ~1.0 상관(suction↔discharge 등)이라 다중공선성 필터가 도메인
+피처를 깎아내고 §7 관계피처도 무의미했다. 공공앵커+독립 AR(1) 성분 기반 jun 정상셋으로 바꾸면
+raw 센서가 필터를 통과하고 관계피처가 자연 선택돼, 데이터 현실성과 함께 attribution·FAR이 개선될 것.
+
+### 시도
+`DOMAIN_ISOLATION=1 python src/train.py` on smartfarm_normal_train_v5.csv(129,599행·90일).
+run `2026-06-07_110219__6965158`(라벨 retrain-rel-features는 PHASE 미지정 기본값). faulty_testset_v1을
+jun base에서 재생성 후 측정도구 4종 + 도메인별 FAR 분해 재실행.
+
+### 관측
+- 검출(baseline_blockage): clog 6/6, 막힘률 0%, AE lead-time 47.5h vs baseline 45.5h.
+  (lead-time은 dabin 35.9h와 직접 비교 불가 — 에피소드 배치가 다른 데이터셋.)
+- attribution(coupling_validate): 4 root 모두 검출 O. 단 Phase I의 깨끗함이 일부 후퇴 —
+  bearing_wear에 hydraulic 0.43 오탐 재등장, nutrient_imbalance에 motor 0.86 오탐.
+- **FAR 회귀**: AE overall 6.5%(>baseline 3.2%, >5% 목표). 도메인별 motor **6.3%(주범)**·
+  hydraulic 2.7%·nutrient 1.1%·zone_drip 1.1%. Phase I는 1.4%였음.
+- 기동 band B: 정상기동 FAR 1.3%, 비정상 ≥1.2배 recall 100%(양호, 재확인).
+- 집중도 판별 깨짐: clog 0.65 > sensor drift/spike 0.40(역전). dabin의 '단일 0.88~0.92 vs 다중 0.45'
+  분리 재현 실패 — hydraulic F=15 축소 + 단일 드리프트가 파생피처(pressure_flow_ratio·system_resistance)로 퍼짐.
+- §7 피처: vibration_per_load(motor)·transpiration_demand(hydraulic) 여전히 Step2에서 드롭 →
+  SENSOR_MANDATORY 강제주입으로만 생존. leaching_ratio(nutrient)만 SHAP 합집합에 자연 포함.
+
+### 진단 / 교훈
+데이터 현실성은 올랐으나(독립 AR(1)·공공앵커), 그 현실적 노이즈가 motor 재구성오차 분포를 넓혀
+sigma threshold(caut 0.0021)가 6.3% FAR을 냈다. motor에 강제주입된 노이즈성 비율피처
+(vibration_per_load·temp_slope_c_per_s·bearing_thermal_margin)가 1차 용의자. §7 관계피처가
+'자연 선택'되지 못하고 강제주입에 의존한 것은, 그것이 판별력이 아니라 노이즈로 작용했을 신호
+(사용자 우려: 필터링되면 곱하거나 공식 변경). 집중도 판별식은 피처구성 의존적이라 데이터셋 간 일반화 안 됨.
+
+### 수정 (다음 회차 방향 — 미확정, 사용자 결정 대기)
+motor FAR을 5%↓로 되돌리는 게 선결. 후보: (i) motor threshold를 percentile(목표 FAR 직접 타게팅)로
+또는 sigma 배수 상향, (ii) motor 강제주입 노이즈피처를 attribution 기여 없으면 제외, (iii) 둘 병행.
+확정 전까지 포트폴리오 정직화(D)는 Phase I 수치(FAR 1.4%) 유지하되 'jun 데이터 재측정 진행 중' 단서.
+
+### 남은 과제
+- motor FAR 회귀 수정 → 재학습 → coupling_validate·baseline_blockage 재측정으로 Phase I 대비 회복 확인.
+- §7 관계피처 판별력 검증 또는 재설계(C 화학·농학 트랙과 통합 검토).
+- 집중도 판별을 포트폴리오에서 쓸지 재검토(jun에서 비재현).
