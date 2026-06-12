@@ -23,7 +23,7 @@ import tensorflow as tf
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
 from preprocessing import step1_prepare_window_data
-from inference_core import get_alarm_status, actionable_feature_mask
+from inference_core import get_alarm_status, actionable_feature_mask, reconstruction_score
 from repro import latest_run_dir
 
 # [진단 시각화] matplotlib 부재 시에도 평가 자체는 진행되도록 import 실패를 흡수.
@@ -46,7 +46,7 @@ LEVEL_CUTOFFS = [1, 2, 3]  # 각각 "Caution 이상 = 이상", "Warning 이상",
 # A-2: nutrient 도메인은 타겟(mix_ec 등)과 최종 학습 피처(time/pump_rpm/motor_temp)가 어긋나
 # 5월 정지 시간대에 FP를 독점 발생시킴 (547/581 = 94%).
 # A-3(feature_selection 재검토)로 근본 수정 전까지 overall voting에서 제외.
-EXCLUDE_FROM_OVERALL = {"nutrient"}
+EXCLUDE_FROM_OVERALL = set()  # nutrient: ph_trend trim으로 FP 해결 → 포함(C)
 
 
 def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict]:
@@ -99,7 +99,7 @@ def run_inference(df_agg: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict]:
             _mask = actionable_feature_mask(features)
         if _mask.sum() == 0:
             _mask = np.ones(len(features), dtype=bool)
-        mse = np.mean(sq_err[:, _mask], axis=1)
+        mse = reconstruction_score(sq_err, _mask, trim_top=cfg.get("recon_trim_top", 0))
 
         levels = np.array(
             [get_alarm_status(float(m), t_caut, t_warn, t_err)[0] for m in mse]

@@ -39,14 +39,14 @@ SRC = os.path.join(PROJECT, "src")
 sys.path.insert(0, SRC)
 
 from preprocessing import step1_prepare_window_data          # noqa: E402  (학습/추론과 동일 윈도우)
-from inference_core import actionable_feature_mask           # noqa: E402  (scoring_features 폴백)
+from inference_core import actionable_feature_mask, reconstruction_score  # noqa: E402
 
 MODELS_DIR = os.environ.get("MODELS_DIR", os.path.join(PROJECT, "models"))
 CLEAN_CSV = os.path.join(PROJECT, "data", "smartfarm_normal_train_v5.csv")   # 임계 기준(train 정상)
 FAULTY_CSV = os.path.join(PROJECT, "data", "faulty_testset_v2.csv")           # 평가(held-out + 고장 라벨)
 
 # nutrient는 화학센서 노이즈로 FP를 독점 → overall voting 제외(evaluate_test_metrics와 동일 정책).
-EXCLUDE_FROM_OVERALL = {"nutrient"}
+EXCLUDE_FROM_OVERALL = set()  # nutrient: ph_trend trim으로 FP 해결 → 포함(C)
 
 # 운영점 sweep에서 훑을 'caution(주의) 분위' 후보. 낮을수록 민감(검출↑·FAR↑), 높을수록 보수적.
 SWEEP_PCTS = [97.0, 98.0, 98.5, 99.0, 99.3, 99.5, 99.7, 99.9]
@@ -84,7 +84,7 @@ def domain_mse(df_agg, model, scaler, cfg):
         mask = actionable_feature_mask(features)
     if mask.sum() == 0:
         mask = np.ones(len(features), dtype=bool)
-    return np.mean(sq[:, mask], axis=1)
+    return reconstruction_score(sq, mask, trim_top=cfg.get("recon_trim_top", 0))
 
 
 def startup_mask_of(df_agg):

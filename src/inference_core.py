@@ -56,6 +56,31 @@ def actionable_feature_mask(features, exclude=None) -> np.ndarray:
     return np.array([f not in blocked for f in features], dtype=bool)
 
 
+def reconstruction_score(sq_err, scoring_mask, trim_top=0):
+    """per-feature 제곱오차에서 scoring 피처만 골라 'trimmed-mean'으로 윈도우 이상점수를 낸다.
+
+    [왜 평균이 아니라 trimmed-mean인가]
+    단순 평균(mean)은 한 피처가 OOD로 외삽돼 복원오차가 폭발하면 그 한 피처에 점수가 지배당해
+    헛알람(FP)이 난다(skew 데이터에서 평균 추정기 취약 — Latent-AE for Skewed Data 2023; AE 외삽
+    불안정 — Unreliable-AE 2025). 그래서 행마다 가장 큰 trim_top개 오차를 버리고 평균낸다(robust
+    aggregation). 진짜 고장은 여러 피처가 동시에 올라 trimmed-mean도 오르지만, 한 피처만 튀는
+    헛알람은 그 피처가 잘려 점수가 안 오른다(trim_top 기본=1).
+
+    sq_err: (N, F) 또는 (F,). scoring_mask: (F,) bool.
+    """
+    e = np.asarray(sq_err, dtype=float)
+    if e.ndim == 1:
+        v = np.sort(e[scoring_mask]); n = len(v)
+        if trim_top <= 0 or n - trim_top < 1:
+            return float(v.mean()) if n else 0.0
+        return float(v[: n - trim_top].mean())
+    em = e[:, scoring_mask]; F = em.shape[1]
+    if trim_top <= 0 or F - trim_top < 1:
+        return em.mean(axis=1)
+    s = np.sort(em, axis=1)
+    return s[:, : F - trim_top].mean(axis=1)
+
+
 def calculate_rca(
     feature_errors: np.ndarray,
     features: list,
