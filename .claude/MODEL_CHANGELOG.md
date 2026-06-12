@@ -890,3 +890,25 @@ per-domain을 1%로 낮춰 baseline 이하로 통제. '목표 오탐률로 임�
 ### 수정 (확정 채택)
 percentile@99를 train.py 정본 기본값으로. 현재 모델이 이미 이 구성이라 재학습 불필요. env로 미세조정
 여지(PCT_CAUTION↓하면 lead-time↑·FAR↑). FAR 작업(J~N) 종결 — 이제 D(포트폴리오 정직화)의 확정 수치 확보.
+## Phase O — 운영점 튜닝 + sliding/tumbling 임계 윈도잉 정합 (2026-06-12)
+
+### 가설
+임계가 기본값 P99이고 한 번도 위치 튜닝이 안 됨. 운영점 곡선을 그리면 '검출 손실 없이 FAR을 더 낮출' 여지가 있을 것. (J~N은 임계 '방법'을, 여기선 임계 '위치'를 본다.)
+
+### 시도
+- operating_point_eval.py: (a) FAR 출처 국소화(도메인 x 기동/정상), (b) caution 분위 P97~P99.9 sweep로 검출/FAR/lead 추적.
+- apply_operating_point.py: 재학습 없이 config 임계만 재계산(원본 백업 후). recall_far_breakdown.py / verify_attribution.py 교차검증.
+
+### 관측
+- 곡선: 검출 12/12가 P97~P99.9 전 구간 유지 -> 현 P99는 느슨. P99.5에서 정상FAR 2.3->1.7%, lead 32.9->32.4h.
+- sanity 실패(재계산 임계 != 저장 임계, 7~64%): 데이터 드리프트 아님(모델이 CSV보다 나중). 원인 = train은 window_method="sliding"(train.py:516), serve/eval은 tumbling. 즉 임계가 sliding 분포 분위로 잡혀 tumbling 점수에 적용돼 옴(eval==serve 임계 불일치). config startup n_samples=2772 vs tumbling 462(~6배)가 결정적 단서.
+- FAR 분해(P99.5 적용 후): FAR 1.8% 중 정상운전 93%(139건) / 기동 7%(10건). 기동 band 작동 중(기동 윈도우 108개뿐). 윈도우 F1 0.63(P .63 / R .63) vs 에피소드 검출 12/12 — 막힘 초반 미미 구간이 윈도우 FN을 쌓아 윈도우 recall은 구조적으로 낮음(정상).
+- 전조: 경고(Warning) 12/12 고장 전 도달, lead 14.8~44.8h.
+- 귀인 검증(nutrient 막힘): nutrient 7.5x / zone_drip 2.0x 진짜 반응, motor 1.0x / hydraulic 0.5x 허위. 검출은 zone_drip이 carry(진짜)하나 RCA는 motor로 오귀인(허위 motor 점수가 최고). nutrient 자기검출 4/4지만 voting 제외.
+
+### 진단
+임계는 서빙과 같은 윈도잉(tumbling) 분포에서 잡아야 정합. 운영점은 검출 만점 유지선에서 최대 분위가 FAR 최소(과튜닝 회피로 P99.5 채택). FAR 주범은 기동이 아니라 정상운전(이미 낮음). nutrient 검출은 진짜나 RCA/voting 구조에 약점.
+
+### 수정
+- main 임계를 tumbling P99.5/99.8/99.95로 재보정(apply_operating_point --apply, 원본 백업 models/_threshold_backup_pre_P995). 재측정: AE FAR 2.4->1.8%(baseline 3.1, 1.3->1.7배 낮음), 검출 12/12 유지, lead 30.3->28.4h.
+- 미적용(플래그): train.py가 임계를 tumbling으로 계산하도록 수정해야 재학습 시 영구화. nutrient RCA 오귀인 / voting 재포함은 B로 별도 결정.

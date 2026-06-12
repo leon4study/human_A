@@ -1,5 +1,27 @@
 # SESSION_LOG
 
+## 2026-06-12 — 운영점 튜닝(sliding->tumbling 정합·FAR 2.4->1.8) + 정직성 검증 — topic/08-portfolio-honesty
+
+### 달성 (Accomplished)
+1. 운영점 곡선/국소화로 임계 튜닝: sanity가 train(sliding)/serve(tumbling) 임계 윈도잉 불일치를 발견. main 임계를 tumbling P99.5로 재보정(재학습 없이, 백업). 재측정 AE FAR 2.4->1.8%(baseline 3.1, 1.7배 낮음), 검출 12/12 유지, lead 28.4h. MODEL_CHANGELOG Phase O.
+2. FAR 분해: 1.8% 중 93%가 정상운전 / 7%만 기동(기동 band 작동). 전조 경고 12/12 고장 전 도달(lead 14~44h, 그래프 저장).
+3. 귀인 검증: nutrient 막힘은 nutrient(7.5x)·zone_drip(2.0x) 진짜 반응, motor·hydraulic 허위 -> 검출은 zone_drip carry지만 RCA는 motor 오귀인('책임도메인 motor' 그래프는 아티팩트).
+4. A-1/A-2 문서 정합: 6시그마 토대+분위 정교화(README §3·MODELING §5), F1 0.95->held-out 검출/FAR/RCA(MODELING §6). Cpk 측정 1.67(cpk_eval). 포폴 §0 4지표 근거화.
+5. 도구 신설: cpk_eval / operating_point_eval / apply_operating_point / recall_far_breakdown / plot_early_warning / plot_domain_timelines / verify_attribution.
+
+### 남은 과제 (Pending)
+1. B(결정 중): nutrient 약점 — RCA 오귀인 수정 / nutrient voting 재포함(FAR 트레이드오프).
+2. train.py 임계를 tumbling으로 계산하도록 수정(재학습 시 영구화). 서빙 모델(services/inference/models) 동기화.
+3. 헤드라인 F1 결정(개선 수치로).
+
+### 절대 규칙 (Absolutes)
+- 임계는 서빙과 같은 윈도잉(tumbling) 분포에서 잡는다 — train은 sliding(데이터 증강)이라도 임계는 tumbling.
+- 운영점은 '검출 만점 유지하는 최대 분위'가 FAR 최소. 단 과튜닝 회피(소표본·강한 고장 기준이라 마진 남김).
+- 검출은 에피소드 단위로 본다(윈도우 recall은 막힘 초반 미미 구간 때문에 구조적으로 낮음).
+
+### 재개 지점 (Resume Point)
+1. B 결정: nutrient RCA 오귀인 수정 또는 voting 재포함(FAR 영향 측정 후). 그다음 헤드라인 F1.
+
 ## 2026-06-08 — percentile 임계 기본값: FAR whack-a-mole 종결(overall 2.3%<baseline) — feat/sensor-fault-control
 
 ### 달성 (Accomplished)
