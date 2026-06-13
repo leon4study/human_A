@@ -1,5 +1,25 @@
 # SESSION_LOG
 
+## 2026-06-12 (2) — nutrient FP 근본수정(trimmed-mean) + 용량 정리 — topic/08-portfolio-honesty
+
+### 달성 (Accomplished)
+1. nutrient FP 근본수정: ph_trend_30 OOD 외삽이 평균 MSE를 지배하던 것 -> 문헌 기반 trimmed-mean 로버스트 집계(상위1 제외)로 차단. per-domain(nutrient만 trim-1). robust 평활·회귀기울기는 실패(꼬리 본질적). MODEL_CHANGELOG Phase P, docs/modeling/13 §6.
+2. nutrient를 voting+RCA 포함(C 완성): 검출 12/12·FAR 2.2%·귀인 정확. 커밋 ab9301c.
+3. train.py recon_trim_top 저장으로 재학습 영구화.
+4. 용량 정리: models/runs 옛/실패 run 삭제(23M->4.5M), 정본 d8773ae만 보존, LATEST_RUN 정정.
+
+### 남은 과제 (Pending)
+1. README·status 갱신(nutrient/trimmed-mean 반영).
+2. (선택) 재학습 1회로 nutrient 기동 band까지 trim 정합(현 FAR 2.2% 잔여 제거).
+3. 나머지: 운영점 tumbling 영구화·현실적 램프·드리프트 문서·서빙 동기화.
+
+### 절대 규칙 (Absolutes)
+- 점수 집계: 평균은 한 피처 외삽에 취약 -> OOD-취약 도메인은 trimmed-mean(robust aggregation). trim은 필요한 곳에만(단일피처 고장 민감도 보존).
+- 추세/차분 파생(diff-of-rolling-mean)은 heavy-tail-prone -> OOD 첨도 점검 필수.
+
+### 재개 지점 (Resume Point)
+1. README/status 갱신 -> 나머지 개념들(운영점 영구화 등).
+
 ## 2026-06-12 — 운영점 튜닝(sliding->tumbling 정합·FAR 2.4->1.8) + 정직성 검증 — topic/08-portfolio-honesty
 
 ### 달성 (Accomplished)

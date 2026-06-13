@@ -912,3 +912,29 @@ percentile@99를 train.py 정본 기본값으로. 현재 모델이 이미 이 �
 ### 수정
 - main 임계를 tumbling P99.5/99.8/99.95로 재보정(apply_operating_point --apply, 원본 백업 models/_threshold_backup_pre_P995). 재측정: AE FAR 2.4->1.8%(baseline 3.1, 1.3->1.7배 낮음), 검출 12/12 유지, lead 30.3->28.4h.
 - 미적용(플래그): train.py가 임계를 tumbling으로 계산하도록 수정해야 재학습 시 영구화. nutrient RCA 오귀인 / voting 재포함은 B로 별도 결정.
+## Phase P — nutrient FP 근본수정: trimmed-mean 로버스트 집계 (2026-06-12)
+
+### 가설
+nutrient FP 폭주(EVAL FP의 94%)의 원인을 찾아 근본 수정하면 nutrient를 alarm+RCA에 포함할 수 있다(C). 초기 가설: ph_trend_30(노이즈 피처)을 채점 제외/robust화하면 된다.
+
+### 시도
+1. ph_trend_30 채점 제외(측정): FAR 1.2->0.4·검출 4/4. 단 RCA에 노이즈 남음.
+2. robust 평활(rolling(5).mean().diff()) 재정의 + 재학습.
+3. 회귀 기울기(30분 선형 fit) 재정의.
+4. 문헌 조사 후: trimmed-mean 로버스트 집계.
+
+### 관측
+- 진단(docs/13): ph_trend_30이 OOD로 외삽돼 복원오차 폭발(FP 99%, v2 스케일 2.5~3.9). 원시 1분은 멀쩡(첨도 0.4)하나 held-out 꼬리(첨도 6.3·OOD 6.86배)를 학습이 못 잡음. 윈도잉(sliding/tumbling)은 분포 거의 안 바꿈 -> 데이터 분포 동일, 피처가 heavy-tail-prone.
+- 첨도 일괄 점검: OOD-취약은 ph_trend_30 하나뿐(나머지 추세 피처 OOD~1.0, 학습이 꼬리 봄).
+- robust 평활 재학습: FAR 1.2->1.9(악화), 외삽 그대로. 회귀 기울기: v2 첨도 141·OOD 7.43(더 악화). -> 어떤 추정기도 안 됨(꼬리가 본질적).
+- 문헌(Skewed-Data AE 2023 arXiv 2301.00462, Unreliable-AE 2025 arXiv 2501.13864): skew/외삽에 평균 추정기 취약 -> 로버스트 집계.
+- trimmed-mean(상위1 제외) 시뮬: nutrient FAR 0.7->0.1·검출 4/4. 전역 적용은 검출 12->11(타도메인 단일피처 고장 손실).
+
+### 진단
+원인은 추정기(diff/slope)가 아니라 '평균 집계가 한 피처의 외삽에 지배당하는 것'. nutrient만 OOD-취약하므로 trim은 nutrient에만(타도메인은 평균 유지 -> 단일피처 고장 민감도 보존).
+
+### 수정
+- inference_core.reconstruction_score(trimmed-mean) 신설 -> train·serve·eval·도구 일관 적용.
+- per-domain: nutrient recon_trim_top=1, 나머지 0(평균). train.py가 config에 저장(재학습 영구화).
+- nutrient를 EXCLUDE_FROM_OVERALL에서 제거(voting+RCA 포함). 재측정: 검출 12/12·FAR 2.2%·귀인 정확(clog->hydr, bearing->moto, suction->hydr, nutrient->nutr).
+- 정본 run d8773ae 가중치 유지(재학습 아닌 재임계로 적용). 잔여: nutrient 기동 band가 아직 평균 기준(재학습 1회로 trim 정합 가능). 커밋 ab9301c.

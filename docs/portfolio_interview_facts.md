@@ -20,7 +20,7 @@
  데이터·모델에서 잰 것      운영 가정으로 잇는 인과 논리        OEE·막힘률·돈
 ```
 
-- **측정 근거**: 막힘 에피소드 검출 12/12(100%, 16건·4유형 주입), 평균 lead-time ~28h, 원인 도메인 정확 귀인(RCA), AE FAR 1.8% < baseline 3.1%, 유량 Cpk 측정. → 코드/모델 산출(가정 아님). ※ 검출·lead-time은 단일센서 baseline과 동등하고, AE의 측정된 우위는 **FAR ~1.7배↓ + 도메인 RCA**다(운영점 P99.5·tumbling 정합 후). 단, RCA는 nutrient 막힘을 motor로 오귀인하는 약점이 있다(§7 참조).
+- **측정 근거**: 막힘 에피소드 검출 12/12(100%, 16건·4유형 주입), 평균 lead-time ~28h, 원인 도메인 정확 귀인(RCA), AE FAR 1.8% < baseline 3.1%, 유량 Cpk 측정. → 코드/모델 산출(가정 아님). ※ 검출·lead-time은 단일센서 baseline과 동등하고, AE의 측정된 우위는 **FAR ~1.7배↓ + 도메인 RCA**다(운영점 P99.5·tumbling 정합 후). 4유형 모두 원인 도메인을 정확히 짚는다(nutrient 포함, Phase P에서 trimmed-mean으로 해소).
 - **정당성(다운타임 서사)**: 관수설비는 "멈추면 작물이 비가역적으로 죽는다" → 다운타임 비용이 비선형. AE가 (a) 원인 도메인 즉시 귀인 → 진단시간↓, (b) ~28h 전 감지 → 돌발정지를 계획정비로 전환 → 다운타임 회피. ← 측정 능력을 KPI로 잇는 다리.
 - **KPI 추정**: 그 다리 위에서 가용성↑ → OEE·막힘률·손실예방 추정.
 
@@ -148,8 +148,7 @@
 
 면접에서 깊이 물으면 정직하게 답할 한계들. 헤드라인은 강점 중심으로 두되, 여기 명시해 자기 인지를 보인다(2026-06-12 검증 기준).
 
-- **RCA 오귀인(nutrient→motor)** — nutrient 막힘 시 motor의 허위 점수가 가장 높아 시스템이 원인을 motor로 잘못 지목한다. 검증: `fault_injection/verify_attribution.py`(nutrient 막힘 구간 알람률 motor 1.0x=평소, nutrient 7.5x·zone_drip 2.0x=진짜). 검출 자체는 zone_drip이 carry해 유지되나 "원인 도메인 귀인" 자랑은 nutrient 케이스에서 깨진다. → B 작업으로 수정 예정.
-- **nutrient voting 제외 비용** — nutrient를 가장 잘 잡는 건 nutrient 도메인(7.5x)인데 FP 이슈로 voting 제외 → overall 검출은 zone_drip의 약한 2x에 의존(마진 얇음).
+- **(해소됨, Phase P) RCA 오귀인·nutrient voting 제외** — 옛 약점: nutrient 막힘을 motor로 오귀인 + nutrient가 FP로 voting 제외돼 검출 마진이 얇음. **2026-06-12 해결** — 원인은 ph_trend_30의 OOD 외삽이 평균 점수를 지배한 것이라, **trimmed-mean 로버스트 집계**(nutrient만 상위1 오차 제외; 문헌 Skewed-Data AE 2023·Unreliable-AE 2025)로 FP를 차단하고 nutrient를 voting+RCA에 포함. 검출 12/12·4유형 귀인 정확. (`inference_core.reconstruction_score`, docs/modeling/13 §6, MODEL_CHANGELOG Phase P)
 - **윈도우 F1 0.63** — 윈도우 단위 F1=0.63(precision/recall ~0.63). 막힘 초반(전조 미미) 구간이 label=1이지만 안 울리는 게 정상이라 윈도우 FN이 구조적으로 쌓임. **에피소드 단위 검출은 12/12**라 발화는 에피소드 검출·FAR·RCA로 한다(윈도우 F1·"F1 0.95" 헤드라인 지양).
 - **소표본** — held-out 막힘 에피소드 12건(소표본). 운영점·검출은 강한 고장(severity 0.8~1.0) 기준이라, 더 미세한 전조까지의 일반화는 미검증.
 - **임계 윈도잉 영구화 미완** — 현재 운영점 정합은 config 핸드에딧(tumbling P99.5). train.py가 임계를 sliding으로 계산하므로, 재학습 시 다시 어긋난다 → train.py 수정으로 영구화 필요(`models/_threshold_backup_pre_P995`에 원본 보존).
