@@ -16,7 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 # 우리가 만들어둔 '메인 셰프(파이프라인 매니저)' 모듈 불러오기
 from feature_engineering import SENSOR_MANDATORY, VIP_FEATURES, inject_vip_features, foreign_scoring_features
 from feature_selection import run_feature_selection_experiment
-from inference_core import actionable_feature_mask, build_target_reference_profiles, DEFAULT_CONTEXT_FEATURES
+from inference_core import actionable_feature_mask, build_target_reference_profiles, DEFAULT_CONTEXT_FEATURES, reconstruction_score
 from logger import get_logger
 from math_utils import calculate_sigma_thresholds
 from model_builder import build_autoencoder
@@ -160,7 +160,11 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
         f"(컨텍스트 제외: {sorted(set(feature_cols) - set(scoring_features))})"
     )
 
-    mse_scores = np.mean(sq_err[:, scoring_mask], axis=1)
+    # nutrient만 trimmed-mean: ph_trend_30이 OOD로 외삽돼 평균 점수를 지배하던 FP를 차단
+    # (한 피처만 튀면 그 피처를 잘라 점수가 안 오름, docs/modeling/13). 다른 도메인은 OOD-취약
+    # 피처가 없어 평균 유지(trim은 단일피처 고장 민감도를 깎으므로 필요한 곳에만).
+    _recon_trim = 1 if model_name == "nutrient" else 0
+    mse_scores = reconstruction_score(sq_err, scoring_mask, trim_top=_recon_trim)
 
     # ── 임계치 계산 — 기동(startup) 구간 제외 + 방법 선택 ──────────────────────
     # [왜] 기동 직후 transient는 MSE가 크게 튀어 σ/percentile을 부풀린다. eval에서
@@ -354,6 +358,7 @@ def train_and_save_model(X_train_ae, model_name, target_dict=None, df_reference=
 
     config = {
         "model_name": model_name,
+        "recon_trim_top": _recon_trim,
         "features": X_train_ae.columns.tolist(),
         # threshold 계산과 동일한 피처 셋으로 추론 시에도 MSE를 내야 일관성 유지
         "scoring_features": scoring_features,

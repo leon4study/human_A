@@ -13,8 +13,8 @@
 |---|---|---|---|
 | **MDOF 물리모델** | `05_노션_경력기술서:46-49` ("물리 모델 로직 개발") | ❌ 미구현 (시도 기록도 0건) | `MODELING.md` 물리모델 언급 0회, `train.py` 순수 AE(`build_autoencoder()`) |
 | **NN 보정 학습** | `05_노션_경력기술서:48-49` ("NN 보정 학습") | ❌ 미구현 | `train.py` residual 보정층 없음, AE가 X→X' 직접 복원 |
-| **Cpk 1.67** | `03_A트랙:90` ("공정능력 1.67 이상 달성") | ❌ 미측정 (계산식 없음) | `evaluate_test_metrics.py`에 Cpk 계산 0줄 |
-| **OEE 78%→85% / 막힘률 10%→2%** | `03_A트랙:16` ("## A. 목표 설정") | ⚠️ **목표값**(달성 미측정) | 평가 코드에 OEE·막힘률 % 산출 로직 없음 |
+| **Cpk 1.67** | `03_A트랙:90` ("공정능력 1.67 이상 달성") | ✅ **측정** (2026-06-11): 유량 ±10% 스펙 Cpk 1.65~1.69(≈1.67, 5σ급) | `fault_injection/cpk_eval.py` (n=9360, μ=78.2, σ=1.54) |
+| **OEE 78%→85% / 막힘률 10%→2%** | `03_A트랙:16` ("## A. 목표 설정") | 🔁 **측정 로직 구축 + 근거 있는 추정** (2026-06-11): 막힘률 비교 로직 코드화, OEE는 다중펌프 가정 추정 | `fault_injection/baseline_blockage_eval.py` (검출·FAR·lead-time 측정), 추정 근거 `portfolio_interview_facts.md` §0 |
 
 **현재 검증 가능한 정본 사실** (포트폴리오에 노출 OK):
 - **F1 ≥ 0.95** (4 도메인, confusion matrix 기반, `evaluate_test_metrics.py`) — `docs/portfolio_interview_facts.md` P-001

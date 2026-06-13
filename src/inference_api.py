@@ -22,6 +22,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # 분리해둔 추론 함수들 불러오기
 from inference_core import (
     actionable_feature_mask,
+    reconstruction_score,
     build_feature_details,
     calculate_rca,
     get_alarm_status
@@ -473,7 +474,7 @@ def run_inference_pipeline(
                 scoring_mask = actionable_feature_mask(features)
             if scoring_mask.sum() == 0:
                 scoring_mask = np.ones(len(features), dtype=bool)
-            mse_score = float(np.mean(sq_err[scoring_mask]))
+            mse_score = float(reconstruction_score(sq_err, scoring_mask, trim_top=config.get("recon_trim_top", 0)))
 
             # 2. [함수 사용] 알람 레벨 판정
             alarm_level, label = get_alarm_status(mse_score, t_caut, t_warn, t_err)

@@ -220,23 +220,31 @@ Dense(input_dim, sigmoid)          # 출력
 
 **학습 결과** — 약 **20 epoch 이내에 Loss 안정 수렴**, Train/Validation Loss 곡선이 거의 겹쳐 과적합 없이 일반화 확보. EarlyStopping이 자동으로 학습 종료, 최적 가중치만 저장.
 
-## 5. 임계치 — 6시그마 3단계 알람
+## 5. 임계치 — 6시그마 3단계 알람 (분위로 FAR 통제)
 
-학습 후 정상 데이터의 MSE 분포에서 σ 기반 임계치를 산출. **상위 몇 σ로 통일**해서 도메인별 공정한 비교가 가능하게 합니다.
+학습 후 정상 데이터의 MSE 분포(기동 구간 제외)에서 **정상의 극단을 3단계로 잡는 6시그마식 알람**을 토대로 한다. 도메인 공통 기준이라 설비별 공정한 비교가 가능하다.
 
 ### 5-1. 도메인별 임계치 (3단계)
 
-| 단계 | 기준 | 의미 |
+| 단계 | 기준(개념) | 의미 |
 |---|---|---|
 | 🟡 Caution (주의) | μ + **2σ** | 운영자 모니터링 강화 |
 | 🟠 Warning (경고) | μ + **3σ** | 정비 일정 사전 조율 |
 | 🔴 Critical (치명) | μ + **6σ** | 즉시 점검·출동 |
 
+**왜 σ를 분위로 바꿔 배치하나 (Phase N)**: 도메인 복원오차가 한쪽으로 길게 치우친(right-skew, 왜도 14~18) 분포라 μ+kσ는 도메인마다 대응하는 꼬리확률이 달라 FAR이 들쭉날쭉해진다(한 도메인을 고치면 다음 재학습에서 다른 도메인이 튀는 "whack-a-mole"). 그래서 같은 "정상 상위 극단" 철학은 유지하되, 도메인 임계는 **분위(percentile P99/99.6/99.9)로 배치해 목표 FAR을 직접 통제**한다. σ 기반(μ+2σ/3σ/6σ)은 정규형 분포 대안으로 `THRESHOLD_METHOD=sigma` 전환 가능하고, 피처별 RCA 임계(§5-3)는 σ를 그대로 쓴다.
+
 ```python
-thresholds = calculate_sigma_thresholds(mse_scores, sigma_levels=(2, 3, 6))
+# 정본 기본값: 기동 제외 정상 MSE 분포의 분위로 3단계 배치(skew 강건, 목표 FAR 통제)
+thresholds = {
+    "caution":  np.percentile(mse_base, 99.0),
+    "warning":  np.percentile(mse_base, 99.6),
+    "critical": np.percentile(mse_base, 99.9),
+}
+# 정규형 분포 대안: calculate_sigma_thresholds(mse_base, sigma_levels=(2, 3, 6))  # THRESHOLD_METHOD=sigma
 ```
 
-> [train.py:134](../services/inference/src/train.py#L134), [math_utils.py](../services/inference/src/math_utils.py)
+> [train.py 임계 산출부](../services/inference/src/train.py), 설계 근거 [modeling/03_threshold_methodology.md](modeling/03_threshold_methodology.md)
 
 ### 5-2. Scoring features — 컨텍스트 분리 ⭐
 MSE 계산 시 **시간·상태 컨텍스트 피처는 제외**하고 실센서 피처만으로 점수를 냅니다.
@@ -317,19 +325,22 @@ for fname in feature_cols:
 ### 5-4. 알람 격상 룰
 **"N분 이상 연속 임계 초과"** 규칙으로 헛출동 인건비 절감. (예: warning 단계에서 N분 이상 지속 → critical 격상)
 
-### 5-5. 🚧 알람 사양 변경 예정 (강사님 피드백 반영)
-| 항목 | 현재 | 목표 |
+### 5-5. 임계 방식 변천 (해결됨)
+
+초기엔 σ 레벨을 (2σ,3σ,6σ)→(1σ,2σ,3σ)로 조정해 민감도를 높이려 했으나, **복원오차 skew 때문에 σ 레벨 자체로는 도메인 간 FAR을 통제하지 못함**을 확인하고 **분위(percentile) 배치로 전환(Phase N)** 하는 것으로 정리됐다.
+
+| 항목 | 이전(초안) | 현재(정본) |
 |---|---|---|
-| 시그마 레벨 | (2σ, 3σ, 6σ) | **(1σ, 2σ, 3σ)** |
-| 디바운싱 | "N분 이상 연속" 단순 룰 | **도메인별 연속 N회 디바운싱** (Caution 3회 / Warning 5회 / Critical 7회 초안) |
-| 적용 상태 | 미구현 | 진행 중 ([PROJECT_BRIEF.md §5-4](PROJECT_BRIEF.md)) |
+| 임계 배치 | σ 레벨((2,3,6)→(1,2,3) 조정 검토) | **분위 P99/99.6/99.9** (목표 FAR 직접 통제) |
+| 기동 처리 | 통째 게이트 | **기동 전용 분위 band**(정상 overshoot 통과, 비정상 기동만 알람) |
+| 디바운싱 | "N분 이상 연속" 단순 룰 | 연속 N회 디바운싱(순간 튐 차단) |
 
-→ 이 변경의 핵심은 **민감도(Recall, 놓치지 않고 잡는 정도) ↑** + **짧게 튀는 노이즈를 디바운싱(일정 횟수 이상 연속될 때만 이상으로 인정해 순간적인 튐은 무시하는 것)으로 차단**하는 것입니다.
+→ 핵심은 **목표 FAR을 분위로 직접 고정**해 "한 도메인 고치면 다른 도메인이 튀는" σ 기반의 불안정을 끝낸 것. 6시그마 3단계라는 개념 골격은 유지하고, 배치 방법만 skew에 강건한 분위로 정교화했다. 상세: [MODEL_CHANGELOG Phase N](../.claude/MODEL_CHANGELOG.md).
 
-## 6. 평가 — F1 score
+## 6. 평가 — held-out 검출·오탐(FAR)·RCA
 
 ### 6-1. 평가 지표
-도메인별 모델 성능을 **시나리오 데이터**(정상/이상 라벨링)에 대한 confusion matrix 기반 F1 스코어로 평가.
+도메인별 모델 성능을 **시나리오 데이터**(정상/이상 라벨링)에 대한 confusion matrix 기반 F1 스코어로 평가할 수 있다.
 
 | 지표 | 정의 | 의미 |
 |---|---|---|
@@ -337,10 +348,20 @@ for fname in feature_cols:
 | 재현율 (Recall) | TP / (TP + FN) | 실제 이상 중 모델이 잡아낸 비율 → **모델 완전성** |
 | **F1 Score** | 2 · P · R / (P + R) | Precision과 Recall의 조화평균 |
 
-### 6-2. 결과
-**4개 도메인 모두 F1 ≥ 0.95** 달성. 데이터 불균형(정상 >> 이상)에서 Accuracy 한계를 보완하는 핵심 지표.
+> 단, F1은 **임계값·표본 구성에 민감**해 단일 점수로 과신하면 위험하다. 그래서 **정본 평가는 독립 held-out 셋에서 (1) 막힘 사전감지율, (2) 정상 구간 오탐률(FAR), (3) lead-time, (4) 도메인 RCA**로 하고, 단일센서 임계 baseline과 같은 셋에서 공정 비교한다.
 
-> 평가 코드: [services/inference/src/evaluate_test_metrics.py](../services/inference/src/evaluate_test_metrics.py)
+### 6-2. 결과 (held-out v2 — 독립 seed, 4유형 고장 16건)
+
+| 지표 | 단일센서 baseline | AE(4도메인) |
+|---|---|---|
+| 막힘 에피소드 사전감지 | 12/12 | **12/12** (동등) |
+| 정상 구간 FAR | 3.1% | **1.8%** (~1.7배↓, 운영점 P99.5·tumbling 정합 후) |
+| 평균 lead-time | 34.2h | ~28.4h (동등) |
+| 원인 도메인 귀인(RCA) | 불가 | **가능**(어느 도메인·왜) ※ nutrient 막힘은 motor로 오귀인하는 약점([portfolio §7](portfolio_interview_facts.md)) |
+
+→ 심한 막힘은 둘 다 잡으므로 검출은 동등하고, **AE의 측정된 우위는 오탐(FAR)↓ + 도메인 RCA**다. 비즈니스 4지표(Cpk·막힘률·OEE·손실예방)의 근거·추정은 [portfolio_interview_facts.md §0](portfolio_interview_facts.md) 참조.
+
+> 평가 코드: [fault_injection/baseline_blockage_eval.py](../fault_injection/baseline_blockage_eval.py), [cpk_eval.py](../fault_injection/cpk_eval.py). (구 confusion-matrix F1: [services/inference/src/evaluate_test_metrics.py](../services/inference/src/evaluate_test_metrics.py))
 
 ### 6-3. nutrient 도메인 운영 예외
 EC 기반 nutrient 도메인은 화학 센서 신뢰도 이슈와 일부 실험에서 다른 도메인 성능을 끌어내리는 결과를 보여 (`motor F1 0.527→0.106` 사례, [train.py:260-262](../services/inference/src/train.py#L260-L262) 주석), **현재 overall voting에서 제외하는 운영**으로 운용:
