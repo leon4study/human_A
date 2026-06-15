@@ -446,9 +446,10 @@ if __name__ == "__main__":
 
     # 학습용 정상 데이터(clog-free). 절대경로를 박지 않고 파일명만 둬서, 어느 머신에서
     # 체크아웃해도 <project_root>/data/ 아래에서 찾도록 한다(이식성).
-    #   - smartfarm_normal_train_v5: data_gen_jun.save_normal_training_set()가 만든
-    #     공공앵커 기반 90일 정상셋. 센서 독립성 게이트를 통과한 캐노니컬 학습본.
-    data_filename = "smartfarm_normal_train_v5.csv"
+    #   - smartfarm_dynamics_train(Phase R): data_gen_dynamics.save_dataset의 현실적 동역학 정상셋
+    #     (주간 산처리 pH 사이클 + days_since_cleaning 위상 피처, clog=0). 정답은 _truth.csv로 분리.
+    #   - (구) smartfarm_normal_train_v5: 공공앵커 90일 정상셋 — 폴백용.
+    data_filename = "smartfarm_dynamics_train.csv"
     data_path = os.path.join(project_root, "data", data_filename)
 
     logger.info(f"📂 데이터 로딩 경로: {data_path}")

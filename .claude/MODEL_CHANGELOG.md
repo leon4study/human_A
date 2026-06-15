@@ -938,3 +938,47 @@ nutrient FP 폭주(EVAL FP의 94%)의 원인을 찾아 근본 수정하면 nutri
 - per-domain: nutrient recon_trim_top=1, 나머지 0(평균). train.py가 config에 저장(재학습 영구화).
 - nutrient를 EXCLUDE_FROM_OVERALL에서 제거(voting+RCA 포함). 재측정: 검출 12/12·FAR 2.2%·귀인 정확(clog->hydr, bearing->moto, suction->hydr, nutrient->nutr).
 - 정본 run d8773ae 가중치 유지(재학습 아닌 재임계로 적용). 잔여: nutrient 기동 band가 아직 평균 기준(재학습 1회로 trim 정합 가능). 커밋 ab9301c.
+
+---
+
+## Phase R — 현실적 동역학 데이터 + 위상 피처(조건부 AE)로 ph_trend FP 근절
+
+### 가설
+
+ph_trend_30이 nutrient FP를 쏟던 근본 원인은 '데이터가 비현실적'이라서다. pH가 상수+노이즈로
+생성돼 ph_trend가 의미 없는 잡음이었고, 그 OOD 외삽이 FP를 만들었다. 데이터를 현실(주간 산처리
+pH 사이클·clog->pH 염기화)로 만들고 AE에 '사이클 위상(days_since_cleaning)'을 조건으로 주면,
+AE가 "위상 X에선 pH=Y가 정상"을 배워 정상 드리프트를 흡수한다 -> ph_trend를 살리면서 FP 제거.
+
+### 시도
+
+1. data_gen_dynamics: 주간 pH 사이클(산처리 톱니)·월간 clog 누적·clog->pH 염기화·임계 캐스케이드.
+   펌프곡선 커플링(유량 ISO 9261 failure=Dra75%=-25%, 압력 펌프곡선 작동점, 전류 반경류 하락).
+2. 누수 차단: 피처/정답 파일 분리(save_dataset, _truth.csv).
+3. days_since_cleaning 조건부 AE 입력(VIP 주입 + DEFAULT_CONTEXT 채점 제외). raw 컬럼이라
+   3곳(model_cols·extract_interpretation_features·sliding _phase_cols)에서 추가 보존.
+4. 재학습 후 evaluate_dynamics_test(정답 join, 고장구간 lead-time·펌프ON recall).
+
+### 관측
+
+- nutrient 정상 FAR 1.43%(>=1) — 예전 ~94%에서 격감. ph_trend_30이 nutrient robust로
+  선정·채점되는데도 정상 주간 드리프트엔 FP 안 냄.
+- 4도메인 전부 VIP에 days_since_cleaning 주입 + MSE 채점 제외 확인(로그).
+- 검출(펌프ON 후기7일): hydraulic 89.9%·motor 63.9%·zone_drip 99.9%·overall 100%.
+  lead-time hydraulic 13.3일·zone_drip 12.0일(clog 0.13~0.15에 검출).
+- 펌프 OFF 포함 시 hydraulic recall 9.6%로 보임 = duty cycle 희석 착시(신호는 펌프 ON에만).
+
+### 진단
+
+- 위상 피처가 의도대로 작동: 조건부 AE가 주간 정상 사이클을 흡수 -> ph_trend 살리면서 FP 차단.
+- 위상 피처 연결이 1차(VIP_FEATURES 등록)만으론 실패 — raw 컬럼이 model_cols 필터와 sliding
+  _phase_cols 하드코딩 리스트에서 걸러져 첫 재학습엔 미주입. 학습 로그의 'VIP 주입 목록'으로 발견.
+- nutrient는 clog->pH 효과가 미묘해 주 검출기가 아님(검출은 hydraulic·zone_drip carry).
+  nutrient의 역할은 FP 없는 모니터링.
+- overall 정상 FAR 4.5%(합집합)·overall 첫 알람 clog 0.018(marginal FP)는 운영점 튜닝 대상(별개).
+
+### 수정
+
+- 위상 피처 3곳 보존 추가 후 재학습 -> 주입 확인.
+- 평가 정직성 보정: lead-time 고장구간 한정, recall 펌프ON 한정, clog-at-alarm로 marginal FP 폭로.
+- (예정) overall voting 규칙(>=2)으로 FAR 추가 절감 — 별도 운영점 튜닝.

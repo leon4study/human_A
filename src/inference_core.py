@@ -40,6 +40,9 @@ DEFAULT_CONTEXT_FEATURES = frozenset(
         "is_off_phase",
         # 운영 이벤트 플래그
         "cleaning_event_flag",
+        "acid_treatment_event",   # 산처리(도싱) 이벤트 — 운영 맥락(채점 제외, Phase R)
+        # 주간 산처리 사이클 위상 — 조건부 AE 입력(채점 제외)
+        "days_since_cleaning",
         # pH 2차 파생 플래그 (실제 원인은 mix_ph)
         "ph_instability_flag",
     }
