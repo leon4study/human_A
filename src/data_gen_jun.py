@@ -205,7 +205,8 @@ def simulate_zone_data(
 # 5. [메인] 데이터 통합 파이프라인 (총 50개 컬럼 완벽 세팅)
 # ==========================================
 def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min",
-                                degradation=True, seed=None):
+                                degradation=True, seed=None,
+                                clog_override=None, ph_override=None, current_dynamics=False):
     """
     degradation:
       True(기본)  — 30일 이후 막힘(clog)이 자라는 '자연 노후' 시나리오(참고/대조용).
@@ -227,7 +228,13 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
 
     irr_mask, clean_flag = generate_schedules(n, minute_of_day, days)
     daylight, env_data = simulate_environment(n, minute_of_day)
-    if degradation:
+    if clog_override is not None:
+        # [동역학 통합] data_gen_dynamics가 controllable 타임라인으로 만든 clog를 주입한다 →
+        # 이 함수의 모든 센서 커플링(압력·진동·온도·EC 등)을 그대로 재사용해 전체 컬럼을 생성.
+        clog = np.asarray(clog_override, dtype=float)
+        blocked_ratio = np.clip((clog / 0.40) ** 1.5 * 0.45, 0, 1.0)
+        cleaning_boost = np.zeros(n, dtype=float)
+    elif degradation:
         clog, blocked_ratio, cleaning_boost = simulate_degradation(
             n, day_num, irr_mask, clean_flag
         )
@@ -244,7 +251,12 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
     flow_baseline = (
         78 + 2.0 * np.sin(2 * np.pi * minute_of_day / 1440 - 0.2)
     ) * pump_on
-    delivery_eff = np.clip(1 - 0.04 * clog - 0.08 * blocked_ratio, 0.75, 1.0)
+    if current_dynamics:
+        # [곡선 커플링·ISO 9261/ASAE EP405.1] 막힘→유량 감소. failure(clog 0.30)=Dra 75%=유량 -25%에
+        # 앵커(기울기 0.83). cap(0.40)서 약 -33%(일반 막힘). 면적-저항-유량 자기일관 검증 완료(docs/modeling).
+        delivery_eff = np.clip(1 - 0.83 * clog, 0.60, 1.0)
+    else:
+        delivery_eff = np.clip(1 - 0.04 * clog - 0.08 * blocked_ratio, 0.75, 1.0)
     flow_noise_std = (0.30 + 1.5 * clog) * pump_on
     flow_rate = (
         flow_baseline * delivery_eff
@@ -259,13 +271,20 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
     steady_p_base = 174.0  # 운영 압력 (정상 가동 중)
     startup_spike_base = 210.0  # 초기 개폐 시 발생하는 피크 압력
 
+    # [곡선 커플링] 작동점 압력 = 펌프 곡선 H(Q)=shutoff - b·Q² 위의 점. 앵커: shutoff≈210(startup 스파이크
+    # =무유량 근처 head)·정상 174@78 L/min. 막힘으로 유량(flow_baseline·delivery_eff)이 줄면 작동점이
+    # 곡선 따라 이동 → 압력↑(독립 계수가 아니라 물리 결합). shutoff/BEP=1.21로 원심펌프 표준 범위 안.
+    _b_pump = (startup_spike_base - steady_p_base) / (78.0 ** 2)
+    _pressure_op = startup_spike_base - _b_pump * (flow_baseline * delivery_eff) ** 2
+
     discharge_pressure[0] = residual_p
     for i in range(1, n):
         if pump_on[i] == 1 and pump_on[i - 1] == 0:  # 펌프 가동 순간
             target_p = startup_spike_base + (20 * clog[i])
             alpha = 0.9
         elif pump_on[i] == 1:  # 펌프 가동 중 (안정화)
-            target_p = steady_p_base + 15 * clog[i] + 18 * blocked_ratio[i]
+            target_p = (_pressure_op[i] if current_dynamics
+                        else steady_p_base + 15 * clog[i] + 18 * blocked_ratio[i])
             alpha = 0.3 if discharge_pressure[i - 1] > target_p else 0.6
         else:  # 펌프 종료 (잔압 유지)
             target_p = residual_p
@@ -298,6 +317,11 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
     motor_power_kw = (
         2.08 + 0.12 * irr_mask + 0.3 * clog + 0.4 * blocked_ratio
     ) * pump_on + np.random.normal(0, 0.01, n) * pump_on
+    if current_dynamics:
+        # [물리 교정] 반경류 원심펌프는 저유량(막힘)에서 전류·동력이 ↓(기존 +clog는 용적식 직관이라 오류).
+        # 완만 하락(보조 신호) — 헤드라인 막힘 신호는 압력·진동·온도가 carry. 검증: Eng-Tips·Industrial Monitor.
+        motor_current_a = (6.4 + 0.50 * irr_mask - 0.8 * clog) * pump_on + np.random.normal(0, 0.05, n) * pump_on
+        motor_power_kw = (2.08 + 0.12 * irr_mask - 0.20 * clog) * pump_on + np.random.normal(0, 0.01, n) * pump_on
     pump_rpm = (1750 + 32 * irr_mask + 45 * clog) * pump_on + np.random.normal(
         0, 3, n
     ) * pump_on
@@ -452,10 +476,12 @@ def generate_smartfarm_final_v5(start="2026-03-01 00:00:00", days=60, freq="1min
         "osmotic_potential_mpa": np.round(osmotic_potential_mpa, 4),  # [C2] 삼투 포텐셜(raw, =-0.036·EC)
         "mix_target_ph": np.round(np.full(n, 5.80), 2),
         "mix_ph": np.round(
-            5.80
-            + 0.02 * np.sin(2 * np.pi * minute_of_day / 1440 + 1.1)
-            - 0.05 * clean_flag
-            + np.random.normal(0, 0.012, n),
+            ph_override if ph_override is not None else (
+                5.80
+                + 0.02 * np.sin(2 * np.pi * minute_of_day / 1440 + 1.1)
+                - 0.05 * clean_flag
+                + np.random.normal(0, 0.012, n)
+            ),
             3,
         ),
         "mix_temp_c": np.round(19.2 + 2.4 * daylight + np.random.normal(0, 0.10, n), 2),

@@ -251,6 +251,94 @@ def build(days=90, scenario="test", onset_day=14, cascade_day=82,
     ).set_index("timestamp")
 
 
+def generate_full(scenario="test", days=90, onset_day=14, cascade_day=82,
+                  start="2026-06-01 00:00:00", seed=None):
+    """전체 컬럼(~50, 파이프라인 호환) 동역학 데이터셋 — data_gen_jun 커플링 재사용 + 동역학 주입 + L4.
+
+    [방식] data_gen_jun에 clog_override·ph_override·current_dynamics를 넘겨 모든 센서 커플링
+    (압력·진동·온도·EC·zone 등)을 그대로 재사용하고, L4 캐스케이드 맥동·온도상승만 여기서
+    post-process로 얹는다(원본 data_gen_jun 무수정 보존).
+      scenario="train": 정상(clog=0, 주간 사이클만). "test": 막힘 타임라인(onset~cascade)+캐스케이드.
+    """
+    from data_gen_jun import generate_smartfarm_final_v5  # 전체 컬럼 조립(커플링) — 지연 import
+
+    idx = pd.date_range(start=start, periods=days * 24 * 60, freq="1min")
+    n = len(idx)
+    minute_of_day = (idx.hour * 60 + idx.minute).to_numpy()
+    day_num = ((idx - idx[0]).total_seconds() / 86400).astype(int).to_numpy()
+    irr_mask, clean_flag = generate_schedules(n, minute_of_day, days)
+    pump_on = np.clip(irr_mask + clean_flag, 0, 1)            # data_gen_jun과 동일 정의
+
+    # 동역학(L0 pH·L3 염기화) + 막힘 타임라인(L1) + 캐스케이드 강도(L4)
+    mix_ph, days_since_cleaning, acid_event = simulate_ph_dynamics(minute_of_day, clean_flag)
+    clog = (np.zeros(n) if scenario == "train"
+            else simulate_clog(n, day_num, irr_mask, clean_flag, onset_day, cascade_day))
+    mix_ph = mix_ph + PH_CLOG_COUPLING * clog                # L3: 막힘→pH 염기화
+    cascade = np.clip((clog - CLOG_CASCADE_THRESHOLD) / (CLOG_CAP - CLOG_CASCADE_THRESHOLD), 0.0, 1.0)
+
+    # 전체 컬럼 — data_gen_jun이 내 clog·pH로 모든 커플링 적용(전류·동력은 반경류 교정)
+    df = generate_smartfarm_final_v5(start=start, days=days, seed=seed, degradation=False,
+                                     clog_override=clog, ph_override=mix_ph, current_dynamics=True)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df = df.set_index("timestamp")
+
+    # L4 캐스케이드 post-process(가동 중만): 재순환 cavitation 맥동 + 마찰열 온도상승을 기존 컬럼 위에.
+    def puls(amp):
+        return amp * cascade * np.random.normal(0, 1, n) * pump_on
+    df["discharge_pressure_kpa"] = np.round(df["discharge_pressure_kpa"].to_numpy() + puls(PULSE_PRESS), 2)
+    df["flow_rate_l_min"] = np.round(np.clip(df["flow_rate_l_min"].to_numpy() + puls(PULSE_FLOW), 0, None), 2)
+    df["motor_current_a"] = np.round(np.clip(df["motor_current_a"].to_numpy() + puls(PULSE_CUR), 0, None), 3)
+    df["bearing_vibration_rms_mm_s"] = np.round(
+        df["bearing_vibration_rms_mm_s"].to_numpy()
+        + VIB_CASCADE * cascade + PULSE_VIB * cascade * np.random.normal(0, 1, n), 3)
+    df["mix_temp_c"] = np.round(df["mix_temp_c"].to_numpy() + TEMP_CASCADE_RISE * cascade, 2)
+    df["motor_temperature_c"] = np.round(df["motor_temperature_c"].to_numpy() + 0.6 * TEMP_CASCADE_RISE * cascade, 2)
+    df["bearing_temperature_c"] = np.round(df["bearing_temperature_c"].to_numpy() + 0.5 * TEMP_CASCADE_RISE * cascade, 2)
+
+    # 정상 운영 맥락(피처) — 정해진 세척 스케줄. 현장에도 있는 정보라 누수 아님.
+    df["days_since_cleaning"] = np.round(days_since_cleaning, 4)
+    df["acid_treatment_event"] = acid_event
+
+    # ── 정답(truth) 컬럼 — 평가·시각화용. 정석(C): save_dataset에서 별도 파일로 분리해 학습 피처에
+    #    절대 안 섞는다(누수 구조적 차단). 막힘 진행 = 고장 에피소드(onset부터 anomaly_label=1),
+    #    캐스케이드(임계) 도달 = failure_time(예지보전 lead-time의 마감 시점).
+    anomaly_label = (clog > 1e-9).astype(int)
+    df["anomaly_label"] = anomaly_label
+    df["fault_mode"] = np.where(anomaly_label == 1, "clog_degradation", "")
+    df["fault_id"] = np.where(anomaly_label == 1, 0, -1)
+    casc_on = int(np.argmax(cascade > 0)) if bool((cascade > 0).any()) else -1
+    failure_time = np.array([np.datetime64("NaT")] * n, dtype="datetime64[ns]")
+    if casc_on > 0:
+        failure_time[anomaly_label == 1] = idx[casc_on].to_datetime64()
+    df["failure_time"] = failure_time
+    df["hidden_clog"] = np.round(clog, 4)
+    df["hidden_cascade_intensity"] = np.round(cascade, 4)
+    return df
+
+
+# 정답(truth) 계열 — 피처 파일에서 분리할 컬럼. 현장에 없거나 정답을 직접 인코딩하는 것들.
+TRUTH_COLS = [
+    "anomaly_label", "fault_mode", "fault_id", "failure_time",
+    "hidden_clog", "hidden_cascade_intensity", "hidden_tip_clog_level", "hidden_risk_stage",
+]
+
+
+def save_dataset(scenario, out_feature, out_truth, **kwargs):
+    """generate_full을 피처/정답 두 파일로 분리 저장(정석 — 누수 구조적 차단).
+
+    out_feature: 센서+운영맥락만(모델이 '보는' 것). out_truth: timestamp+정답(채점·시각화).
+    둘 다 timestamp 인덱스라 평가·노트북에서 timestamp로 join한다. 데이콘/캐글의 train·test·solution 분리와 동일.
+    """
+    df = generate_full(scenario=scenario, **kwargs)
+    truth_present = [c for c in TRUTH_COLS if c in df.columns]
+    feat = df.drop(columns=truth_present)
+    truth = df[truth_present]
+    feat.to_csv(out_feature)
+    truth.to_csv(out_truth)
+    print(f"  {scenario}: 피처 {feat.shape} -> {out_feature}  |  정답 {truth.shape} -> {out_truth}")
+    return feat, truth
+
+
 def main():
     # 5개월안 검증: test 시나리오(60일) = lead-in 2주 + degradation ~5.5주 + 캐스케이드 1주.
     df = build(days=60, scenario="test", onset_day=14, cascade_day=53)
