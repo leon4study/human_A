@@ -1009,3 +1009,22 @@ nutrient FAR 1.43%가 (a) 현실 데이터 덕인가 (b) 위상피처 덕인가?
 ### 수정
 - 위상피처 유지 결정(검출 이득 입증). 서빙은 days_since_cleaning을 반드시 공급해야 함(후속 업그레이드).
 - 재현 토글 보존: ABLATE_PHASE(추론시 0/mean/shuffle), ABLATE_TRAIN_PHASE(학습시 제외).
+
+---
+
+## Phase R-서빙 — days_since_cleaning 파생화로 train-serving skew 차단
+
+### 배경
+ablation에서 서빙이 days_since_cleaning 미공급(0) 시 nutrient FAR 9%(train-serving skew) 확인 -> 서빙도 그 피처를 정확히 공급해야 함.
+
+### 시도
+preprocessing이 raw 컬럼 대신 cleaning_event_flag(30분 블록의 시작 0->1 전이)서 days_since_cleaning을 시간기반 계산. 학습·eval·서빙이 같은 derivation 사용 -> 재학습.
+
+### 관측
+- 계산값 vs 생성기 raw: maxΔ 0.0001일, corr 1.0(공식 정확).
+- 재학습 FAR: nutrient 1.46%(raw 1.43%와 동일) 유지 -> derivation 변경이 성능 손상 없음.
+- 서빙 경로: 피처조립이 days_since_cleaning 공급 확인(0.805, 0 폴백 아님).
+
+### 진단/수정
+- raw 의존 제거 -> 서빙은 cleaning 이벤트만 있으면 파생 가능 = skew 구조적 차단.
+- caveat: 서빙 윈도우에 직전 세척이 없으면 부정확 -> 운영선 마지막 세척 시각을 상태로 유지해야(후속 하드닝).

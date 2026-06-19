@@ -1,5 +1,24 @@
 # SESSION_LOG
 
+## 2026-06-19 (2) — 서빙 정합: days_since_cleaning 파생화(train-serving skew 차단) — topic/11-serving
+
+### 달성 (Accomplished)
+1. preprocessing이 days_since_cleaning을 raw 컬럼 대신 cleaning_event_flag(30분 블록의 시작 0->1 전이)서 시간기반 계산 -> 학습·서빙 derivation 일치. 생성기 raw와 maxΔ 0.0001일(corr 1.0).
+2. 재학습(계산값) 검증: nutrient FAR 1.46%(raw 1.43%와 동일) 유지. VIP 주입·채점제외 정상.
+3. 새 모델 4종 -> services/inference/models 복사(서빙 모델은 gitignore, 로컬 배포).
+4. 서빙 경로 검증: days_since_cleaning 공급 확인(0.805, 0 폴백 아님) -> 미공급 시 FAR 9% 회귀 구조적 차단.
+
+### 남은 과제 (Pending)
+1. 서빙 윈도우 caveat: 윈도우에 직전 세척이 없으면 윈도우 시작부터 카운트 -> 운영선 마지막 세척 시각을 상태로 유지/공급(API 상태추적) 필요. 큰 배치 서빙엔 영향 없음.
+2. (선택) 전체 end-to-end 데모(FastAPI + 시뮬레이터).
+3. 운영점: overall FAR 4.6% -> Warning(>=2) 1.67% 서술/운영.
+
+### 절대 규칙 (Absolutes)
+- 모델이 요구하는 피처는 서빙서 반드시 공급(train-serving skew). days_since_cleaning은 cleaning 이벤트서 파생(raw 의존 제거).
+
+### 재개 지점 (Resume Point)
+1. 서빙 정합 커밋 -> (선택) API 상태추적/데모 또는 운영점 -> 포폴.
+
 ## 2026-06-19 — 위상피처 인과 검증(ablation) + 유지 결정 — topic/10-realistic-datagen
 
 ### 달성 (Accomplished)

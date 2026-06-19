@@ -110,6 +110,17 @@ def create_modeling_features(df, extra_cols=None):
         pump_on.eq(1), on_steps - 1, 0
     ).astype(int)
 
+    # [Phase R-서빙정합] days_since_cleaning: 주간 산처리(cleaning_event_flag) 후 경과일(사이클 위상).
+    # raw 컬럼 의존 없이 세척 이벤트에서 파생 -> 학습·서빙이 같은 값을 쓰게 해 train-serving skew를 막는다.
+    # cleaning_event_flag는 30분 블록이라 블록 시작(0->1 전이) 시각 기준으로 경과를 잰다(생성기 raw와 maxΔ 0.0001일).
+    # 주의(서빙): 윈도우 안에 직전 세척이 없으면 윈도우 시작부터 카운트됨 -> 운영선 마지막 세척 시각을 상태로 유지/공급해야 정확.
+    if "cleaning_event_flag" in df_feat.columns and pd.api.types.is_datetime64_any_dtype(df_feat.index):
+        _cflag = df_feat["cleaning_event_flag"].fillna(0).astype(int)
+        _block_start = _cflag.eq(1) & _cflag.shift(1, fill_value=0).eq(0)
+        _idx_s = df_feat.index.to_series()
+        _last_clean = _idx_s.where(_block_start).ffill().fillna(_idx_s.iloc[0])
+        df_feat["days_since_cleaning"] = ((_idx_s - _last_clean).dt.total_seconds() / 86400.0).astype(float)
+
     # 유량 감소율 (Flow Drop Rate)
     # 정상적인 기준치 대비 현재 유량이 얼마나 줄었는지 백분율로 나타냅니다.
     # [Rule] 유량이 급감하면 공압, 실린더, 배관 막힘 등 물리적 저항이 발생했음을 의미합니다.
