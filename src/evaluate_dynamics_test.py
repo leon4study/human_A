@@ -74,6 +74,30 @@ def main():
     clog = df_agg["hidden_clog"].to_numpy()
     idx = df_agg.index
 
+    # --- [신중 모드] 위상피처 ablation: 인과 분리 + 서빙-0 시나리오 동시 검증 ---
+    # 두 변화(현실 데이터 + 위상피처)를 동시에 줬으므로, FAR 개선이 무엇 덕인지 분리해야 한다.
+    # 같은 학습 모델에 days_since_cleaning만 무력화해 추론하면, 모델이 그 피처에 '의존'하는지 본다.
+    #   ABLATE_PHASE=zero    : 항상 0(세척 직후)으로 고정.
+    #     = 서빙이 위상피처를 공급 못 하는 '망가진 시나리오'와 정확히 동일 -> 서빙 위험도 함께 측정.
+    #   ABLATE_PHASE=mean    : 평균값 고정(정보 제거, 위치는 중앙).
+    #   ABLATE_PHASE=shuffle : 무작위 셔플(분포 유지, 정보만 파괴) — '피처가 무의미'의 순수 대조.
+    # 정상 FAR이 WITH 대비 튀어오르면 = 모델이 위상피처에 의존 = 위상피처가 인과적으로 FP를
+    # 눌렀다는 증거(데이터 개선만의 효과가 아님). 안 변하면 = 데이터가 주역, 피처는 보조(정직 수정).
+    ablate = os.environ.get("ABLATE_PHASE", "").strip().lower()
+    if ablate and "days_since_cleaning" in df_agg.columns:
+        _orig = df_agg["days_since_cleaning"]
+        if ablate == "zero":
+            df_agg["days_since_cleaning"] = 0.0
+        elif ablate == "mean":
+            df_agg["days_since_cleaning"] = float(_orig.mean())
+        elif ablate == "shuffle":
+            df_agg["days_since_cleaning"] = np.random.default_rng(42).permutation(_orig.to_numpy())
+        else:
+            print(f"[ABLATE_PHASE] 알 수 없는 값 '{ablate}' — 무시(zero/mean/shuffle 중 하나)")
+        print(f"\n*** [ABLATE_PHASE={ablate}] 위상피처 무력화 모드 — WITH 결과의 nutrient FAR과 비교할 것 ***")
+    else:
+        print("\n[기준(WITH) 모드] 위상피처 정상 사용. 인과 비교는 ABLATE_PHASE=zero 로 재실행.")
+
     # --- 3) 도메인별 추론(학습된 아티팩트 로드) ---
     print("\n=== 추론 ===")
     df_pred, domains, thr_map = run_inference(df_agg)

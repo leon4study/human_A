@@ -982,3 +982,30 @@ AE가 "위상 X에선 pH=Y가 정상"을 배워 정상 드리프트를 흡수한
 - 위상 피처 3곳 보존 추가 후 재학습 -> 주입 확인.
 - 평가 정직성 보정: lead-time 고장구간 한정, recall 펌프ON 한정, clog-at-alarm로 marginal FP 폭로.
 - (예정) overall voting 규칙(>=2)으로 FAR 추가 절감 — 별도 운영점 튜닝.
+
+---
+
+## Phase R-검증 — 위상피처 인과 검증(ablation): FAR이 아니라 검출로 봐야
+
+### 가설
+nutrient FAR 1.43%가 (a) 현실 데이터 덕인가 (b) 위상피처 덕인가? 두 변화를 동시에 줬으니 분리 필요.
+
+### 시도
+- A-1(추론시 ablation): 학습된 WITH 모델에 days_since_cleaning만 0/shuffle로 무력화(ABLATE_PHASE).
+- A-2(학습시 ablation): ABLATE_TRAIN_PHASE=1로 위상피처 없이 재학습.
+- 두 모델의 정상 FAR + 고장 검출(recall·lead-time)을 evaluate_dynamics_test로 비교.
+
+### 관측
+- A-1: nutrient FAR 1.43% -> 9.05%(zero)/7.24%(shuffle). WITH 모델은 피처에 의존.
+- A-2: nutrient FAR 1.42%(≈WITH). 임계값이 percentile로 목표-FAR을 직접 통제(train.py:239) -> FAR은 핀 고정 -> FAR로는 피처 가치 판단 불가.
+- 검출(올바른 지표): nutrient pump-ON recall WITH 11.9% vs A-2 7.9%, 전체 recall 10.3% vs 2.9% -> 위상피처가 nutrient 검출 1.5~3.5배.
+- overall recall 100% 동일(zone_drip carry). hydraulic recall 동일(lead-time 차이는 첫-교차 노이즈로 판단).
+
+### 진단
+- FAR로 피처 가치를 판단한 1차 결론("불필요")은 오류 - 임계값 percentile 보정이 FAR을 핀 고정하기 때문.
+- 위상피처는 FAR 중립이나 nutrient(pH 도메인) 검출을 실질 개선. 단 시스템 검출은 불변(보조 검출기 개선).
+- 부작용: 위상피처를 안 쓰면(서빙이 0 공급) FAR 9%로 악화 = train-serving skew 위험.
+
+### 수정
+- 위상피처 유지 결정(검출 이득 입증). 서빙은 days_since_cleaning을 반드시 공급해야 함(후속 업그레이드).
+- 재현 토글 보존: ABLATE_PHASE(추론시 0/mean/shuffle), ABLATE_TRAIN_PHASE(학습시 제외).
