@@ -1,5 +1,52 @@
 # SESSION_LOG
 
+## 2026-06-19 — 위상피처 인과 검증(ablation) + 유지 결정 — topic/10-realistic-datagen
+
+### 달성 (Accomplished)
+1. 위상피처 인과 검증: 데이터 vs 피처 분리를 위해 ablation 2종.
+   - FAR은 임계값 percentile 보정이 목표-FAR을 직접 통제(train.py:239) -> 핀 고정 -> 피처 가치 판단 불가. (1차 "FAR 같으니 불필요" 결론은 오류였음.)
+   - 올바른 지표는 검출: nutrient recall WITH 11.9%/전체10.3% vs A-2(피처 없이 재학습) 7.9%/2.9% = 위상피처가 nutrient 검출 1.5~3.5배 개선.
+   - A-1(추론시 0 주입): nutrient FAR 1.43%->9% = 서빙이 days_since_cleaning 미공급 시 망가짐(train-serving skew) 정량 확인.
+2. 결정: 위상피처 유지(검출 이득 입증). 재현 토글 ABLATE_PHASE(추론)·ABLATE_TRAIN_PHASE(학습) 추가.
+3. live 모델 = WITH 복원 확인.
+
+### 남은 과제 (Pending) — 마무리 후 업그레이드
+1. 서빙 정합(필수): days_since_cleaning을 서빙 입력에 공급(세척 스케줄서 계산), 새 모델을 services/inference/models로 복사. 안 하면 FAR 9%.
+2. 운영점: overall FAR 4.5%(Caution) -> Warning(>=2) 1.67%로 서술/운영(voting 아님).
+3. (선택) 시드 견고성: hydraulic lead-time(13 vs 6일)이 노이즈인지 시드 1~2개로 확인.
+
+### 절대 규칙 (Absolutes)
+- 피처 가치는 FAR이 아니라 '동일 FAR에서의 검출'로 판단(임계값 percentile이 FAR을 핀 고정한다).
+- 모델이 요구하는 피처(days_since_cleaning 등)는 서빙에서도 반드시 공급(train-serving skew 방지).
+
+### 재개 지점 (Resume Point)
+1. ablation 토글·로그 커밋 -> 서빙 정합(새 모델 복사 + days_since_cleaning 공급) -> 운영점 -> 포폴.
+
+## 2026-06-14 — Phase R: 현실적 동역학 데이터 + 위상 피처(조건부 AE) + 정직 평가 — topic/10-realistic-datagen
+
+### 달성 (Accomplished)
+1. 현실적 동역학 생성기(data_gen_dynamics.generate_full): 주간 산처리 pH 사이클·월간 clog 누적·clog->pH 염기화·임계 캐스케이드. 펌프곡선 커플링(유량 ISO 9261 failure=Dra75%=-25% 앵커, 압력 펌프곡선 작동점, 전류 반경류 하락). 노트북(dynamics_data_check) 실%변화로 검증.
+2. 정석 누수 차단: save_dataset이 피처/정답 별도 파일(데이콘식). 피처 CSV엔 정답 0개. anomaly_label·failure_time·hidden_clog 등은 _truth.csv.
+3. 위상 피처 days_since_cleaning 조건부 AE 연결: VIP(AE 입력)+DEFAULT_CONTEXT(채점 제외)+preprocessing(model_cols·extract_interpret·sliding _phase_cols·phase_agg). 4도메인 전부 주입+채점제외 확인.
+4. 재학습(새 데이터·위상 피처) + 정직 평가(evaluate_dynamics_test, 정답 join):
+   - nutrient 정상 FAR 1.43%(예전 ph_trend FP ~94% -> 위상으로 흡수).
+   - 후기 검출 펌프ON 한정: hydraulic 89.9%/motor 63.9%/zone_drip 99.9%/overall 100%.
+   - lead-time ~12-13일(hydraulic clog0.133·zone_drip clog0.146, failure 전).
+
+### 남은 과제 (Pending)
+1. overall 정상 FAR 4.5%(합집합) -> >=2 voting / level>=2로 낮추는 운영점 튜닝(별개 이슈, >=2면 1.67%).
+2. nutrient 검출 약함(펌프ON 12%) — clog->pH 효과 미묘. 모니터링 가치는 유지, 주검출기는 hydraulic·zone_drip.
+3. 서빙 동기화 점검(services/inference 듀얼트리 — preprocessing/feature_engineering/inference_core는 동기화 완료).
+
+### 절대 규칙 (Absolutes)
+- 피처/정답 파일 분리(누수 구조적 차단): 피처 CSV에 anomaly_label 등 정답 절대 금지 -> _truth.csv로만.
+- 위상/컨텍스트 피처(days_since_cleaning 등)는 조건부 AE 입력이되 MSE 채점에서 제외(DEFAULT_CONTEXT).
+- 평가 정직성: lead-time은 고장구간 한정(정상 FP는 FAR로), 유량/전류 recall은 펌프 ON 한정(OFF창 희석 제거), clog-at-alarm로 marginal FP 폭로.
+- raw 컬럼을 AE까지 보존하려면 3곳(model_cols 화이트리스트·extract_interpretation_features·sliding _phase_cols) 모두 추가해야 함(1차 실패 교훈).
+
+### 재개 지점 (Resume Point)
+1. 커밋(위상피처 연결 + evaluate_dynamics_test + 로그) -> 운영점 튜닝(overall FAR) 또는 포트폴리오 반영.
+
 ## 2026-06-12 (2) — nutrient FP 근본수정(trimmed-mean) + 용량 정리 — topic/08-portfolio-honesty
 
 ### 달성 (Accomplished)

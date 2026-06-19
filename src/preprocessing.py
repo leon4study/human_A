@@ -414,6 +414,7 @@ def create_modeling_features(df, extra_cols=None):
         # time / state
         "time_sin", "time_cos", "pump_on", "pump_start_event", "pump_stop_event",
         "minutes_since_startup", "minutes_since_shutdown", "is_startup_phase", "is_off_phase",
+        "days_since_cleaning",  # Phase R: 주간 산처리 위상 — raw 컬럼이라 화이트리스트로 집계까지 보존(조건부 AE)
         # dynamics
         "pressure_diff", "differential_pressure_kpa", "flow_diff", "flow_drop_rate",
         "wire_to_water_efficiency", "rpm_slope", "rpm_acc", "rpm_stability_index",
@@ -472,7 +473,7 @@ def aggregate_time_window(
     phase_cols = [
         "pump_on", "minutes_since_startup", "is_startup_phase",
         "pump_start_event", "pump_stop_event", "minutes_since_shutdown", "is_off_phase",
-        "cleaning_event_flag",
+        "cleaning_event_flag", "acid_treatment_event", "days_since_cleaning",
         # data_gen_test.py가 부여하는 평가용 정답 라벨 — 평균 집계되면 안 되므로 phase로 분리
         "anomaly_label", "composite_z_score",
     ]
@@ -487,7 +488,7 @@ def aggregate_time_window(
             "pump_on": "last", "minutes_since_startup": "last", "is_startup_phase": "max",
             "pump_start_event": "max", "pump_stop_event": "max",
             "minutes_since_shutdown": "last", "is_off_phase": "max",
-            "cleaning_event_flag": "max",
+            "cleaning_event_flag": "max", "acid_treatment_event": "max", "days_since_cleaning": "last",
             # 평가용 라벨: 윈도우 내 1개라도 이상이면 윈도우도 이상, worst-case z 유지
             "anomaly_label": "max",
             "composite_z_score": "max",
@@ -506,7 +507,9 @@ def aggregate_time_window(
 
         # phase는 윈도우 끝 상태(last)가 중요
         _phase_cols = [
-            c for c in ["pump_on", "minutes_since_startup", "is_startup_phase"] if c in df.columns
+            c for c in ["pump_on", "minutes_since_startup", "is_startup_phase",
+                        "days_since_cleaning"]  # Phase R: 주간 산처리 위상(슬라이딩서도 보존)
+            if c in df.columns
         ]
         df_phase = df[_phase_cols]
 
@@ -626,7 +629,8 @@ def extract_interpretation_features(df_agg):
     # ---------------------------------------------------------
     for col in [
         "is_startup_phase", "pump_start_event", "minutes_since_startup",
-        "is_off_phase", "pump_on"
+        "is_off_phase", "pump_on",
+        "days_since_cleaning",   # Phase R: 주간 산처리 사이클 위상 — 조건부 AE 입력(VIP 주입 소스)
     ]:
         if col in df_agg.columns:
             df_interpret[col] = df_agg[col]

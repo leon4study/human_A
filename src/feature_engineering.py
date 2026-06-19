@@ -20,6 +20,7 @@ import pandas as pd
 MODE_FEATURES: list[str] = [
     "pump_on",                 # 펌프 on/off 이진 (50:50 분포 → 학습 안전)
     "minutes_since_startup",   # 기동 후 경과 분 (연속값, 기동 맥락의 핵심 정보원)
+    "days_since_cleaning",     # 주간 산처리 사이클 위상(0~7) — 조건부 AE가 위상별 정상 pH를 학습(Phase R)
     # ----------------------------------------------------------------------
     # 🛑 Phase A 1차에서 제거된 피처들 — 아래 전제 조건이 충족될 때만 재활성화.
     #
